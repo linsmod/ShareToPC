@@ -1,0 +1,13 @@
+  正在确定要还原的项目…
+  已还原 c:\Users\linswin\AndroidStudioProjects\ShareToPC\pc_proj\ShareToPcReciver\ShareToPcReciver\ShareToPcReciver.csproj (用时 234 毫秒)。
+C:\Program Files\dotnet\sdk\9.0.308\Microsoft.Common.CurrentVersion.targets(3455,5): error MSB4216: 无法运行“GenerateResource”任务，因为 MSBuild 无法创建或连接到运行时为“NET”、体系结构为“x86”的任务宿主。请确保 (1) 请求的运行时和/或体系结构在计算机上可用，以及 (2) 所需的可执行文件“C:\Program Files\dotnet\sdk\9.0.308\MSBuild.dll”存在，且可以运行。 [c:\Users\linswin\AndroidStudioProjects\ShareToPC\pc_proj\ShareToPcReciver\ShareToPcReciver\ShareToPcReciver.csproj]
+C:\Program Files\dotnet\sdk\9.0.308\Microsoft.Common.CurrentVersion.targets(3479,7): error MSB4028: 未能从“FilesWritten”参数中检索到“GenerateResource”任务的输出。Object type Microsoft.Build.Tasks.GenerateResource does not match target type Microsoft.Build.BackEnd.TaskHostTask. [c:\Users\linswin\AndroidStudioProjects\ShareToPC\pc_proj\ShareToPcReciver\ShareToPcReciver\ShareToPcReciver.csproj]
+
+生成失败。
+
+C:\Program Files\dotnet\sdk\9.0.308\Microsoft.Common.CurrentVersion.targets(3455,5): error MSB4216: 无法运行“GenerateResource”任务，因为 MSBuild 无法创建或连接到运行时为“NET”、体系结构为“x86”的任务宿主。请确保 (1) 请求的运行时和/或体系结构在计算机上可用，以及 (2) 所需的可执行文件“C:\Program Files\dotnet\sdk\9.0.308\MSBuild.dll”存在，且可以运行。 [c:\Users\linswin\AndroidStudioProjects\ShareToPC\pc_proj\ShareToPcReciver\ShareToPcReciver\ShareToPcReciver.csproj]
+C:\Program Files\dotnet\sdk\9.0.308\Microsoft.Common.CurrentVersion.targets(3479,7): error MSB4028: 未能从“FilesWritten”参数中检索到“GenerateResource”任务的输出。Object type Microsoft.Build.Tasks.GenerateResource does not match target type Microsoft.Build.BackEnd.TaskHostTask. [c:\Users\linswin\AndroidStudioProjects\ShareToPC\pc_proj\ShareToPcReciver\ShareToPcReciver\ShareToPcReciver.csproj]
+    0 个警告
+    2 个错误
+
+已用时间 00:00:02.23

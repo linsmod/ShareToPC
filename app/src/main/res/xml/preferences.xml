@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <ListPreference
+        android:defaultValue="AFTER_SEND"
+        android:entries="@array/cleanup_policy_entries"
+        android:entryValues="@array/cleanup_policy_values"
+        android:key="cleanup_policy"
+        android:title="@string/pref_cleanup_policy_title" />
+
+    <EditTextPreference
+        android:defaultValue=""
+        android:key="manual_host"
+        android:title="@string/pref_manual_host_title" />
+
+    <EditTextPreference
+        android:defaultValue="51234"
+        android:inputType="number"
+        android:key="manual_port"
+        android:title="@string/pref_manual_port_title" />
+
+    <EditTextPreference
+        android:defaultValue="30"
+        android:inputType="number"
+        android:key="scan_timeout"
+        android:title="@string/pref_scan_timeout_title"
+        app:useSimpleSummaryProvider="true" />
+
+    <Preference
+        android:key="port_info"
+        android:selectable="false"
+        android:summary="@string/pref_port_info_summary"
+        android:title="@string/pref_port_info_title" />
+
+    <Preference
+        android:key="clear_history"
+        android:title="@string/pref_clear_history_title" />
+</PreferenceScreen>

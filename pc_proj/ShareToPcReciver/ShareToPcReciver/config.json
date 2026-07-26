@@ -1,0 +1,7 @@
+{
+  "port": 51234,
+  "saveDir": "%USERPROFILE%\\Documents\\ShareToPC",
+  "autoCopyText": true,
+  "showBalloon": true,
+  "runAtStartup": false
+}
