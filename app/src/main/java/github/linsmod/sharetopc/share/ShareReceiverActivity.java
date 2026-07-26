@@ -325,13 +325,13 @@ public class ShareReceiverActivity extends AppCompatActivity {
             TextView tvMeta = convertView.findViewById(R.id.tvContentMeta);
 
             if (item.isText()) {
-                dot.setBackgroundResource(R.drawable.dot_offline);
+                dot.setBackgroundResource(R.drawable.dot_content_text);
                 String preview = item.text.length() > 40
                         ? item.text.substring(0, 40) + "…" : item.text;
                 tvName.setText("文本：" + preview);
                 tvMeta.setText(item.text.length() + " 字符");
             } else {
-                dot.setBackgroundResource(R.drawable.dot_online);
+                dot.setBackgroundResource(R.drawable.dot_content_file);
                 tvName.setText(item.name);
                 tvMeta.setText(github.linsmod.sharetopc.util.FileUtils.formatSize(item.size));
             }

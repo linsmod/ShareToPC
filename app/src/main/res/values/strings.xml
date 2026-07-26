@@ -70,7 +70,6 @@
     <string name="copied">已复制到剪贴板</string>
     <string name="share">分享</string>
     <string name="resend">重发</string>
-    <string name="resent_count">已重新发送 %1$d 条</string>
     <string name="device_alias_title">设备备注名</string>
     <string name="preset_laptop">我的笔记本电脑</string>
     <string name="preset_office">公司电脑</string>

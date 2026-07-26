@@ -177,6 +177,10 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         holder.tvName.setAlpha(fileGone ? 0.4f : 1.0f);
         holder.tvMeta.setAlpha(fileGone ? 0.4f : 1.0f);
 
+        // 状态方块颜色
+        holder.vStatus.setAlpha(fileGone ? 0.4f : 1.0f);
+        holder.vStatus.setBackgroundColor(statusDotColor(ctx, record));
+
         String status = statusText(ctx, record);
         StringBuilder meta = new StringBuilder(status);
         String target = record.targetName != null ? record.targetName
@@ -250,12 +254,29 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         }
     }
 
+    /** 状态方块颜色，与 DeviceTaskAdapter 风格统一。 */
+    private int statusDotColor(android.content.Context ctx, TransferRecord record) {
+        switch (record.statusOrLegacy()) {
+            case TransferRecord.STATUS_SUCCESS:
+                return ctx.getColor(android.R.color.holo_green_dark);
+            case TransferRecord.STATUS_SENDING:
+                return ctx.getColor(android.R.color.holo_blue_light);
+            case TransferRecord.STATUS_PENDING:
+                return ctx.getColor(android.R.color.holo_orange_light);
+            case TransferRecord.STATUS_CANCELLED:
+                return ctx.getColor(android.R.color.darker_gray);
+            default: // FAILED
+                return ctx.getColor(android.R.color.holo_red_dark);
+        }
+    }
+
     @Override
     public int getItemCount() {
         return differ.getCurrentList().size();
     }
 
     static class VH extends RecyclerView.ViewHolder {
+        final View vStatus;
         final CheckBox cbSelect;
         final TextView tvName;
         final TextView tvMeta;
@@ -263,6 +284,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
 
         VH(@NonNull View itemView) {
             super(itemView);
+            vStatus = itemView.findViewById(R.id.vHistoryStatus);
             cbSelect = itemView.findViewById(R.id.cbSelect);
             tvName = itemView.findViewById(R.id.tvHistoryName);
             tvMeta = itemView.findViewById(R.id.tvHistoryMeta);

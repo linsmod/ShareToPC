@@ -150,13 +150,6 @@
                 android:text="@string/select_all" />
 
             <Button
-                android:id="@+id/btnResendSelected"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/resend" />
-
-            <Button
                 android:id="@+id/btnDeleteSelected"
                 style="@style/Widget.Material3.Button.TextButton"
                 android:layout_width="wrap_content"

@@ -8,6 +8,13 @@
     android:paddingVertical="8dp"
     android:background="?attr/selectableItemBackground">
 
+    <!-- 状态方块 -->
+    <View
+        android:id="@+id/vHistoryStatus"
+        android:layout_width="10dp"
+        android:layout_height="10dp"
+        android:layout_marginEnd="10dp" />
+
     <CheckBox
         android:id="@+id/cbSelect"
         android:layout_width="wrap_content"

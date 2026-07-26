@@ -768,9 +768,9 @@ namespace ShareToPcReciver
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
-                Dock = DockStyle.Fill,
-                Text = text.Text
+                Dock = DockStyle.Fill
             };
+            txt.Text = text.Text.Replace("\n", Environment.NewLine);
             var btnCopy = new Button { Text = "复制", AutoSize = true };
             btnCopy.Click += (s, ev) =>
             {

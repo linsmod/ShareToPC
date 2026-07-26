@@ -213,7 +213,6 @@ public class MainActivity extends AppCompatActivity {
             // 刷新按钮始终显示，connState 自身带倒计时，不再单独控制可见性
         });
         findViewById(R.id.btnSelectAll).setOnClickListener(v -> historyAdapter.toggleSelectAll());
-        findViewById(R.id.btnResendSelected).setOnClickListener(v -> resendSelected());
         findViewById(R.id.btnDeleteSelected).setOnClickListener(v -> confirmDeleteSelected());
         findViewById(R.id.btnCancelSelection).setOnClickListener(v -> historyAdapter.exitSelectionMode());
 
@@ -315,40 +314,6 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
-    }
-
-    /** 批量重发：跳过已成功和不可投递的记录，暂存记录弹设备选择器。 */
-    private void resendSelected() {
-        java.util.List<github.linsmod.sharetopc.data.TransferRecord> selected =
-                historyAdapter.getSelectedRecords();
-        if (selected.isEmpty()) {
-            return;
-        }
-
-        java.util.List<github.linsmod.sharetopc.data.TransferRecord> pendingList =
-                new java.util.ArrayList<>();
-        int resent = 0;
-        for (github.linsmod.sharetopc.data.TransferRecord r : selected) {
-            if (r.success || !r.canDeliver()) {
-                continue;
-            }
-            if (r.isPending() || r.host == null) {
-                pendingList.add(r);
-            } else {
-                viewModel.retry(r);
-                resent++;
-            }
-        }
-        historyAdapter.exitSelectionMode();
-
-        if (resent > 0) {
-            Toast.makeText(this, getString(R.string.resent_count, resent),
-                    Toast.LENGTH_SHORT).show();
-        }
-
-        if (!pendingList.isEmpty()) {
-            showDevicePickerForPending(pendingList);
-        }
     }
 
     /** 多选操作条显隐：标题显示"传输历史 (已选 N 项)"，选择栏显示/隐藏。 */
