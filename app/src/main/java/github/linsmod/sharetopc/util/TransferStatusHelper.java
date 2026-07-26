@@ -45,6 +45,7 @@ public class TransferStatusHelper {
             case STATUS_SUCCESS:
                 return ctx.getColor(android.R.color.holo_green_dark);
             case STATUS_SENDING:
+            case "CONNECTING":
                 return ctx.getColor(android.R.color.holo_blue_light);
             case STATUS_PENDING:
                 return ctx.getColor(android.R.color.holo_orange_light);
@@ -64,6 +65,7 @@ public class TransferStatusHelper {
             case STATUS_SUCCESS:
                 return ctx.getString(R.string.result_ok);
             case STATUS_SENDING:
+            case "CONNECTING":
                 return ctx.getString(R.string.result_sending);
             case STATUS_PENDING:
                 return ctx.getString(R.string.result_pending);

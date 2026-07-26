@@ -27,22 +27,33 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         public final String deviceKey;
         public final String fileName;
         public final int percent;
-        public final boolean active;
-        public final boolean paused;
+        /** 统一状态：SENDING | PAUSED | SUCCESS | FAILED | CANCELLED */
+        public final String status;
+        public final long size;
+        public final long time;
+        public final int contentType;
         @Nullable
         public final String recordId;
 
-        public DeviceTransferInfo(String deviceKey, String fileName, int percent, boolean active) {
-            this(deviceKey, fileName, percent, active, false, null);
+        public DeviceTransferInfo(String deviceKey, String fileName, int percent, String status) {
+            this(deviceKey, fileName, percent, status, 0, 0, 0, null);
         }
 
         public DeviceTransferInfo(String deviceKey, String fileName, int percent,
-                                  boolean active, boolean paused, @Nullable String recordId) {
+                                  String status, @Nullable String recordId) {
+            this(deviceKey, fileName, percent, status, 0, 0, 0, recordId);
+        }
+
+        public DeviceTransferInfo(String deviceKey, String fileName, int percent,
+                                  String status, long size, long time,
+                                  int contentType, @Nullable String recordId) {
             this.deviceKey = deviceKey;
             this.fileName = fileName;
             this.percent = percent;
-            this.active = active;
-            this.paused = paused;
+            this.status = status;
+            this.size = size;
+            this.time = time;
+            this.contentType = contentType;
             this.recordId = recordId;
         }
     }
@@ -81,8 +92,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         for (DiscoveredDevice device : items) {
             displayItems.add(device);
             if (currentTransfer != null && currentTransfer.deviceKey != null
-                    && currentTransfer.deviceKey.equals(device.key())
-                    && (currentTransfer.active || currentTransfer.paused)) {
+                    && currentTransfer.deviceKey.equals(device.key())) {
                 displayItems.add(currentTransfer);
             }
         }
@@ -96,20 +106,19 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     }
 
     public void setCurrentTransfer(@Nullable DeviceTransferInfo info) {
-        boolean wasVisible = this.currentTransfer != null
-                && (this.currentTransfer.active || this.currentTransfer.paused);
-        boolean willBeVisible = info != null && (info.active || info.paused);
-        boolean structureChanged = wasVisible != willBeVisible
-                || !Objects.equals(
-                        this.currentTransfer != null ? this.currentTransfer.deviceKey : null,
-                        info != null ? info.deviceKey : null);
+        // 忽略 null，不清空已显示的传输项（始终显示最近一次传输状态）
+        if (info == null) return;
+
+        String oldKey = this.currentTransfer != null ? this.currentTransfer.deviceKey : null;
+        String newKey = info.deviceKey;
+        boolean structureChanged = !Objects.equals(oldKey, newKey);
 
         this.currentTransfer = info;
 
         if (structureChanged) {
             rebuildDisplayItems();
             notifyDataSetChanged();
-        } else if (willBeVisible) {
+        } else {
             updateTransferProgressViews(info);
         }
     }
@@ -153,9 +162,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
         if (viewType == TYPE_TRANSFER) {
             TransferItemView view = new TransferItemView(parent.getContext());
-            // 传输子项：隐藏状态圆点、多选框、元信息
-            view.setStatusDotVisible(false);
-            view.setMetaVisible(false);
             return new TransferVH(view);
         }
         if (viewType == TYPE_ADD) {
@@ -210,19 +216,54 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     private void bindTransferContent(TransferItemView view, DeviceTransferInfo info) {
         android.content.Context ctx = view.getContext();
 
-        if (info.paused) {
-            view.setName(info.fileName + "  " + ctx.getString(R.string.state_paused));
-            view.setPercent(-1);
-            view.setProgressBarVisible(false);
-            view.setActionMode(TransferItemView.ActionMode.RETRY,
-                    ctx.getString(R.string.action_resume), true);
-        } else {
-            view.setName(info.fileName + "  " + ctx.getString(R.string.state_sending));
-            view.setPercent(info.percent >= 0 ? info.percent : -1);
-            view.setProgressBarVisible(true);
-            view.setProgress(info.percent);
-            view.setActionMode(TransferItemView.ActionMode.ACTIVE, null, false);
+        TransferItemView.BindData data = new TransferItemView.BindData();
+
+        // 文件名（带 [文本] 前缀）
+        String prefix = info.contentType == github.linsmod.sharetopc.data.PendingContent.TYPE_TEXT
+                ? "[" + ctx.getString(R.string.type_text) + "] " : "";
+        data.name = prefix + (info.fileName != null ? info.fileName : "");
+
+        // 状态圆点 + 按钮区（单一 status 驱动，不再用 active/paused 拼凑）
+        String status = info.status != null ? info.status : "SUCCESS";
+        data.status = status;
+        switch (status) {
+            case "SENDING":
+            case "CONNECTING":
+                data.actionMode = TransferItemView.ActionMode.ACTIVE;
+                break;
+            case "PAUSED":
+                data.actionMode = TransferItemView.ActionMode.RETRY;
+                data.actionLabel = ctx.getString(R.string.action_resume);
+                data.actionEnabled = true;
+                break;
+            case "FAILED":
+            case "CANCELLED":
+                data.actionMode = TransferItemView.ActionMode.RETRY;
+                data.actionLabel = ctx.getString(R.string.retry);
+                data.actionEnabled = true;
+                break;
+            default: // SUCCESS
+                break;
         }
+
+        // 元信息：状态 · 大小 · 时间（与 HistoryAdapter 格式一致）
+        StringBuilder meta = new StringBuilder(TransferItemView.statusLabel(ctx, status));
+        if (info.size > 0) {
+            meta.append(" · ").append(github.linsmod.sharetopc.util.FileUtils.formatSize(info.size));
+        }
+        if (info.time > 0) {
+            java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault());
+            meta.append(" · ").append(fmt.format(new java.util.Date(info.time)));
+        }
+        data.meta = meta.toString();
+
+        // 百分比 + 进度条
+        boolean hasProgress = info.percent >= 0;
+        data.percent = hasProgress ? info.percent : -1;
+        data.showProgressBar = hasProgress;
+        data.progress = hasProgress ? info.percent : 0;
+
+        view.bind(data);
 
         view.setOnActionListener(new TransferItemView.OnActionListener() {
             @Override public void onPause() {

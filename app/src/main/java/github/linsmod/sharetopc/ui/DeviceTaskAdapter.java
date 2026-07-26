@@ -132,6 +132,7 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
                 VH holder = (VH) recyclerView.findViewHolderForAdapterPosition(i);
                 if (holder != null) {
                     holder.item.setPercent(percent);
+                    holder.item.setProgress(percent);
                 }
                 return;
             }
@@ -142,9 +143,6 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         TransferItemView view = new TransferItemView(parent.getContext());
-        view.setProgressBarVisible(false); // 任务弹窗不显示进度条
-        view.setStatusDotVisible(true);
-        view.setMetaVisible(true);
         return new VH(view);
     }
 
@@ -155,36 +153,34 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
         android.content.Context ctx = view.getContext();
         String statusStr = item.statusString();
 
-        view.setName(item.name);
-        view.setTransferStatus(statusStr);
+        TransferItemView.BindData data = new TransferItemView.BindData();
+        data.name = item.name;
+        data.status = statusStr;
 
-        // 元信息
+        // 元信息：状态 · 大小 · 时间
         StringBuilder meta = new StringBuilder(TransferItemView.statusLabel(ctx, statusStr));
         meta.append(" · ").append(FileUtils.formatSize(item.size))
                 .append(" · ").append(timeFormat.format(new Date(item.time)));
-        view.setMeta(meta.toString());
+        data.meta = meta.toString();
 
-        // 百分比
-        if (item.isCurrent && item.percent >= 0) {
-            view.setPercent(item.percent);
-        } else {
-            view.setPercent(-1); // 隐藏
-        }
-
-        // 隐藏多选框
-        view.setCheckboxVisible(false, false);
+        // 百分比 + 进度条
+        boolean hasProgress = item.percent >= 0;
+        data.percent = hasProgress ? item.percent : -1;
+        data.showProgressBar = hasProgress;
+        data.progress = hasProgress ? item.percent : 0;
 
         // 按钮
         if (item.status == STATUS_TRANSFERRING) {
-            view.setActionMode(TransferItemView.ActionMode.ACTIVE, null, false);
+            data.actionMode = TransferItemView.ActionMode.ACTIVE;
         } else if (item.status == STATUS_FAILED || item.status == STATUS_CANCELLED) {
-            String label = item.status == STATUS_CANCELLED
+            data.actionMode = TransferItemView.ActionMode.RETRY;
+            data.actionLabel = item.status == STATUS_CANCELLED
                     ? ctx.getString(github.linsmod.sharetopc.R.string.action_resume)
                     : ctx.getString(github.linsmod.sharetopc.R.string.retry);
-            view.setActionMode(TransferItemView.ActionMode.RETRY, label, item.canResume);
-        } else {
-            view.setActionMode(TransferItemView.ActionMode.NONE, null, false);
+            data.actionEnabled = item.canResume;
         }
+
+        view.bind(data);
 
         // 操作回调
         view.setOnActionListener(new TransferItemView.OnActionListener() {

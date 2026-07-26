@@ -39,6 +39,7 @@ public class DeviceStore {
             if (list != null) {
                 for (KnownDevice kd : list) {
                     DiscoveredDevice d = new DiscoveredDevice(kd.name, kd.host, kd.port, false);
+                    d.lastTransferId = kd.lastTransferId;
                     result.add(d);
                 }
             }
@@ -82,15 +83,34 @@ public class DeviceStore {
         String name;
         String host;
         int port;
+        String lastTransferId;
 
         KnownDevice(String name, String host, int port) {
+            this(name, host, port, null);
+        }
+
+        KnownDevice(String name, String host, int port, String lastTransferId) {
             this.name = name;
             this.host = host;
             this.port = port;
+            this.lastTransferId = lastTransferId;
         }
 
         String key() {
             return host + ":" + port;
+        }
+    }
+
+    /** 更新设备的 lastTransferId 并持久化。 */
+    public void setLastTransferId(String host, int port, String transferId) {
+        List<KnownDevice> list = loadRawList();
+        String key = host + ":" + port;
+        for (KnownDevice kd : list) {
+            if (kd.key().equals(key)) {
+                kd.lastTransferId = transferId;
+                prefs.edit().putString(KEY_DEVICES, gson.toJson(list)).apply();
+                return;
+            }
         }
     }
 }

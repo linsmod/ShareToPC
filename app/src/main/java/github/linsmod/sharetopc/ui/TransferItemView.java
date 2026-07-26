@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.ImageButton;
@@ -23,10 +24,12 @@ import github.linsmod.sharetopc.util.TransferStatusHelper;
  * <pre>
  * 用法：
  *   TransferItemView item = new TransferItemView(context);
- *   item.setName("file.txt");
- *   item.setStatus(TransferRecord.STATUS_SENDING);
- *   item.setMeta("传输中 · 192.168.1.1:80 · 1.2MB · 14:30");
- *   item.setActionMode(ActionMode.ACTIVE);
+ *   BindData data = new BindData();
+ *   data.name = "file.txt";
+ *   data.status = "SENDING";
+ *   data.meta = "传输中 · 192.168.1.1:80 · 1.2MB · 14:30";
+ *   data.actionMode = ActionMode.ACTIVE;
+ *   item.bind(data);
  *   item.setOnActionListener(listener);
  * </pre>
  */
@@ -47,6 +50,30 @@ public class TransferItemView extends LinearLayout {
         void onPause();
         void onCancel();
         void onResume();
+    }
+
+    /** 统一绑定数据，三处 Adapter 共用同一份字段。 */
+    public static class BindData {
+        /** 文件名（可含前缀如 "[文本] "）。 */
+        public String name = "";
+        /** 文件名透明度（1.0 正常，0.4 文件已删除灰化）。 */
+        public float nameAlpha = 1.0f;
+        /** 传输状态字符串："SENDING" / "SUCCESS" / "FAILED" / "CANCELLED"（映射圆点颜色）。 */
+        public String status = "";
+        /** meta 行完整文案（Adapter 自行拼接后传入）。 */
+        public String meta = "";
+        /** 百分比数值，-1 表示隐藏。 */
+        public int percent = -1;
+        /** 进度条进度 0–100。 */
+        public boolean showProgressBar = false;
+        public int progress = 0;
+        /** 多选框。 */
+        public boolean showCheckbox = false;
+        public boolean checkboxChecked = false;
+        /** 按钮区。 */
+        public ActionMode actionMode = ActionMode.NONE;
+        @Nullable public String actionLabel;
+        public boolean actionEnabled = false;
     }
 
     private final View vStatus;
@@ -73,6 +100,10 @@ public class TransferItemView extends LinearLayout {
     public TransferItemView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         setOrientation(HORIZONTAL);
+        // 代码创建时默认撑满宽度，避免在某些容器中只能显示 wrap_content 宽度
+        setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LayoutInflater.from(context).inflate(R.layout.item_transfer_unified, this, true);
 
@@ -156,6 +187,51 @@ public class TransferItemView extends LinearLayout {
 
     public boolean isCheckboxChecked() {
         return cbSelect.isChecked();
+    }
+
+    // ── 统一绑定入口 ──────────────────────────────────────
+
+    /** 一次调用完成所有字段绑定（除 setOnActionListener / setOnClickListener 等回调）。 */
+    public void bind(@Nullable BindData data) {
+        if (data == null) return;
+
+        // 名称
+        tvName.setText(data.name != null ? data.name : "");
+        tvName.setAlpha(data.nameAlpha);
+
+        // 状态圆点
+        if (data.status != null && !data.status.isEmpty()) {
+            vStatus.setVisibility(VISIBLE);
+            vStatus.setBackgroundColor(TransferStatusHelper.dotColor(getContext(), data.status));
+        } else {
+            vStatus.setVisibility(GONE);
+        }
+
+        // 百分比
+        if (data.percent >= 0) {
+            tvPercent.setVisibility(VISIBLE);
+            tvPercent.setText(data.percent + "%");
+            tvPercent.setTextColor(TransferStatusHelper.percentColor(getContext(), data.percent));
+        } else {
+            tvPercent.setVisibility(GONE);
+        }
+
+        // 进度条
+        progressBar.setVisibility(data.showProgressBar ? VISIBLE : GONE);
+        if (data.showProgressBar) {
+            progressBar.setProgress(Math.max(0, Math.min(100, data.progress)));
+        }
+
+        // meta 行
+        tvMeta.setVisibility(data.meta != null && !data.meta.isEmpty() ? VISIBLE : GONE);
+        tvMeta.setText(data.meta != null ? data.meta : "");
+
+        // 多选框
+        cbSelect.setVisibility(data.showCheckbox ? VISIBLE : GONE);
+        if (data.showCheckbox) cbSelect.setChecked(data.checkboxChecked);
+
+        // 按钮区
+        setActionMode(data.actionMode, data.actionLabel, data.actionEnabled);
     }
 
     // ── 按钮区 ────────────────────────────────────────────

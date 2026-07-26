@@ -47,7 +47,9 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
                     && java.util.Objects.equals(old.host, n.host)
                     && old.port == n.port
                     && java.util.Objects.equals(old.targetName, n.targetName)
-                    && java.util.Objects.equals(old.errorMsg, n.errorMsg);
+                    && java.util.Objects.equals(old.errorMsg, n.errorMsg)
+                    && old.sentBytes == n.sentBytes
+                    && old.totalBytes == n.totalBytes;
         }
     };
 
@@ -130,9 +132,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         TransferItemView item = new TransferItemView(parent.getContext());
-        // 历史记录不显示进度条和百分比
-        item.setProgressBarVisible(false);
-        item.setPercentVisible(false);
         return new VH(item);
     }
 
@@ -143,50 +142,59 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         android.content.Context ctx = view.getContext();
         String status = record.statusOrLegacy();
 
-        // 文件名
+        TransferItemView.BindData data = new TransferItemView.BindData();
+
+        // 文件名（带 [文本] 前缀）
         String prefix = record.contentType == PendingContent.TYPE_TEXT
                 ? "[" + ctx.getString(github.linsmod.sharetopc.R.string.type_text) + "] " : "";
-        view.setName(prefix + record.name);
+        data.name = prefix + record.name;
 
         // 文件已不存在 → 灰化
-        boolean fileGone = record.isFileGone();
-        float alpha = fileGone ? 0.4f : 1.0f;
-        view.setNameAlpha(alpha);
+        data.nameAlpha = record.isFileGone() ? 0.4f : 1.0f;
 
         // 状态圆点
-        view.setTransferStatus(status);
+        data.status = status;
 
-        // 元信息
+        // 元信息：状态 · 设备 · 大小 · 时间
         StringBuilder meta = new StringBuilder(TransferItemView.statusLabel(ctx, status));
         String target = record.targetName != null ? record.targetName
                 : (record.host != null ? record.host + ":" + record.port : null);
         if (target != null) meta.append(" · ").append(target);
         meta.append(" · ").append(FileUtils.formatSize(record.size))
                 .append(" · ").append(timeFormat.format(new Date(record.timeMillis)));
-        view.setMeta(meta.toString());
-        view.setMetaVisible(true);
+        data.meta = meta.toString();
+
+        // 进度条 + 百分比
+        if (record.sentBytes > 0 && record.totalBytes > 0) {
+            int pct = (int) (record.sentBytes * 100 / record.totalBytes);
+            data.showProgressBar = true;
+            data.progress = pct;
+            data.percent = pct;
+        }
 
         // 多选框
-        view.setCheckboxVisible(selectionMode, selectedIds.contains(record.id));
+        data.showCheckbox = selectionMode;
+        data.checkboxChecked = selectionMode && selectedIds.contains(record.id);
 
         // 按钮
         if (selectionMode) {
-            view.setActionMode(TransferItemView.ActionMode.NONE, null, false);
+            // 多选模式：隐藏按钮
+            data.actionMode = TransferItemView.ActionMode.NONE;
         } else if (record.isPending()) {
-            view.setActionMode(TransferItemView.ActionMode.RETRY,
-                    ctx.getString(github.linsmod.sharetopc.R.string.action_send),
-                    record.canDeliver());
+            data.actionMode = TransferItemView.ActionMode.RETRY;
+            data.actionLabel = ctx.getString(github.linsmod.sharetopc.R.string.action_send);
+            data.actionEnabled = record.canDeliver();
         } else if (TransferRecord.STATUS_SENDING.equals(status)) {
-            view.setActionMode(TransferItemView.ActionMode.ACTIVE, null, false);
+            data.actionMode = TransferItemView.ActionMode.ACTIVE;
         } else if (!record.success) {
             boolean isCancelled = TransferRecord.STATUS_CANCELLED.equals(status);
-            String label = isCancelled ? ctx.getString(github.linsmod.sharetopc.R.string.action_resume)
+            data.actionMode = TransferItemView.ActionMode.RETRY;
+            data.actionLabel = isCancelled ? ctx.getString(github.linsmod.sharetopc.R.string.action_resume)
                     : ctx.getString(github.linsmod.sharetopc.R.string.retry);
-            boolean canRetry = TransferStatusHelper.canResumeOrRetry(record, pfdChecker);
-            view.setActionMode(TransferItemView.ActionMode.RETRY, label, canRetry);
-        } else {
-            view.setActionMode(TransferItemView.ActionMode.NONE, null, false);
+            data.actionEnabled = TransferStatusHelper.canResumeOrRetry(record, pfdChecker);
         }
+
+        view.bind(data);
 
         // 操作回调
         view.setOnActionListener(new TransferItemView.OnActionListener() {

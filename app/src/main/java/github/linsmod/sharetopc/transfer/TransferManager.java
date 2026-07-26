@@ -73,10 +73,10 @@ public class TransferManager {
         }
 
         public String displayName() {
-            if (items.size() == 1) {
+            if (!items.isEmpty()) {
                 return items.get(0).name;
             }
-            return items.size() + " 个文件";
+            return "";
         }
     }
 
@@ -131,6 +131,13 @@ public class TransferManager {
     public String getCurrentDeviceKey() {
         SendJob job = currentJob;
         return job != null ? job.host + ":" + job.port : null;
+    }
+
+    /** 当前任务的关联历史记录 id（重试/补发时存在），否则返回 null。 */
+    @Nullable
+    public String getCurrentRecordId() {
+        SendJob job = currentJob;
+        return job != null ? job.recordId : null;
     }
 
     /** 当前正在传输的任务显示名（文件名或"X 个文件"），无任务时返回 null。 */
