@@ -11,6 +11,8 @@ public class PendingContent {
     public String text;
     /** TYPE_FILE 时的本地路径 */
     public String localPath;
+    /** TYPE_FILE 时的原始 content:// URI（已申请持久读权限，用于清理后重发时回退复制） */
+    public String contentUri;
     /** 文件名或文本预览名 */
     public String name;
     public long size;
@@ -27,12 +29,18 @@ public class PendingContent {
     }
 
     public static PendingContent ofFile(String localPath, String name, long size, String mime) {
+        return ofFile(localPath, name, size, mime, null);
+    }
+
+    public static PendingContent ofFile(String localPath, String name, long size,
+                                        String mime, String contentUri) {
         PendingContent c = new PendingContent();
         c.type = TYPE_FILE;
         c.localPath = localPath;
         c.name = name;
         c.size = size;
         c.mime = mime;
+        c.contentUri = contentUri;
         return c;
     }
 

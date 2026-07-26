@@ -1,10 +1,15 @@
 package github.linsmod.sharetopc.transfer;
 
+import android.content.ContentResolver;
 import android.content.Context;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -19,6 +24,7 @@ import github.linsmod.sharetopc.cleanup.CleanupScheduler;
 import github.linsmod.sharetopc.data.HistoryStore;
 import github.linsmod.sharetopc.data.PendingContent;
 import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.util.FileUtils;
 import github.linsmod.sharetopc.util.LogX;
 
 /**
@@ -73,11 +79,13 @@ public class TransferManager {
     private final List<TransferListener> listeners = new CopyOnWriteArrayList<>();
     private final HistoryStore historyStore;
     private final CleanupScheduler cleanupScheduler;
+    private final Context appContext;
 
     private volatile State state = State.IDLE;
 
     public TransferManager(Context context, HistoryStore historyStore,
                            CleanupScheduler cleanupScheduler) {
+        this.appContext = context.getApplicationContext();
         this.historyStore = historyStore;
         this.cleanupScheduler = cleanupScheduler;
         worker.execute(this::consumeLoop);
@@ -196,9 +204,40 @@ public class TransferManager {
         } else {
             File file = new File(item.localPath);
             if (!file.exists()) {
-                throw new Exception("本地文件不存在：" + item.name);
+                // 本地副本已被清理，尝试从 content:// URI 回退复制
+                if (item.contentUri != null) {
+                    File restored = restoreFromContentUri(item);
+                    if (restored != null) {
+                        item.localPath = restored.getAbsolutePath();
+                        file = restored;
+                    }
+                }
+                if (!file.exists()) {
+                    throw new Exception("本地文件不存在：" + item.name);
+                }
             }
             client.sendFile(item, (sent, total) -> notifyProgress(item.name, sent, total));
+        }
+    }
+
+    /** 从 content:// URI 重新复制文件到 inbox。成功返回新 File，失败返回 null。 */
+    private File restoreFromContentUri(PendingContent item) {
+        try {
+            Uri uri = Uri.parse(item.contentUri);
+            ContentResolver resolver = appContext.getContentResolver();
+            File target = FileUtils.uniqueInboxFile(appContext, item.name);
+            try (InputStream in = resolver.openInputStream(uri);
+                 FileOutputStream fos = new FileOutputStream(target)) {
+                if (in == null) {
+                    return null;
+                }
+                FileUtils.copy(in, fos);
+                LogX.d("restored from contentUri: " + item.contentUri + " -> " + target);
+                return target;
+            }
+        } catch (Exception e) {
+            LogX.e("restoreFromContentUri failed: " + item.contentUri, e);
+            return null;
         }
     }
 

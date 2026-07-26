@@ -23,6 +23,7 @@ public class TransferRecord {
     // ---- 重发/补发所需信息 ----
     public String textContent;   // TYPE_TEXT 时的完整文本
     public String localPath;     // TYPE_FILE 时的本地路径（可能已被清理）
+    public String contentUri;    // TYPE_FILE 时的原始 content:// URI（已申请持久权限，清理后可回退复制）
     public String host;
     public int port;
     public String targetName;
@@ -59,6 +60,7 @@ public class TransferRecord {
         r.mime = c.mime;
         r.textContent = c.text;
         r.localPath = c.localPath;
+        r.contentUri = c.contentUri;
         r.policy = policy;
         return r;
     }
@@ -75,18 +77,19 @@ public class TransferRecord {
         return STATUS_PENDING.equals(statusOrLegacy());
     }
 
-    /** 内容仍可投递：文本永远可以；文件需本地副本仍存在。 */
+    /** 内容仍可投递：文本永远可以；文件需本地副本仍存在，或有 contentUri 可回退复制。 */
     public boolean canDeliver() {
         if (contentType == PendingContent.TYPE_TEXT) {
             return textContent != null;
         }
-        return localPath != null && new java.io.File(localPath).exists();
+        return (localPath != null && new java.io.File(localPath).exists())
+                || contentUri != null;
     }
 
     public PendingContent toPendingContent() {
         if (contentType == PendingContent.TYPE_TEXT) {
             return PendingContent.ofText(textContent);
         }
-        return PendingContent.ofFile(localPath, name, size, mime);
+        return PendingContent.ofFile(localPath, name, size, mime, contentUri);
     }
 }

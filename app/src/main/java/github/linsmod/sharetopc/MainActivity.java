@@ -46,7 +46,7 @@ public class MainActivity extends AppCompatActivity {
     private View progressSection;
     private android.widget.Button btnExpandHistory;
     private View selectionBar;
-    private TextView tvSelectionCount;
+    private TextView tvHistoryTitle;
     private boolean historyFullscreen = false;
 
     private final ActivityResultLauncher<String> locationPermissionLauncher =
@@ -80,7 +80,7 @@ public class MainActivity extends AppCompatActivity {
         btnAddManual = findViewById(R.id.btnAddManual);
         btnExpandHistory = findViewById(R.id.btnExpandHistory);
         selectionBar = findViewById(R.id.selectionBar);
-        tvSelectionCount = findViewById(R.id.tvSelectionCount);
+        tvHistoryTitle = findViewById(R.id.tvHistoryTitle);
 
         rvDevices = findViewById(R.id.rvDevices);
         rvDevices.setLayoutManager(new LinearLayoutManager(this));
@@ -267,12 +267,13 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** 多选操作条显隐与计数更新。 */
+    /** 多选操作条显隐：标题显示"传输历史 (已选 N 项)"，选择栏显示/隐藏。 */
     private void updateSelectionBar(int count) {
         if (historyAdapter.isSelectionMode()) {
+            tvHistoryTitle.setText(getString(R.string.history_title) + " (" + getString(R.string.selected_count, count) + ")");
             selectionBar.setVisibility(View.VISIBLE);
-            tvSelectionCount.setText(getString(R.string.selected_count, count));
         } else {
+            tvHistoryTitle.setText(R.string.history_title);
             selectionBar.setVisibility(View.GONE);
         }
     }

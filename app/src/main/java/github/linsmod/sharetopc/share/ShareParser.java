@@ -68,6 +68,17 @@ public final class ShareParser {
         String displayName = null;
         long size = -1;
 
+        // 申请持久读权限，以便清理本地副本后仍能从 content:// URI 重新复制
+        try {
+            final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                resolver.takePersistableUriPermission(uri, takeFlags);
+            }
+        } catch (Exception e) {
+            // 部分 ContentProvider 不支持持久权限，静默忽略
+            LogX.d("takePersistableUriPermission failed: " + uri);
+        }
+
         try (Cursor cursor = resolver.query(uri, null, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {
                 int nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
@@ -99,7 +110,8 @@ public final class ShareParser {
             }
             long copied = FileUtils.copy(in, fos);
             return PendingContent.ofFile(target.getAbsolutePath(),
-                    FileUtils.sanitizeFileName(displayName), copied, mime);
+                    FileUtils.sanitizeFileName(displayName), copied, mime,
+                    uri.toString());
         } catch (Exception e) {
             LogX.e("copy to inbox failed: " + uri, e);
             FileUtils.deleteQuietly(target);
