@@ -15,12 +15,31 @@
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/tvPreview"
+        android:id="@+id/tvContentCount"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <ListView
+        android:id="@+id/lvContentList"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginTop="4dp"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="2dp"
+        android:scrollbars="vertical"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tvPreviewFallback"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
         android:maxLines="4"
-        android:text="@string/parsing_share" />
+        android:text="@string/parsing_share"
+        android:visibility="gone" />
 
     <TextView
         android:layout_width="match_parent"
@@ -53,25 +72,12 @@
         android:textStyle="bold"
         android:visibility="gone" />
 
-    <RadioGroup
-        android:id="@+id/rgPolicy"
+    <CheckBox
+        android:id="@+id/cbCleanAfterSent"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:visibility="gone">
-
-        <RadioButton
-            android:id="@+id/rbAfterSend"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/policy_after_send" />
-
-        <RadioButton
-            android:id="@+id/rbNever"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/policy_never" />
-    </RadioGroup>
+        android:text="@string/clean_after_sent"
+        android:visibility="gone" />
 
     <ProgressBar
         android:id="@+id/progressSend"

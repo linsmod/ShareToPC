@@ -6,13 +6,14 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -20,6 +21,8 @@ import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -41,19 +44,13 @@ public class MainActivity extends AppCompatActivity {
 
     private MainViewModel viewModel;
     private TextView tvConnState;
-    private TextView tvProgress;
-    private ProgressBar progressBar;
-    private android.widget.Button btnCancelTransfer;
     private DeviceAdapter deviceAdapter;
     private HistoryAdapter historyAdapter;
 
     private DeviceQueueDialog deviceQueueDialog;
 
     private TextView tvDevicesTitle;
-    private TextView tvSearchingStatus;
     private RecyclerView rvDevices;
-    private View btnAddManual;
-    private View progressSection;
     private android.widget.Button btnExpandHistory;
     private View selectionBar;
     private TextView tvHistoryTitle;
@@ -92,14 +89,8 @@ public class MainActivity extends AppCompatActivity {
 
         mainContent = findViewById(R.id.mainContent);
         tvConnState = findViewById(R.id.tvConnState);
-        tvProgress = findViewById(R.id.tvProgress);
-        progressBar = findViewById(R.id.progressBar);
-        btnCancelTransfer = findViewById(R.id.btnCancelTransfer);
 
         tvDevicesTitle = findViewById(R.id.tvDevicesTitle);
-        tvSearchingStatus = findViewById(R.id.tvSearchingStatus);
-        progressSection = findViewById(R.id.progressSection);
-        btnAddManual = findViewById(R.id.btnAddManual);
         btnExpandHistory = findViewById(R.id.btnExpandHistory);
         selectionBar = findViewById(R.id.selectionBar);
         tvHistoryTitle = findViewById(R.id.tvHistoryTitle);
@@ -121,6 +112,11 @@ public class MainActivity extends AppCompatActivity {
 
         // 初始定位到折叠态（post 确保布局完成后再定位）
         historySheet.post(() -> historySheet.setY(sheetCollapsedTop));
+
+        // 给 mainContent 底部留出 peekHeight 的空间，避免进度条/按钮被抽屉挡住
+        ViewGroup.MarginLayoutParams mainLp = (ViewGroup.MarginLayoutParams) mainContent.getLayoutParams();
+        mainLp.bottomMargin = peekHeight;
+        mainContent.setLayoutParams(mainLp);
 
         // 头部区域响应拖拽
         sheetHeader.setOnTouchListener((v, event) -> {
@@ -177,6 +173,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         rvDevices.setAdapter(deviceAdapter);
+        deviceAdapter.setOnAddDeviceClickListener(() -> showManualDeviceDialog());
 
         RecyclerView rvHistory = findViewById(R.id.rvHistory);
         rvHistory.setLayoutManager(new LinearLayoutManager(this));
@@ -208,16 +205,12 @@ public class MainActivity extends AppCompatActivity {
 
         findViewById(R.id.btnSettings).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
-        btnAddManual.setOnClickListener(v -> showManualDeviceDialog());
 
         View btnRefreshDevices = findViewById(R.id.btnRefreshDevices);
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
-        btnCancelTransfer.setOnClickListener(v -> viewModel.cancelCurrentTransfer());
+        deviceAdapter.setOnCancelTransferListener(() -> viewModel.cancelCurrentTransfer());
         viewModel.getScanning().observe(this, isScanning -> {
-            boolean scanning = Boolean.TRUE.equals(isScanning);
-            tvConnState.setVisibility(scanning ? View.GONE : View.VISIBLE);
-            btnRefreshDevices.setVisibility(scanning ? View.GONE : View.VISIBLE);
-            tvSearchingStatus.setVisibility(scanning ? View.VISIBLE : View.GONE);
+            // 刷新按钮始终显示，connState 自身带倒计时，不再单独控制可见性
         });
         findViewById(R.id.btnSelectAll).setOnClickListener(v -> historyAdapter.toggleSelectAll());
         findViewById(R.id.btnResendSelected).setOnClickListener(v -> resendSelected());
@@ -240,30 +233,13 @@ public class MainActivity extends AppCompatActivity {
 
         viewModel.getDevices().observe(this, deviceAdapter::submitList);
         viewModel.getConnState().observe(this, tvConnState::setText);
-        viewModel.getSearchHint().observe(this, tvSearchingStatus::setText);
-        viewModel.getDeviceTransfer().observe(this, deviceAdapter::setCurrentTransfer);
-        viewModel.getHistory().observe(this, records -> {
-            historyAdapter.submitList(records);
-            refreshDeviceQueueIfVisible();
-        });
-        viewModel.getProgress().observe(this, p -> {
-            if (p == null) {
-                tvProgress.setText(R.string.current_transfer_idle);
-                progressBar.setProgress(0);
-                btnCancelTransfer.setVisibility(View.GONE);
-            } else if (p.percent >= 0) {
-                tvProgress.setText(p.statusText + " " + p.name + " " + p.percent + "%");
-                progressBar.setProgress(p.percent);
-                btnCancelTransfer.setVisibility(View.VISIBLE);
-                // 轻量更新队列弹窗中的进度百分比，不重建列表
-                if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
-                    deviceQueueDialog.updateProgress(p.percent);
-                }
-            } else {
-                tvProgress.setText(p.statusText + " " + p.name);
-                btnCancelTransfer.setVisibility(View.VISIBLE);
+        viewModel.getDeviceTransfer().observe(this, info -> {
+            deviceAdapter.setCurrentTransfer(info);
+            if (deviceQueueDialog != null && deviceQueueDialog.isShowing() && info != null) {
+                deviceQueueDialog.updateProgress(info.percent);
             }
         });
+        viewModel.getHistory().observe(this, historyAdapter::submitList);
     }
 
     @Override
@@ -279,7 +255,10 @@ public class MainActivity extends AppCompatActivity {
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
-            viewModel.startDiscovery();
+            // 已有扫描在进行中（切回前台或 resume），不重启避免重新读秒
+            if (!App.get().discoveryManager.isDiscovering()) {
+                viewModel.startDiscovery();
+            }
         } else {
             locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
         }
@@ -297,19 +276,13 @@ public class MainActivity extends AppCompatActivity {
         viewModel.refreshHistory();
     }
 
-    /** 如果设备任务弹窗正在显示，刷新其数据。 */
-    private void refreshDeviceQueueIfVisible() {
-        if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
-            deviceQueueDialog.refresh();
-        }
-    }
-
     /** 点击设备：弹出该设备的任务队列弹窗。 */
     private void showDeviceQueueDialog(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
         if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
             deviceQueueDialog.dismiss();
         }
-        deviceQueueDialog = new DeviceQueueDialog(this, device, this::showTextPreview);
+        deviceQueueDialog = new DeviceQueueDialog(this, device, this::showTextPreview,
+                this, viewModel.getHistory());
         deviceQueueDialog.show();
     }
 
@@ -418,7 +391,7 @@ public class MainActivity extends AppCompatActivity {
                 .start();
     }
 
-    /** 为暂存记录选择目标设备后补发（支持批量）。 */
+    /** 为暂存记录选择目标设备后补发（支持批量），弹窗中显示在线/离线圆点。 */
     private void showDevicePickerForPending(
             java.util.List<github.linsmod.sharetopc.data.TransferRecord> records) {
         java.util.List<github.linsmod.sharetopc.discovery.DiscoveredDevice> targets =
@@ -441,27 +414,56 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, R.string.no_device_for_send, Toast.LENGTH_LONG).show();
             return;
         }
-        String[] names = new String[targets.size()];
-        for (int i = 0; i < targets.size(); i++) {
-            names[i] = targets.get(i).toString();
-        }
-        new AlertDialog.Builder(this)
+
+        android.widget.ArrayAdapter<github.linsmod.sharetopc.discovery.DiscoveredDevice> adapter =
+                new android.widget.ArrayAdapter<github.linsmod.sharetopc.discovery.DiscoveredDevice>(
+                        this, R.layout.item_pick_device, targets) {
+            @NonNull
+            @Override
+            public android.view.View getView(int position, @Nullable android.view.View convertView,
+                                              @NonNull android.view.ViewGroup parent) {
+                if (convertView == null) {
+                    convertView = LayoutInflater.from(getContext())
+                            .inflate(R.layout.item_pick_device, parent, false);
+                }
+                github.linsmod.sharetopc.discovery.DiscoveredDevice device = getItem(position);
+                android.view.View dot = convertView.findViewById(R.id.vDot);
+                android.widget.TextView tvName = convertView.findViewById(R.id.tvName);
+                android.widget.TextView tvAddr = convertView.findViewById(R.id.tvAddr);
+                if (device != null) {
+                    dot.setBackgroundResource(
+                            device.isOnline ? R.drawable.dot_online : R.drawable.dot_offline);
+                    tvName.setText(device.displayName());
+                    tvAddr.setText(device.host + ":" + device.port);
+                }
+                return convertView;
+            }
+        };
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.choose_device)
-                .setItems(names, (dialog, which) -> {
+                .setAdapter(adapter, (d, which) -> {
+                    github.linsmod.sharetopc.discovery.DiscoveredDevice chosen = targets.get(which);
                     for (github.linsmod.sharetopc.data.TransferRecord r : records) {
-                        viewModel.sendPending(r, targets.get(which));
+                        viewModel.sendPending(r, chosen);
                     }
                 })
                 .setNegativeButton(R.string.cancel, null)
-                .show();
+                .create();
+        dialog.show();
+        android.view.Window window = dialog.getWindow();
+        if (window != null) {
+            window.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.85),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
-    /** 设备备注名对话框：支持自由输入与常用预设，可恢复默认。 */
+    /** 设备备注名对话框：支持自由输入与常用预设，可删除设备。 */
     private void showAliasDialog(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (20 * getResources().getDisplayMetrics().density);
-        layout.setPadding(pad, pad / 2, pad, 0);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        layout.setPadding(pad, pad / 2, pad, pad / 2);
 
         EditText etAlias = new EditText(this);
         etAlias.setHint(device.name);
@@ -490,28 +492,34 @@ public class MainActivity extends AppCompatActivity {
         }
         layout.addView(presets);
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.device_alias_title)
                 .setView(layout)
-                .setPositiveButton(R.string.save, (dialog, which) -> {
+                .setPositiveButton(R.string.save, (d, which) -> {
                     App.get().settingsStore.setDeviceAlias(device.host, device.port,
                             etAlias.getText().toString());
                     viewModel.refreshDevices();
                 })
                 .setNegativeButton(R.string.cancel, null)
-                .setNeutralButton(R.string.reset_default, (dialog, which) -> {
-                    App.get().settingsStore.setDeviceAlias(device.host, device.port, null);
-                    viewModel.refreshDevices();
+                .setNeutralButton(R.string.delete_device, (d, which) -> {
+                    App.get().settingsStore.deleteManualDevice(device.host, device.port);
+                    viewModel.removeDevice(device);
                 })
                 .show();
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawableResource(R.drawable.bg_dialog);
+            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 
     /** 手动输入 IP:端口 对话框，保存到设置。 */
     private void showManualDeviceDialog() {
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (20 * getResources().getDisplayMetrics().density);
-        layout.setPadding(pad, pad / 2, pad, 0);
+        int pad = (int) (16 * getResources().getDisplayMetrics().density);
+        layout.setPadding(pad, pad / 2, pad, pad / 2);
 
         EditText etHost = new EditText(this);
         etHost.setHint(R.string.manual_host_hint);
@@ -525,16 +533,23 @@ public class MainActivity extends AppCompatActivity {
         etPort.setText(String.valueOf(App.get().settingsStore.getManualPort()));
         layout.addView(etPort);
 
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(R.string.manual_device_dialog_title)
                 .setView(layout)
-                .setPositiveButton(R.string.ok, (dialog, which) -> {
+                .setPositiveButton(R.string.ok, (d, which) -> {
                     String host = etHost.getText().toString().trim();
                     String port = etPort.getText().toString().trim();
                     App.get().settingsStore.saveManualDevice(host, port);
+                    viewModel.refreshDevices();
                     Toast.makeText(this, R.string.ok, Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawableResource(R.drawable.bg_dialog);
+            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
     }
 }

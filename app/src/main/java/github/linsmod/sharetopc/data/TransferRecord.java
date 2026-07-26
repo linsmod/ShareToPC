@@ -7,6 +7,8 @@ public class TransferRecord {
 
     public static final String STATUS_SUCCESS = "SUCCESS";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_CANCELLED = "CANCELLED";
+    public static final String STATUS_SENDING = "SENDING";
     /** 暂存：尚未选择目标设备，等待补发 */
     public static final String STATUS_PENDING = "PENDING";
 
@@ -19,6 +21,8 @@ public class TransferRecord {
     public String transferId;    // PendingContent.transferId，用于在多文件传输中匹配已完成项
     public boolean success;
     public String status;        // SUCCESS / FAILED / PENDING（旧数据可能为空，由 success 推导）
+    public long sentBytes;       // 已发送字节，启动恢复时 0→CANCELLED，>0→FAILED（为断点续传预留）
+    public long totalBytes;      // 总字节数
     public String errorMsg;
 
     // ---- 重发/补发所需信息 ----
@@ -40,6 +44,18 @@ public class TransferRecord {
         r.success = success;
         r.status = success ? STATUS_SUCCESS : STATUS_FAILED;
         r.errorMsg = errorMsg;
+        return r;
+    }
+
+    /** 传输中的记录（发送前插入，后续更新为 SUCCESS/FAILED/CANCELLED）。 */
+    public static TransferRecord sending(PendingContent c, String host, int port,
+                                         String targetName, String policy) {
+        TransferRecord r = base(c, policy);
+        r.host = host;
+        r.port = port;
+        r.targetName = targetName;
+        r.success = false;
+        r.status = STATUS_SENDING;
         return r;
     }
 
@@ -79,18 +95,19 @@ public class TransferRecord {
         return STATUS_PENDING.equals(statusOrLegacy());
     }
 
-    /** 内容仍可投递：文本永远可以；文件需本地副本仍存在，或有 contentUri 可回退复制。 */
+    /** 内容仍可投递：文本永远可以；文件需有 contentUri 或仍存在的 localPath。 */
     public boolean canDeliver() {
         if (contentType == PendingContent.TYPE_TEXT) {
             return textContent != null;
         }
-        return (localPath != null && new java.io.File(localPath).exists())
-                || contentUri != null;
+        return contentUri != null
+                || (localPath != null && new java.io.File(localPath).exists());
     }
 
-    /** 文件类型的记录，本地副本已不存在（无论是否有 contentUri 回退，用于视觉灰化）。 */
+    /** 文件类型的记录，本地副本已不存在且无 contentUri 回退（用于视觉灰化）。 */
     public boolean isFileGone() {
         return contentType == PendingContent.TYPE_FILE
+                && contentUri == null
                 && (localPath == null || !new java.io.File(localPath).exists());
     }
 
@@ -98,6 +115,10 @@ public class TransferRecord {
         if (contentType == PendingContent.TYPE_TEXT) {
             return PendingContent.ofText(textContent);
         }
-        return PendingContent.ofFile(localPath, name, size, mime, contentUri);
+        // 优先用 contentUri（新路径 / 回退），其次用 localPath（历史兼容）
+        if (contentUri != null) {
+            return PendingContent.ofFileFromUri(contentUri, name, size, mime);
+        }
+        return PendingContent.ofFile(localPath, name, size, mime, null);
     }
 }

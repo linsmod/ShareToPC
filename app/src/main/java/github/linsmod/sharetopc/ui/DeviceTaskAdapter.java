@@ -6,6 +6,8 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.text.SimpleDateFormat;
@@ -21,10 +23,10 @@ import github.linsmod.sharetopc.util.FileUtils;
 public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH> {
 
     /** 任务状态类型。 */
-    public static final int STATUS_WAITING = 0;     // 排队中
     public static final int STATUS_TRANSFERRING = 1; // 传输中
     public static final int STATUS_SUCCESS = 2;      // 成功
     public static final int STATUS_FAILED = 3;       // 失败
+    public static final int STATUS_CANCELLED = 4;    // 已取消
 
     /** 统一的任务展示模型。 */
     public static class TaskItem {
@@ -66,11 +68,48 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
     }
 
     public void submitList(List<TaskItem> list) {
-        items.clear();
-        if (list != null) {
-            items.addAll(list);
+        List<TaskItem> newList = list != null ? list : new ArrayList<>();
+        // 有一方为空时跳过 DiffUtil 动画，避免从空列表切到有数据时逐项插入的闪烁
+        if (items.isEmpty() || newList.isEmpty()) {
+            items.clear();
+            items.addAll(newList);
+            notifyDataSetChanged();
+            return;
         }
-        notifyDataSetChanged();
+        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffCallback(items, newList));
+        items.clear();
+        items.addAll(newList);
+        diff.dispatchUpdatesTo(this);
+    }
+
+    /** DiffUtil 回调：按 id 匹配，按 status/percent 判断内容变化。 */
+    private static class DiffCallback extends DiffUtil.Callback {
+        private final List<TaskItem> oldList;
+        private final List<TaskItem> newList;
+
+        DiffCallback(List<TaskItem> oldList, List<TaskItem> newList) {
+            this.oldList = oldList;
+            this.newList = newList;
+        }
+
+        @Override
+        public int getOldListSize() { return oldList.size(); }
+
+        @Override
+        public int getNewListSize() { return newList.size(); }
+
+        @Override
+        public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+            return oldList.get(oldItemPosition).id.equals(newList.get(newItemPosition).id);
+        }
+
+        @Override
+        public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+            TaskItem o = oldList.get(oldItemPosition);
+            TaskItem n = newList.get(newItemPosition);
+            return o.status == n.status && o.percent == n.percent
+                    && o.isCurrent == n.isCurrent && o.name.equals(n.name);
+        }
     }
 
     /** 直接操作 ViewHolder 更新进度百分比，不走 onBindViewHolder。 */
@@ -119,9 +158,6 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
         // 状态文案
         String statusText;
         switch (item.status) {
-            case STATUS_WAITING:
-                statusText = ctx.getString(R.string.queue_status_waiting);
-                break;
             case STATUS_TRANSFERRING:
                 statusText = ctx.getString(R.string.queue_status_transferring);
                 break;
@@ -130,6 +166,9 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
                 break;
             case STATUS_FAILED:
                 statusText = ctx.getString(R.string.result_failed);
+                break;
+            case STATUS_CANCELLED:
+                statusText = ctx.getString(R.string.result_cancelled);
                 break;
             default:
                 statusText = "";
@@ -143,9 +182,6 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
         // 状态圆点颜色
         int dotColor;
         switch (item.status) {
-            case STATUS_WAITING:
-                dotColor = ctx.getColor(android.R.color.darker_gray);
-                break;
             case STATUS_TRANSFERRING:
                 dotColor = ctx.getColor(android.R.color.holo_blue_light);
                 break;
@@ -154,6 +190,9 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
                 break;
             case STATUS_FAILED:
                 dotColor = ctx.getColor(android.R.color.holo_red_dark);
+                break;
+            case STATUS_CANCELLED:
+                dotColor = ctx.getColor(android.R.color.darker_gray);
                 break;
             default:
                 dotColor = ctx.getColor(android.R.color.darker_gray);

@@ -62,6 +62,11 @@ public class NsdDiscoveryManager {
         listeners.remove(listener);
     }
 
+    /** 从缓存中移除设备（下次 mDNS 扫描/发现时仍会重新出现）。 */
+    public synchronized void removeDevice(String host, int port) {
+        devices.remove(host + ":" + port);
+    }
+
     public synchronized List<DiscoveredDevice> getDevices() {
         List<DiscoveredDevice> list = new ArrayList<>(devices.values());
         for (DiscoveredDevice d : list) {

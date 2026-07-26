@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import github.linsmod.sharetopc.data.TransferRecord;
@@ -63,7 +64,7 @@ public class MainViewModel extends AndroidViewModel {
         discoveryListener = new NsdDiscoveryManager.Listener() {
             @Override
             public void onDevicesChanged(List<DiscoveredDevice> list) {
-                devices.setValue(list);
+                devices.setValue(mergeManualDevice(list));
                 updateConnState();
             }
 
@@ -82,7 +83,7 @@ public class MainViewModel extends AndroidViewModel {
 
         transferListener = new TransferListener() {
         @Override
-        public void onStateChanged(TransferManager.State state, String jobName) {
+        public void onStateChanged(TransferManager.State state, String jobName, String deviceKey) {
             String text;
             switch (state) {
                 case CONNECTING:
@@ -108,18 +109,16 @@ public class MainViewModel extends AndroidViewModel {
             } else {
                 String name = jobName != null ? jobName : "";
                 progress.setValue(new TransferProgress(name, -1, text));
-                String deviceKey = app.transferManager.getCurrentDeviceKey();
                 deviceTransfer.setValue(new DeviceAdapter.DeviceTransferInfo(
                         deviceKey, name, -1, true));
             }
         }
 
         @Override
-        public void onProgress(String itemName, long sentBytes, long totalBytes) {
+        public void onProgress(String itemName, long sentBytes, long totalBytes, String deviceKey) {
             int percent = totalBytes > 0 ? (int) (sentBytes * 100 / totalBytes) : 0;
             progress.setValue(new TransferProgress(itemName, percent,
                     app.getString(R.string.state_sending)));
-            String deviceKey = app.transferManager.getCurrentDeviceKey();
             deviceTransfer.setValue(new DeviceAdapter.DeviceTransferInfo(
                     deviceKey, itemName, percent, true));
         }
@@ -148,9 +147,10 @@ public class MainViewModel extends AndroidViewModel {
         initListeners();
         app.discoveryManager.addListener(discoveryListener);
         app.transferManager.addListener(transferListener);
+        app.historyStore.fixStaleSendingRecords();
         refreshHistory();
-        // 立即显示已知设备（离线状态）
-        devices.setValue(app.discoveryManager.getDevices());
+        // 立即显示已知设备（离线状态），包含手动设备
+        refreshDevices();
         updateConnState();
     }
 
@@ -174,20 +174,21 @@ public class MainViewModel extends AndroidViewModel {
         return scanning;
     }
 
-    /** 根据扫描状态与已发现数量生成状态文案（扫描中带倒计时）。 */
+    /** 根据扫描状态与已发现数量生成状态文案（扫描中在已发现x台设备后追加秒数）。 */
     private void updateConnState() {
         List<DiscoveredDevice> list = devices.getValue();
         int count = list != null ? list.size() : 0;
         boolean isScanning = Boolean.TRUE.equals(scanning.getValue());
+        String base = count > 0
+                ? app.getString(R.string.status_found, count)
+                : app.getString(R.string.status_not_found);
         if (isScanning) {
             long remainingSec = Math.max(0, (scanEndAtMillis - System.currentTimeMillis() + 999) / 1000);
-            searchHint.setValue("搜索中...（" + remainingSec + "s）");
-            connState.setValue(app.getString(R.string.status_searching, remainingSec));
-        } else {
+            connState.setValue(base + "（" + remainingSec + "s）");
             searchHint.setValue(null);
-            connState.setValue(count > 0
-                    ? app.getString(R.string.status_found, count)
-                    : app.getString(R.string.status_not_found));
+        } else {
+            connState.setValue(base);
+            searchHint.setValue(null);
         }
     }
 
@@ -200,13 +201,32 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     public void startDiscovery() {
-        devices.setValue(app.discoveryManager.getDevices());
+        app.discoveryManager.stopDiscovery();
+        refreshDevices();
         app.discoveryManager.startDiscovery(app.settingsStore.getScanTimeoutSec() * 1000L);
     }
 
-    /** 刷新设备列表（备注名变更后调用）。 */
+    /** 刷新设备列表（备注名变更后调用）。也用于手动设备保存后刷新。 */
     public void refreshDevices() {
-        devices.setValue(app.discoveryManager.getDevices());
+        devices.setValue(mergeManualDevice(app.discoveryManager.getDevices()));
+    }
+
+    /** 将手动添加的设备合并到列表中（去重）。 */
+    private List<DiscoveredDevice> mergeManualDevice(List<DiscoveredDevice> list) {
+        DiscoveredDevice manual = app.settingsStore.getManualDevice();
+        if (manual == null) return list;
+        for (DiscoveredDevice d : list) {
+            if (d.key().equals(manual.key())) return list;
+        }
+        List<DiscoveredDevice> merged = new ArrayList<>(list);
+        merged.add(manual);
+        return merged;
+    }
+
+    /** 从当前设备列表中移除指定设备（下次扫描可能重新发现）。 */
+    public void removeDevice(DiscoveredDevice device) {
+        app.discoveryManager.removeDevice(device.host, device.port);
+        refreshDevices();
     }
 
     public void stopDiscovery() {

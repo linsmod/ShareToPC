@@ -84,15 +84,44 @@ public class HistoryStore {
         if (target == null) {
             return;
         }
+        applyUpdate(target, host, port, targetName, success, errorMsg);
+    }
+
+    /** 按 transferId 匹配最近一条记录并更新状态（发送前插入 → 成功后/取消/失败时更新）。 */
+    public synchronized void updateStatusByTransferId(String transferId, String host, int port,
+                                                      String targetName, boolean success, String errorMsg) {
+        if (transferId == null) {
+            return;
+        }
+        ensureLoaded();
+        TransferRecord target = null;
+        for (TransferRecord r : records) {
+            if (transferId.equals(r.transferId)) {
+                target = r;
+                break;
+            }
+        }
+        if (target == null) {
+            return;
+        }
+        applyUpdate(target, host, port, targetName, success, errorMsg);
+    }
+
+    private void applyUpdate(TransferRecord target, String host, int port, String targetName,
+                             boolean success, String errorMsg) {
         target.host = host;
         target.port = port;
         target.targetName = targetName;
         target.success = success;
-        target.status = success ? TransferRecord.STATUS_SUCCESS : TransferRecord.STATUS_FAILED;
+        // errorMsg 可能是 STATUS_CANCELLED / STATUS_SENDING / STATUS_PENDING 等状态字符串
+        if (errorMsg != null && (errorMsg.equals(TransferRecord.STATUS_CANCELLED)
+                || errorMsg.equals(TransferRecord.STATUS_SENDING)
+                || errorMsg.equals(TransferRecord.STATUS_PENDING))) {
+            target.status = errorMsg;
+        } else {
+            target.status = success ? TransferRecord.STATUS_SUCCESS : TransferRecord.STATUS_FAILED;
+        }
         target.errorMsg = errorMsg;
-        target.timeMillis = System.currentTimeMillis();
-        records.remove(target);
-        records.add(0, target);
         persist();
     }
 
@@ -129,5 +158,37 @@ public class HistoryStore {
     public synchronized void clear() {
         records.clear();
         persist();
+    }
+
+    /** 启动时修复中断的传输记录：sentBytes=0 → PENDING（等待发送），sentBytes>0 → FAILED。 */
+    public void fixStaleSendingRecords() {
+        ensureLoaded();
+        boolean changed = false;
+        for (TransferRecord r : records) {
+            if (TransferRecord.STATUS_SENDING.equals(r.status)) {
+                if (r.sentBytes == 0) {
+                    r.status = TransferRecord.STATUS_PENDING;
+                } else {
+                    r.status = TransferRecord.STATUS_FAILED;
+                }
+                r.success = false;
+                changed = true;
+            }
+        }
+        if (changed) {
+            persist();
+        }
+    }
+
+    /** 传输过程中更新指定 transferId 的已发送/总字节数。 */
+    public synchronized void updateProgressByTransferId(String transferId, long sent, long total) {
+        if (transferId == null) return;
+        for (TransferRecord r : records) {
+            if (transferId.equals(r.transferId)) {
+                r.sentBytes = sent;
+                r.totalBytes = total;
+                return;
+            }
+        }
     }
 }

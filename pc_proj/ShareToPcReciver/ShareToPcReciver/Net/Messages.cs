@@ -68,4 +68,10 @@ namespace ShareToPcReciver.Net
         [JsonPropertyName("type")]
         public string Type => "PONG";
     }
+
+    public class CancelMsg
+    {
+        [JsonPropertyName("type")]
+        public string Type => "CANCEL";
+    }
 }

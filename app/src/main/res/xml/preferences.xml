@@ -40,4 +40,14 @@
     <Preference
         android:key="view_logs"
         android:title="@string/pref_view_logs_title" />
+
+    <Preference
+        android:key="qq_group"
+        android:summary="@string/pref_qq_group_summary"
+        android:title="@string/pref_qq_group_title" />
+
+    <Preference
+        android:key="version"
+        android:selectable="false"
+        android:title="@string/pref_version_title" />
 </PreferenceScreen>

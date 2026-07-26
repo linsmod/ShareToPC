@@ -8,10 +8,13 @@ import android.widget.CheckBox;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.AsyncListDiffer;
+import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -23,24 +26,34 @@ import github.linsmod.sharetopc.data.PendingContent;
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.util.FileUtils;
 
-/** 传输历史适配器。支持 成功/失败(重试)/暂存(补发) 三种状态，以及长按进入的多选管理模式。 */
+/** 传输历史适配器。用 DiffUtil 精准更新，避免 notifyDataSetChanged() 导致的整列表跳动。 */
 public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
 
     public interface ActionListener {
-        /** 失败记录重发。 */
         void onRetry(TransferRecord record);
-
-        /** 暂存记录选择设备补发。 */
         void onSendPending(TransferRecord record);
-
-        /** 多选状态变化（count 为已选数量；配合 isSelectionMode 判断是否处于选择模式）。 */
         void onSelectionChanged(int count);
-
-        /** 非多选状态下点击条目（用于文本预览等）。 */
         void onItemClick(TransferRecord record);
     }
 
-    private final List<TransferRecord> items = new ArrayList<>();
+    private static final DiffUtil.ItemCallback<TransferRecord> DIFF = new DiffUtil.ItemCallback<TransferRecord>() {
+        @Override
+        public boolean areItemsTheSame(@NonNull TransferRecord old, @NonNull TransferRecord n) {
+            return old.id.equals(n.id);
+        }
+
+        @Override
+        public boolean areContentsTheSame(@NonNull TransferRecord old, @NonNull TransferRecord n) {
+            return old.success == n.success
+                    && java.util.Objects.equals(old.status, n.status)
+                    && java.util.Objects.equals(old.host, n.host)
+                    && old.port == n.port
+                    && java.util.Objects.equals(old.targetName, n.targetName)
+                    && java.util.Objects.equals(old.errorMsg, n.errorMsg);
+        }
+    };
+
+    private final AsyncListDiffer<TransferRecord> differ = new AsyncListDiffer<>(this, DIFF);
     private final Set<String> selectedIds = new HashSet<>();
     private final ActionListener actionListener;
     private final SimpleDateFormat timeFormat =
@@ -52,20 +65,18 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
     }
 
     public void submitList(List<TransferRecord> list) {
-        items.clear();
-        if (list != null) {
-            items.addAll(list);
-        }
-        if (selectionMode) {
-            Set<String> alive = new HashSet<>();
-            for (TransferRecord r : items) {
-                alive.add(r.id);
+        List<TransferRecord> newList = list != null ? list : Collections.emptyList();
+        differ.submitList(new ArrayList<>(newList), () -> {
+            if (selectionMode) {
+                Set<String> alive = new HashSet<>();
+                for (TransferRecord r : newList) {
+                    alive.add(r.id);
+                }
+                if (selectedIds.retainAll(alive)) {
+                    notifySelectionChanged();
+                }
             }
-            if (selectedIds.retainAll(alive)) {
-                notifySelectionChanged();
-            }
-        }
-        notifyDataSetChanged();
+        });
     }
 
     public boolean isSelectionMode() {
@@ -79,7 +90,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
     /** 当前选中的记录对象（保持列表顺序）。 */
     public List<TransferRecord> getSelectedRecords() {
         List<TransferRecord> result = new ArrayList<>();
-        for (TransferRecord r : items) {
+        for (TransferRecord r : differ.getCurrentList()) {
             if (selectedIds.contains(r.id)) {
                 result.add(r);
             }
@@ -116,11 +127,12 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         if (!selectionMode) {
             return;
         }
-        if (selectedIds.size() == items.size()) {
+        List<TransferRecord> current = differ.getCurrentList();
+        if (selectedIds.size() == current.size()) {
             selectedIds.clear();
         } else {
             selectedIds.clear();
-            for (TransferRecord r : items) {
+            for (TransferRecord r : current) {
                 selectedIds.add(r.id);
             }
         }
@@ -152,7 +164,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
 
     @Override
     public void onBindViewHolder(@NonNull VH holder, int position) {
-        TransferRecord record = items.get(position);
+        TransferRecord record = differ.getCurrentList().get(position);
         android.content.Context ctx = holder.itemView.getContext();
 
         String prefix = record.contentType == PendingContent.TYPE_TEXT
@@ -183,7 +195,9 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         if (!selectionMode && record.isPending()) {
             bindAction(holder.btnRetry, ctx.getString(R.string.action_send),
                     record.canDeliver(), () -> actionListener.onSendPending(record));
-        } else if (!selectionMode && !record.success) {
+        } else if (!selectionMode && !record.success
+                && !TransferRecord.STATUS_CANCELLED.equals(record.statusOrLegacy())
+                && !TransferRecord.STATUS_SENDING.equals(record.statusOrLegacy())) {
             bindAction(holder.btnRetry, ctx.getString(R.string.retry),
                     record.canDeliver(), () -> actionListener.onRetry(record));
         } else {
@@ -195,7 +209,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
             if (selectionMode) {
                 int pos = holder.getAdapterPosition();
                 if (pos != RecyclerView.NO_POSITION) {
-                    toggleSelection(items.get(pos), pos);
+                    toggleSelection(differ.getCurrentList().get(pos), pos);
                 }
             } else if (actionListener != null) {
                 actionListener.onItemClick(record);
@@ -225,8 +239,12 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         switch (record.statusOrLegacy()) {
             case TransferRecord.STATUS_SUCCESS:
                 return ctx.getString(R.string.result_ok);
+            case TransferRecord.STATUS_SENDING:
+                return ctx.getString(R.string.result_sending);
             case TransferRecord.STATUS_PENDING:
                 return ctx.getString(R.string.result_pending);
+            case TransferRecord.STATUS_CANCELLED:
+                return ctx.getString(R.string.result_cancelled);
             default:
                 return ctx.getString(R.string.result_failed);
         }
@@ -234,7 +252,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
 
     @Override
     public int getItemCount() {
-        return items.size();
+        return differ.getCurrentList().size();
     }
 
     static class VH extends RecyclerView.ViewHolder {

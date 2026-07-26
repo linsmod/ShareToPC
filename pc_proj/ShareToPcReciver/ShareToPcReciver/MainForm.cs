@@ -379,6 +379,25 @@ namespace ShareToPcReciver
                     }
                     return;
                 }
+                if (p.Cancelled)
+                {
+                    if (_activeRow != null)
+                    {
+                        _activeRow.Tag = p;
+                        RefreshRow(_activeRow);
+                        _activeRow = null;
+                    }
+                    else
+                    {
+                        // 取消时可能还没有 activeRow（传输未开始时取消）
+                        string content = p.FileName.Length > 0
+                            ? $"{p.FileName} ({FormatSize(p.Total)})"
+                            : $"来自 {p.DeviceName}";
+                        var item = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", content, p.DeviceName, p);
+                        RefreshRow(item);
+                    }
+                    return;
+                }
                 if (_activeRow == null)
                 {
                     string content = $"{p.FileName} ({FormatSize(p.Total)})";
@@ -411,6 +430,13 @@ namespace ShareToPcReciver
             if (p.Failed)
             {
                 TextRenderer.DrawText(e.Graphics, "失败", lvHistory.Font, e.Bounds, Color.DarkRed,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                return;
+            }
+
+            if (p.Cancelled)
+            {
+                TextRenderer.DrawText(e.Graphics, "已取消", lvHistory.Font, e.Bounds, Color.Gray,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }

@@ -3,9 +3,10 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:layout_margin="16dp"
+    android:background="@drawable/bg_dialog"
     android:orientation="vertical"
-    android:paddingTop="8dp"
-    android:background="?android:attr/colorBackground">
+    android:paddingTop="8dp">
 
     <!-- 标题栏 -->
     <LinearLayout
@@ -64,6 +65,13 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/filter_completed" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipFailed"
+            style="@style/Widget.Material3.Chip.Filter"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/filter_failed" />
     </com.google.android.material.chip.ChipGroup>
 
     <View

@@ -9,9 +9,6 @@ import android.os.Build;
 import android.provider.OpenableColumns;
 import android.text.TextUtils;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -21,7 +18,7 @@ import github.linsmod.sharetopc.util.LogX;
 
 /**
  * Intent → List&lt;PendingContent&gt;。
- * 注意：URI 读取授权仅在进程存活期有效，必须在 Activity 前台时调用本类完成复制。
+ * 不复制文件到 inbox，直接记录 content:// URI，发送时实时读流。
  * 请在后台线程执行 {@link #parse}。
  */
 public final class ShareParser {
@@ -39,7 +36,7 @@ public final class ShareParser {
             String text = intent.getStringExtra(Intent.EXTRA_TEXT);
             Uri stream = getParcelable(intent, Intent.EXTRA_STREAM);
             if (stream != null) {
-                PendingContent file = copyUriToInbox(context, stream,
+                PendingContent file = resolveUriContent(context, stream,
                         intent.getType());
                 if (file != null) {
                     result.add(file);
@@ -51,7 +48,7 @@ public final class ShareParser {
             List<Uri> uris = getParcelableList(intent, Intent.EXTRA_STREAM);
             if (uris != null) {
                 for (Uri uri : uris) {
-                    PendingContent file = copyUriToInbox(context, uri,
+                    PendingContent file = resolveUriContent(context, uri,
                             intent.getType());
                     if (file != null) {
                         result.add(file);
@@ -62,20 +59,19 @@ public final class ShareParser {
         return result;
     }
 
-    /** 复制 content:// URI 到 inbox，生成 PendingContent。失败返回 null。 */
-    private static PendingContent copyUriToInbox(Context context, Uri uri, String intentType) {
+    /** 查询 content:// URI 的元数据，申请持久读权限，返回 PendingContent（不复制文件）。 */
+    private static PendingContent resolveUriContent(Context context, Uri uri, String intentType) {
         ContentResolver resolver = context.getContentResolver();
         String displayName = null;
         long size = -1;
 
-        // 申请持久读权限，以便清理本地副本后仍能从 content:// URI 重新复制
+        // 申请持久读权限，确保后台发送时仍可读取
         try {
             final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
                 resolver.takePersistableUriPermission(uri, takeFlags);
             }
         } catch (Exception e) {
-            // 部分 ContentProvider 不支持持久权限，静默忽略
             LogX.d("takePersistableUriPermission failed: " + uri);
         }
 
@@ -102,21 +98,8 @@ public final class ShareParser {
             mime = intentType != null ? intentType : FileUtils.guessMimeType(displayName);
         }
 
-        File target = FileUtils.uniqueInboxFile(context, displayName);
-        try (InputStream in = resolver.openInputStream(uri);
-             FileOutputStream fos = new FileOutputStream(target)) {
-            if (in == null) {
-                return null;
-            }
-            long copied = FileUtils.copy(in, fos);
-            return PendingContent.ofFile(target.getAbsolutePath(),
-                    FileUtils.sanitizeFileName(displayName), copied, mime,
-                    uri.toString());
-        } catch (Exception e) {
-            LogX.e("copy to inbox failed: " + uri, e);
-            FileUtils.deleteQuietly(target);
-            return null;
-        }
+        return PendingContent.ofFileFromUri(uri.toString(),
+                FileUtils.sanitizeFileName(displayName), size, mime);
     }
 
     private static Uri getParcelable(Intent intent, String key) {

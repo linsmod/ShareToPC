@@ -1,16 +1,15 @@
 package github.linsmod.sharetopc.transfer;
 
-import android.content.ContentResolver;
 import android.content.Context;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
 import androidx.annotation.Nullable;
+import androidx.lifecycle.LiveData;
+import androidx.lifecycle.MutableLiveData;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,7 +25,6 @@ import github.linsmod.sharetopc.cleanup.CleanupScheduler;
 import github.linsmod.sharetopc.data.HistoryStore;
 import github.linsmod.sharetopc.data.PendingContent;
 import github.linsmod.sharetopc.data.TransferRecord;
-import github.linsmod.sharetopc.util.FileUtils;
 import github.linsmod.sharetopc.util.LogX;
 
 /**
@@ -90,6 +88,9 @@ public class TransferManager {
     private final CleanupScheduler cleanupScheduler;
     private final Context appContext;
 
+    /** 队列状态 LiveData：入队/出队/取消时更新，供 UI 响应式观察。 */
+    private final MutableLiveData<List<SendJob>> queueJobsLiveData = new MutableLiveData<>();
+
     private volatile State state = State.IDLE;
     private volatile SendJob currentJob;
     private volatile TransferClient activeClient;
@@ -134,27 +135,24 @@ public class TransferManager {
         return job != null ? job.displayName() : null;
     }
 
-    /** 获取指定设备的排队任务（不包含正在执行的任务）。 */
-    public List<SendJob> getQueuedJobsForDevice(String deviceKey) {
-        List<SendJob> result = new ArrayList<>();
-        for (SendJob job : queue) {
-            String key = job.host + ":" + job.port;
-            if (key.equals(deviceKey)) {
-                result.add(job);
-            }
-        }
-        return result;
+    /** 获取队列状态 LiveData。 */
+    public LiveData<List<SendJob>> getQueueJobsLiveData() {
+        return queueJobsLiveData;
     }
 
-    /** 取消当前正在传输的任务。 */
+    /** 拍快照并通过 LiveData 发出（入队/出队/取消后调用）。 */
+    private void emitQueueChanged() {
+        List<SendJob> snapshot = new ArrayList<>(queue);
+        mainHandler.post(() -> queueJobsLiveData.setValue(snapshot));
+    }
+
+    /** 取消当前正在传输的任务。
+     * 只设置取消标志，由 worker 线程在 chunk 循环中检测到后自行发送 CANCEL 帧并关闭连接。 */
     public void cancelCurrentJob() {
         cancelRequested = true;
         TransferClient c = activeClient;
         if (c != null) {
-            try {
-                c.close();
-            } catch (Exception ignored) {
-            }
+            c.cancel();
         }
     }
 
@@ -163,6 +161,24 @@ public class TransferManager {
         for (SendJob job : queue) {
             if (job.id.equals(jobId)) {
                 if (queue.remove(job)) {
+                    // 更新历史记录为已取消（否则 SENDING/PENDING 记录会在设备弹窗里消失）
+                    for (PendingContent item : job.items) {
+                        if (job.recordId != null) {
+                            // 重试/补发：按 recordId 更新原记录，同时写入 host/port
+                            // （补发场景下原 PENDING 记录的 host/port 可能为空）
+                            historyStore.updateStatus(job.recordId, job.host, job.port,
+                                    job.deviceName, false, TransferRecord.STATUS_CANCELLED);
+                        } else {
+                            // 首次发送且尚未被 take 出队列→ process() 中的 recordHistory() 未执行
+                            // → 没有 SENDING 记录可更新，无需操作
+                        }
+                    }
+                    mainHandler.post(() -> {
+                        for (TransferListener l : listeners) {
+                            l.onHistoryChanged();
+                        }
+                    });
+                    emitQueueChanged();
                     LogX.d("cancelled queued job: " + job.displayName());
                     return true;
                 }
@@ -189,6 +205,7 @@ public class TransferManager {
                           String deviceName, CleanupPolicy policy, String recordId) {
         SendJob job = new SendJob(items, host, port, deviceName, policy, recordId);
         queue.offer(job);
+        emitQueueChanged();
         LogX.d("enqueue job: " + job.displayName() + " -> " + host + ":" + port);
         return job.id;
     }
@@ -198,22 +215,42 @@ public class TransferManager {
             SendJob job;
             try {
                 job = queue.take();
+                emitQueueChanged();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             }
-            process(job);
+            try {
+                process(job);
+            } catch (Throwable t) {
+                LogX.e("unhandled exception in consumeLoop, job="
+                        + (job != null ? job.displayName() : "null"), t);
+                try {
+                    setState(State.FAILED, job != null ? job.displayName() : "");
+                } catch (Throwable ignored) {
+                }
+                try {
+                    setState(State.IDLE, null);
+                } catch (Throwable ignored) {
+                }
+            }
         }
     }
 
     private void process(SendJob job) {
         currentJob = job;
         cancelRequested = false;
+        String error = null;
+        List<PendingContent> succeeded = new ArrayList<>();
+        List<PendingContent> failed = new ArrayList<>();
+
+        // 先为所有 item 创建/更新历史记录为 SENDING，确保后续即使 connect/send 失败，结算时也有记录可更新
+        for (PendingContent item : job.items) {
+            recordHistory(job, item, false, null);
+        }
+
         try {
             setState(State.CONNECTING, job.displayName());
-            String error = null;
-            List<PendingContent> succeeded = new ArrayList<>();
-            List<PendingContent> failed = new ArrayList<>();
 
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
                 if (cancelRequested) {
@@ -237,7 +274,7 @@ public class TransferManager {
                         }
                         sendItem(client, job, item);
                         succeeded.add(item);
-                        recordHistory(job, item, true, null);
+                        updateHistoryStatus(job, item, true, null);
                     }
                     if (cancelRequested) {
                         break;
@@ -263,20 +300,28 @@ public class TransferManager {
                     activeClient = null;
                 }
             }
+        } catch (Throwable t) {
+            // 防御：connect/send 阶段出现未预期异常也不会崩溃
+            LogX.e("unexpected error in transfer for job: " + job.displayName(), t);
+            error = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
+        } finally {
+            activeClient = null;
+        }
 
+        // 结算阶段（内部有 try-catch 防护，确保走到 IDLE）
+        try {
             for (PendingContent item : job.items) {
                 if (!succeeded.contains(item)) {
-                    // 已取消的项目不记录为失败，等用户重试
                     if (cancelRequested) {
-                        continue;
+                        updateHistoryStatus(job, item, false, TransferRecord.STATUS_CANCELLED);
+                    } else {
+                        failed.add(item);
+                        updateHistoryStatus(job, item, false, error);
                     }
-                    failed.add(item);
-                    recordHistory(job, item, false, error);
                 }
             }
 
             if (cancelRequested) {
-                // 已取消：仅清理已成功的项，不把未完成的记录为失败
                 setState(State.CANCELLED, job.displayName());
                 notifyJobCancelled(job.id, job.displayName());
             } else if (failed.isEmpty()) {
@@ -284,15 +329,19 @@ public class TransferManager {
                 setState(State.DONE, job.displayName());
                 notifyJobFinished(job.id, true, null);
             } else {
-                // 部分成功：成功部分仍按策略处理
                 if (!succeeded.isEmpty()) {
                     cleanupScheduler.onTransferSuccess(succeeded, job.policy);
                 }
                 setState(State.FAILED, job.displayName());
                 notifyJobFinished(job.id, false, error);
             }
-            setState(State.IDLE, null);
+        } catch (Throwable t) {
+            LogX.e("bookkeeping failed for job: " + job.displayName(), t);
         } finally {
+            try {
+                setState(State.IDLE, null);
+            } catch (Throwable ignored) {
+            }
             cancelRequested = false;
             currentJob = null;
             activeClient = null;
@@ -303,53 +352,60 @@ public class TransferManager {
         if (item.isText()) {
             client.sendText(item.text);
         } else {
-            File file = new File(item.localPath);
-            if (!file.exists()) {
-                // 本地副本已被清理，尝试从 content:// URI 回退复制
-                if (item.contentUri != null) {
-                    File restored = restoreFromContentUri(item);
-                    if (restored != null) {
-                        item.localPath = restored.getAbsolutePath();
-                        file = restored;
+            // 优先从 content:// URI 直接读流发送（新分享路径，无本地文件）
+            if (item.contentUri != null) {
+                Uri uri = Uri.parse(item.contentUri);
+                try (InputStream in = appContext.getContentResolver().openInputStream(uri)) {
+                    if (in == null) {
+                        throw new Exception("无法读取内容：" + item.name);
                     }
-                }
-                if (!file.exists()) {
-                    throw new Exception("本地文件不存在：" + item.name);
+                    client.sendFileFromStream(item.name, item.mime, item.size, in,
+                            (sent, total) -> notifyProgress(item.name, sent, total, item.transferId));
+                    return;
                 }
             }
-            client.sendFile(item, (sent, total) -> notifyProgress(item.name, sent, total));
+            // 历史兼容：从本地 inbox 文件发送
+            if (item.localPath != null) {
+                File file = new File(item.localPath);
+                if (file.exists()) {
+                    client.sendFile(item.name, item.mime, file,
+                            (sent, total) -> notifyProgress(item.name, sent, total, item.transferId));
+                    return;
+                }
+            }
+            throw new Exception("无可读取的源：" + item.name);
         }
     }
 
-    /** 从 content:// URI 重新复制文件到 inbox。成功返回新 File，失败返回 null。 */
-    private File restoreFromContentUri(PendingContent item) {
-        try {
-            Uri uri = Uri.parse(item.contentUri);
-            ContentResolver resolver = appContext.getContentResolver();
-            File target = FileUtils.uniqueInboxFile(appContext, item.name);
-            try (InputStream in = resolver.openInputStream(uri);
-                 FileOutputStream fos = new FileOutputStream(target)) {
-                if (in == null) {
-                    return null;
-                }
-                FileUtils.copy(in, fos);
-                LogX.d("restored from contentUri: " + item.contentUri + " -> " + target);
-                return target;
-            }
-        } catch (Exception e) {
-            LogX.e("restoreFromContentUri failed: " + item.contentUri, e);
-            return null;
-        }
-    }
-
+    /** 发送前插入一条初始记录或更新已有记录为 SENDING（重试/补发时复用原记录）。 */
     private void recordHistory(SendJob job, PendingContent item, boolean success, String error) {
         if (job.recordId != null) {
-            // 重试/补发：原地更新已有记录，保持同一内容只有单个条目
+            // 重试/补发：更新已有记录为 SENDING
             historyStore.updateStatus(job.recordId, job.host, job.port,
-                    job.deviceName, success, error);
+                    job.deviceName, false, TransferRecord.STATUS_SENDING);
         } else {
-            historyStore.add(TransferRecord.from(item, job.host, job.port,
-                    job.deviceName, job.policy.name(), success, error));
+            // 首次发送：创建新记录
+            TransferRecord r = TransferRecord.sending(item, job.host, job.port,
+                    job.deviceName, job.policy.name());
+            historyStore.add(r);
+        }
+        mainHandler.post(() -> {
+            for (TransferListener l : listeners) {
+                l.onHistoryChanged();
+            }
+        });
+    }
+
+    /** 更新历史记录状态（发送成功后 / 取消 / 失败）。 */
+    private void updateHistoryStatus(SendJob job, PendingContent item, boolean success, String errorOrStatus) {
+        if (job.recordId != null) {
+            // 重试/补发：按 recordId 更新原记录
+            historyStore.updateStatus(job.recordId, job.host, job.port,
+                    job.deviceName, success, errorOrStatus);
+        } else {
+            // 首次发送：按 transferId 匹配
+            historyStore.updateStatusByTransferId(item.transferId, job.host, job.port,
+                    job.deviceName, success, errorOrStatus);
         }
         mainHandler.post(() -> {
             for (TransferListener l : listeners) {
@@ -360,14 +416,20 @@ public class TransferManager {
 
     private void setState(State newState, String jobName) {
         state = newState;
+        // 在 post 之前同步捕获 deviceKey，避免主线程回调时 currentJob 已被清空
+        String deviceKey = currentJob != null ? currentJob.host + ":" + currentJob.port : null;
         mainHandler.post(() -> {
             for (TransferListener l : listeners) {
-                l.onStateChanged(newState, jobName);
+                l.onStateChanged(newState, jobName, deviceKey);
             }
         });
     }
 
     private void notifyProgress(String itemName, long sent, long total) {
+        notifyProgress(itemName, sent, total, null);
+    }
+
+    private void notifyProgress(String itemName, long sent, long total, String transferId) {
         long now = System.currentTimeMillis();
         // 节流：上次回调不到 200ms 则跳过（但 100% 必须通知）
         boolean isComplete = total > 0 && sent >= total;
@@ -375,9 +437,14 @@ public class TransferManager {
             return;
         }
         lastProgressNotifyMs = now;
+        // 持久化进度（为断点续传预留）
+        if (transferId != null) {
+            historyStore.updateProgressByTransferId(transferId, sent, total);
+        }
+        String deviceKey = currentJob != null ? currentJob.host + ":" + currentJob.port : null;
         mainHandler.post(() -> {
             for (TransferListener l : listeners) {
-                l.onProgress(itemName, sent, total);
+                l.onProgress(itemName, sent, total, deviceKey);
             }
         });
     }

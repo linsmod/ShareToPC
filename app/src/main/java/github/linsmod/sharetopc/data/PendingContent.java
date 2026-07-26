@@ -2,7 +2,7 @@ package github.linsmod.sharetopc.data;
 
 import java.util.UUID;
 
-/** 待发送内容：文本或已落地到 inbox 的文件。 */
+/** 待发送内容：文本（内存）或文件（content:// URI，实时读流，不落地）。 */
 public class PendingContent {
 
     public static final int TYPE_TEXT = 1;
@@ -11,9 +11,9 @@ public class PendingContent {
     public int type;
     /** TYPE_TEXT 时的文本内容 */
     public String text;
-    /** TYPE_FILE 时的本地路径 */
+    /** TYPE_FILE 时的本地路径（历史兼容，新分享为 null） */
     public String localPath;
-    /** TYPE_FILE 时的原始 content:// URI（已申请持久读权限，用于清理后重发时回退复制） */
+    /** TYPE_FILE 时的 content:// URI（含已申请的持久读权限），新分享的主数据源 */
     public String contentUri;
     /** 文件名或文本预览名 */
     public String name;
@@ -46,6 +46,24 @@ public class PendingContent {
         c.mime = mime;
         c.contentUri = contentUri;
         return c;
+    }
+
+    /** 直接从 content:// URI 构建（不落地 inbox），发送时实时读流。 */
+    public static PendingContent ofFileFromUri(String contentUri, String name, long size, String mime) {
+        PendingContent c = new PendingContent();
+        c.type = TYPE_FILE;
+        c.localPath = null;
+        c.contentUri = contentUri;
+        c.name = name;
+        c.size = size;
+        c.mime = mime;
+        return c;
+    }
+
+    /** 是否有可直接读取的内容流（contentUri 或仍存在的 localPath）。 */
+    public boolean hasReadableSource() {
+        if (contentUri != null) return true;
+        return localPath != null && new java.io.File(localPath).exists();
     }
 
     public boolean isText() {

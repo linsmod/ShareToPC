@@ -6,13 +6,15 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.net.wifi.WifiManager;
 import android.os.IBinder;
+import android.os.PowerManager;
 
 import github.linsmod.sharetopc.MainActivity;
 import github.linsmod.sharetopc.R;
 
 /**
- * 前台服务：保持进程活跃，防止切后台后 Android 限制网络访问或杀死进程。
+ * 前台服务：保持进程活跃 + CPU/Wi-Fi 不休眠，防止切后台后传输速度归零。
  */
 public class ShareForegroundService extends Service {
 
@@ -20,13 +22,37 @@ public class ShareForegroundService extends Service {
     public static final int NOTIFICATION_ID = 1001;
     public static final String ACTION_STOP = "github.linsmod.sharetopc.action.STOP_SERVICE";
 
+    private PowerManager.WakeLock wakeLock;
+    private WifiManager.WifiLock wifiLock;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+
+        // 部分唤醒锁：保持 CPU 运行，允许 Socket I/O 继续工作
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ShareToPC:TransferWakeLock");
+        wakeLock.setReferenceCounted(false);
+
+        // Wi-Fi 锁：防止屏幕关闭后 Wi-Fi 进入低功耗模式导致吞吐量骤降
+        WifiManager wm = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+        if (wm != null) {
+            wifiLock = wm.createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "ShareToPC:WifiLock");
+            wifiLock.setReferenceCounted(false);
+        }
+    }
+
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+            releaseLocks();
             stopForeground(STOP_FOREGROUND_REMOVE);
             stopSelf();
             return START_NOT_STICKY;
         }
+
+        // 获取锁，确保后台持续传输
+        acquireLocks();
 
         // 点击通知回到主界面
         Intent notificationIntent = new Intent(this, MainActivity.class);
@@ -56,8 +82,32 @@ public class ShareForegroundService extends Service {
     }
 
     @Override
+    public void onDestroy() {
+        releaseLocks();
+        super.onDestroy();
+    }
+
+    @Override
     public IBinder onBind(Intent intent) {
         return null;
+    }
+
+    private void acquireLocks() {
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire();
+        }
+        if (wifiLock != null && !wifiLock.isHeld()) {
+            wifiLock.acquire();
+        }
+    }
+
+    private void releaseLocks() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            wakeLock.release();
+        }
+        if (wifiLock != null && wifiLock.isHeld()) {
+            wifiLock.release();
+        }
     }
 
     /** 必须在启动服务前调用（建议在 Application.onCreate 中）。 */
