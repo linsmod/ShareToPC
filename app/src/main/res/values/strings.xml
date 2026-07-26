@@ -2,8 +2,7 @@
     <string name="app_name">ShareToPC</string>
     <string name="settings">设置</string>
     <string name="status_idle">未开始搜索</string>
-    <string name="status_searching">搜索中…（剩余 %1$d 秒）</string>
-    <string name="status_searching_found">搜索中…（剩余 %1$d 秒，已发现 %2$d 台）</string>
+    <string name="status_searching">搜索中… (%1$ds)</string>
     <string name="status_found">已发现 %1$d 台设备</string>
     <string name="status_not_found">未发现设备</string>
     <string name="refresh">刷新</string>

@@ -153,9 +153,7 @@ public class MainViewModel extends AndroidViewModel {
         boolean isScanning = Boolean.TRUE.equals(scanning.getValue());
         if (isScanning) {
             long remainingSec = Math.max(0, (scanEndAtMillis - System.currentTimeMillis() + 999) / 1000);
-            connState.setValue(count > 0
-                    ? app.getString(R.string.status_searching_found, remainingSec, count)
-                    : app.getString(R.string.status_searching, remainingSec));
+            connState.setValue(app.getString(R.string.status_searching, remainingSec));
         } else {
             connState.setValue(count > 0
                     ? app.getString(R.string.status_found, count)

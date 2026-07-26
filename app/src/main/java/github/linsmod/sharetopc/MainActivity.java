@@ -5,7 +5,10 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.text.InputType;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.animation.DecelerateInterpolator;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -47,7 +50,15 @@ public class MainActivity extends AppCompatActivity {
     private android.widget.Button btnExpandHistory;
     private View selectionBar;
     private TextView tvHistoryTitle;
-    private boolean historyFullscreen = false;
+    private View mainContent;
+
+    // 自定义抽屉拖拽
+    private View historySheet;
+    private int sheetExpandedTop;
+    private int sheetCollapsedTop;
+    private boolean sheetExpanded = false;
+    private boolean sheetDragging = false;
+    private float lastTouchY;
 
     private final ActivityResultLauncher<String> locationPermissionLauncher =
             registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
@@ -63,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
+        final int[] coordinatorAvailableHeight = {0};
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -71,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
 
         viewModel = new ViewModelProvider(this).get(MainViewModel.class);
 
+        mainContent = findViewById(R.id.mainContent);
         tvConnState = findViewById(R.id.tvConnState);
         tvProgress = findViewById(R.id.tvProgress);
         progressBar = findViewById(R.id.progressBar);
@@ -81,6 +94,65 @@ public class MainActivity extends AppCompatActivity {
         btnExpandHistory = findViewById(R.id.btnExpandHistory);
         selectionBar = findViewById(R.id.selectionBar);
         tvHistoryTitle = findViewById(R.id.tvHistoryTitle);
+
+        // 底部抽屉：自定义拖拽实现
+        historySheet = findViewById(R.id.historySheet);
+        View sheetHeader = findViewById(R.id.sheetHeader);
+
+        // 获取状态栏高度，计算停靠位置
+        int statusBarHeight = 0;
+        int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resId > 0) {
+            statusBarHeight = getResources().getDimensionPixelSize(resId);
+        }
+        int parentHeight = getResources().getDisplayMetrics().heightPixels;
+        int peekHeight = (parentHeight - statusBarHeight) / 3;
+        sheetExpandedTop = statusBarHeight;
+        sheetCollapsedTop = parentHeight - peekHeight;
+
+        // 初始定位到折叠态（post 确保布局完成后再定位）
+        historySheet.post(() -> historySheet.setY(sheetCollapsedTop));
+
+        // 头部区域响应拖拽
+        sheetHeader.setOnTouchListener((v, event) -> {
+            switch (event.getAction()) {
+                case MotionEvent.ACTION_DOWN:
+                    lastTouchY = event.getRawY();
+                    sheetDragging = false;
+                    v.getParent().requestDisallowInterceptTouchEvent(true);
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    float dy = event.getRawY() - lastTouchY;
+                    if (Math.abs(dy) > 5) {
+                        sheetDragging = true;
+                    }
+                    if (sheetDragging) {
+                        float newY = historySheet.getY() + dy;
+                        newY = Math.max(sheetExpandedTop, Math.min(sheetCollapsedTop, newY));
+                        historySheet.setY(newY);
+                        lastTouchY = event.getRawY();
+                    }
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (sheetDragging) {
+                        float mid = (sheetExpandedTop + sheetCollapsedTop) / 2f;
+                        float target = historySheet.getY() < mid ? sheetExpandedTop : sheetCollapsedTop;
+                        snapSheet(target);
+                    }
+                    return true;
+            }
+            return false;
+        });
+
+        // 按钮切换展开/折叠
+        btnExpandHistory.setOnClickListener(v -> {
+            if (sheetExpanded) {
+                snapSheet(sheetCollapsedTop);
+            } else {
+                snapSheet(sheetExpandedTop);
+            }
+        });
 
         rvDevices = findViewById(R.id.rvDevices);
         rvDevices.setLayoutManager(new LinearLayoutManager(this));
@@ -128,13 +200,12 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnSettings).setOnClickListener(v ->
                 startActivity(new Intent(this, SettingsActivity.class)));
         btnAddManual.setOnClickListener(v -> showManualDeviceDialog());
-        btnExpandHistory.setOnClickListener(v -> setHistoryFullscreen(!historyFullscreen));
 
         View btnRefreshDevices = findViewById(R.id.btnRefreshDevices);
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
         viewModel.getScanning().observe(this, isScanning ->
                 btnRefreshDevices.setVisibility(
-                        Boolean.TRUE.equals(isScanning) ? View.GONE : View.VISIBLE));
+                        Boolean.TRUE.equals(isScanning) ? View.INVISIBLE : View.VISIBLE));
         findViewById(R.id.btnSelectAll).setOnClickListener(v -> historyAdapter.toggleSelectAll());
         findViewById(R.id.btnResendSelected).setOnClickListener(v -> resendSelected());
         findViewById(R.id.btnDeleteSelected).setOnClickListener(v -> confirmDeleteSelected());
@@ -145,8 +216,8 @@ public class MainActivity extends AppCompatActivity {
             public void handleOnBackPressed() {
                 if (historyAdapter.isSelectionMode()) {
                     historyAdapter.exitSelectionMode();
-                } else if (historyFullscreen) {
-                    setHistoryFullscreen(false);
+                } else if (sheetExpanded) {
+                    snapSheet(sheetCollapsedTop);
                 } else {
                     setEnabled(false);
                     getOnBackPressedDispatcher().onBackPressed();
@@ -270,7 +341,7 @@ public class MainActivity extends AppCompatActivity {
     /** 多选操作条显隐：标题显示"传输历史 (已选 N 项)"，选择栏显示/隐藏。 */
     private void updateSelectionBar(int count) {
         if (historyAdapter.isSelectionMode()) {
-            tvHistoryTitle.setText(getString(R.string.history_title) + " (" + getString(R.string.selected_count, count) + ")");
+                tvHistoryTitle.setText(getString(R.string.history_title) + " (" + getString(R.string.selected_count, count) + ")");
             selectionBar.setVisibility(View.VISIBLE);
         } else {
             tvHistoryTitle.setText(R.string.history_title);
@@ -296,16 +367,15 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** 历史区域全屏 / 还原：全屏时隐藏设备与进度区块，历史列表占满剩余空间。 */
-    private void setHistoryFullscreen(boolean fullscreen) {
-        historyFullscreen = fullscreen;
-        int vis = fullscreen ? View.GONE : View.VISIBLE;
-        tvConnState.setVisibility(vis);
-        tvDevicesTitle.setVisibility(vis);
-        rvDevices.setVisibility(vis);
-        btnAddManual.setVisibility(vis);
-        progressSection.setVisibility(vis);
-        btnExpandHistory.setText(fullscreen ? R.string.history_restore : R.string.history_fullscreen);
+    /** 抽屉吸附到目标位置 */
+    private void snapSheet(float targetY) {
+        sheetExpanded = (targetY == sheetExpandedTop);
+        btnExpandHistory.setText(sheetExpanded ? R.string.history_restore : R.string.history_fullscreen);
+        historySheet.animate()
+                .y(targetY)
+                .setDuration(250)
+                .setInterpolator(new DecelerateInterpolator())
+                .start();
     }
 
     /** 为暂存记录选择目标设备后补发（支持批量）。 */
