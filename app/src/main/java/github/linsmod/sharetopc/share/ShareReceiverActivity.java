@@ -6,7 +6,6 @@ import android.os.Bundle;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -25,21 +24,17 @@ import github.linsmod.sharetopc.cleanup.CleanupPolicy;
 import github.linsmod.sharetopc.data.PendingContent;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
-import github.linsmod.sharetopc.transfer.TransferListener;
-import github.linsmod.sharetopc.transfer.TransferManager;
 
 /** 接收 Sharesheet 的对话框式 Activity：解析 → 选设备/策略 → 发送 → 结束。 */
 public class ShareReceiverActivity extends AppCompatActivity {
 
     private TextView tvPreview;
     private TextView tvNoDeviceHint;
-    private TextView tvSendStatus;
     private Spinner spinnerDevices;
     private TextView tvPolicyTitle;
     private android.widget.RadioGroup rgPolicy;
     private RadioButton rbAfterSend;
     private RadioButton rbNever;
-    private ProgressBar progressSend;
     private Button btnSend;
     private Button btnStash;
     private Button btnCancel;
@@ -47,46 +42,9 @@ public class ShareReceiverActivity extends AppCompatActivity {
     private final List<DiscoveredDevice> devices = new ArrayList<>();
     private ArrayAdapter<DiscoveredDevice> deviceAdapter;
     private List<PendingContent> pendingItems;
-    private String currentJobId;
-    private boolean jobRunning = false;
     private boolean startedDiscoveryHere = false;
 
     private final NsdDiscoveryManager.Listener discoveryListener = list -> refreshDevices();
-    private final TransferListener transferListener = new TransferListener() {
-        @Override
-        public void onStateChanged(TransferManager.State state, String jobName) {
-            if (jobRunning) {
-                showStatus(stateText(state));
-            }
-        }
-
-        @Override
-        public void onProgress(String itemName, long sentBytes, long totalBytes) {
-            if (jobRunning && totalBytes > 0) {
-                progressSend.setProgress((int) (sentBytes * 100 / totalBytes));
-            }
-        }
-
-        @Override
-        public void onJobFinished(String jobId, boolean success, String errorMsg) {
-            if (!jobId.equals(currentJobId)) {
-                return;
-            }
-            jobRunning = false;
-            if (success) {
-                Toast.makeText(ShareReceiverActivity.this,
-                        R.string.send_success, Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(ShareReceiverActivity.this,
-                        getString(R.string.send_failed, errorMsg), Toast.LENGTH_LONG).show();
-            }
-            finish();
-        }
-
-        @Override
-        public void onHistoryChanged() {
-        }
-    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -95,13 +53,11 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
         tvPreview = findViewById(R.id.tvPreview);
         tvNoDeviceHint = findViewById(R.id.tvNoDeviceHint);
-        tvSendStatus = findViewById(R.id.tvSendStatus);
         spinnerDevices = findViewById(R.id.spinnerDevices);
         tvPolicyTitle = findViewById(R.id.tvPolicyTitle);
         rgPolicy = findViewById(R.id.rgPolicy);
         rbAfterSend = findViewById(R.id.rbAfterSend);
         rbNever = findViewById(R.id.rbNever);
-        progressSend = findViewById(R.id.progressSend);
         btnSend = findViewById(R.id.btnSend);
         btnStash = findViewById(R.id.btnStash);
         btnCancel = findViewById(R.id.btnCancel);
@@ -118,7 +74,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
         btnSend.setOnClickListener(v -> doSend());
         btnStash.setOnClickListener(v -> doStash());
 
-        App.get().transferManager.addListener(transferListener);
         startDiscoveryIfPermitted();
         parseShareIntent();
     }
@@ -224,8 +179,8 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
     private void updateSendEnabled() {
         boolean hasContent = pendingItems != null && !pendingItems.isEmpty();
-        btnSend.setEnabled(hasContent && !devices.isEmpty() && !jobRunning);
-        btnStash.setEnabled(hasContent && !jobRunning);
+        btnSend.setEnabled(hasContent && !devices.isEmpty());
+        btnStash.setEnabled(hasContent);
     }
 
     private void doSend() {
@@ -234,38 +189,14 @@ public class ShareReceiverActivity extends AppCompatActivity {
             return;
         }
         CleanupPolicy policy = rbNever.isChecked() ? CleanupPolicy.NEVER : CleanupPolicy.AFTER_SEND;
-        jobRunning = true;
-        progressSend.setVisibility(View.VISIBLE);
-        progressSend.setProgress(0);
-        tvSendStatus.setVisibility(View.VISIBLE);
-        btnSend.setEnabled(false);
-        btnCancel.setEnabled(false);
-        currentJobId = App.get().transferManager.enqueue(pendingItems,
+        App.get().transferManager.enqueue(pendingItems,
                 target.host, target.port, target.displayName(), policy);
-    }
-
-    private void showStatus(String text) {
-        tvSendStatus.setText(text);
-    }
-
-    private String stateText(TransferManager.State state) {
-        switch (state) {
-            case CONNECTING:
-                return getString(R.string.state_connecting);
-            case SENDING:
-                return getString(R.string.state_sending);
-            case DONE:
-                return getString(R.string.state_done);
-            case FAILED:
-                return getString(R.string.state_failed);
-            default:
-                return "";
-        }
+        // 立即关闭窗口，传输在后台继续
+        finish();
     }
 
     @Override
     protected void onDestroy() {
-        App.get().transferManager.removeListener(transferListener);
         App.get().discoveryManager.removeListener(discoveryListener);
         if (startedDiscoveryHere) {
             App.get().discoveryManager.stopDiscovery();

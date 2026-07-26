@@ -82,6 +82,7 @@ public class TransferManager {
     private final Context appContext;
 
     private volatile State state = State.IDLE;
+    private volatile SendJob currentJob;
 
     public TransferManager(Context context, HistoryStore historyStore,
                            CleanupScheduler cleanupScheduler) {
@@ -101,6 +102,18 @@ public class TransferManager {
 
     public State getState() {
         return state;
+    }
+
+    /** 当前正在传输的任务的设备标识（host:port），无任务时返回 null。 */
+    public String getCurrentDeviceKey() {
+        SendJob job = currentJob;
+        return job != null ? job.host + ":" + job.port : null;
+    }
+
+    /** 当前正在传输的任务显示名（文件名或"X 个文件"），无任务时返回 null。 */
+    public String getCurrentJobName() {
+        SendJob job = currentJob;
+        return job != null ? job.displayName() : null;
     }
 
     /** 重发一条历史记录（完成后原地更新该记录状态）。 */
@@ -139,63 +152,68 @@ public class TransferManager {
     }
 
     private void process(SendJob job) {
-        setState(State.CONNECTING, job.displayName());
-        String error = null;
-        List<PendingContent> succeeded = new ArrayList<>();
-        List<PendingContent> failed = new ArrayList<>();
+        currentJob = job;
+        try {
+            setState(State.CONNECTING, job.displayName());
+            String error = null;
+            List<PendingContent> succeeded = new ArrayList<>();
+            List<PendingContent> failed = new ArrayList<>();
 
-        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-            TransferClient client = new TransferClient();
-            try {
-                client.connect(job.host, job.port);
-                client.hello();
-                setState(State.SENDING, job.displayName());
-                for (PendingContent item : job.items) {
-                    if (succeeded.contains(item)) {
-                        continue;
+            for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                TransferClient client = new TransferClient();
+                try {
+                    client.connect(job.host, job.port);
+                    client.hello();
+                    setState(State.SENDING, job.displayName());
+                    for (PendingContent item : job.items) {
+                        if (succeeded.contains(item)) {
+                            continue;
+                        }
+                        sendItem(client, job, item);
+                        succeeded.add(item);
+                        recordHistory(job, item, true, null);
                     }
-                    sendItem(client, job, item);
-                    succeeded.add(item);
-                    recordHistory(job, item, true, null);
-                }
-                error = null;
-                break;
-            } catch (Exception e) {
-                error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                LogX.e("transfer attempt " + attempt + " failed: " + error, e);
-                if (attempt < MAX_ATTEMPTS) {
-                    try {
-                        Thread.sleep(RETRY_DELAY_MS);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        break;
+                    error = null;
+                    break;
+                } catch (Exception e) {
+                    error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    LogX.e("transfer attempt " + attempt + " failed: " + error, e);
+                    if (attempt < MAX_ATTEMPTS) {
+                        try {
+                            Thread.sleep(RETRY_DELAY_MS);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
                     }
+                } finally {
+                    client.close();
                 }
-            } finally {
-                client.close();
             }
-        }
 
-        for (PendingContent item : job.items) {
-            if (!succeeded.contains(item)) {
-                failed.add(item);
-                recordHistory(job, item, false, error);
+            for (PendingContent item : job.items) {
+                if (!succeeded.contains(item)) {
+                    failed.add(item);
+                    recordHistory(job, item, false, error);
+                }
             }
-        }
 
-        if (failed.isEmpty()) {
-            cleanupScheduler.onTransferSuccess(job.items, job.policy);
-            setState(State.DONE, job.displayName());
-            notifyJobFinished(job.id, true, null);
-        } else {
-            // 部分成功：成功部分仍按策略处理
-            if (!succeeded.isEmpty()) {
-                cleanupScheduler.onTransferSuccess(succeeded, job.policy);
+            if (failed.isEmpty()) {
+                cleanupScheduler.onTransferSuccess(job.items, job.policy);
+                setState(State.DONE, job.displayName());
+                notifyJobFinished(job.id, true, null);
+            } else {
+                // 部分成功：成功部分仍按策略处理
+                if (!succeeded.isEmpty()) {
+                    cleanupScheduler.onTransferSuccess(succeeded, job.policy);
+                }
+                setState(State.FAILED, job.displayName());
+                notifyJobFinished(job.id, false, error);
             }
-            setState(State.FAILED, job.displayName());
-            notifyJobFinished(job.id, false, error);
+            setState(State.IDLE, null);
+        } finally {
+            currentJob = null;
         }
-        setState(State.IDLE, null);
     }
 
     private void sendItem(TransferClient client, SendJob job, PendingContent item) throws Exception {

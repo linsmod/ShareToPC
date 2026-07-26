@@ -6,6 +6,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.ArrayList;
@@ -17,6 +18,21 @@ import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 /** 设备列表适配器。 */
 public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.VH> {
 
+    /** 当前设备传输状态，用于在设备行显示发送进度。 */
+    public static class DeviceTransferInfo {
+        public final String deviceKey;
+        public final String fileName;
+        public final int percent;
+        public final boolean active;
+
+        public DeviceTransferInfo(String deviceKey, String fileName, int percent, boolean active) {
+            this.deviceKey = deviceKey;
+            this.fileName = fileName;
+            this.percent = percent;
+            this.active = active;
+        }
+    }
+
     public interface OnDeviceClickListener {
         void onClick(DiscoveredDevice device);
 
@@ -26,6 +42,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.VH> {
 
     private final List<DiscoveredDevice> items = new ArrayList<>();
     private final OnDeviceClickListener clickListener;
+    private DeviceTransferInfo currentTransfer;
 
     public DeviceAdapter(OnDeviceClickListener clickListener) {
         this.clickListener = clickListener;
@@ -36,6 +53,11 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.VH> {
         if (list != null) {
             items.addAll(list);
         }
+        notifyDataSetChanged();
+    }
+
+    public void setCurrentTransfer(@Nullable DeviceTransferInfo info) {
+        this.currentTransfer = info;
         notifyDataSetChanged();
     }
 
@@ -52,6 +74,21 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.VH> {
         DiscoveredDevice device = items.get(position);
         holder.tvName.setText(device.displayName());
         holder.tvAddr.setText(device.host + ":" + device.port);
+
+        // 在线/离线圆点
+        holder.vOnlineDot.setBackgroundResource(
+                device.isOnline ? R.drawable.dot_online : R.drawable.dot_offline);
+
+        boolean isActive = currentTransfer != null && currentTransfer.active
+                && currentTransfer.deviceKey.equals(device.key());
+        if (isActive) {
+            holder.tvProgress.setVisibility(View.VISIBLE);
+            holder.tvProgress.setText(currentTransfer.fileName
+                    + "  发送中… " + currentTransfer.percent + "%");
+        } else {
+            holder.tvProgress.setVisibility(View.GONE);
+        }
+
         holder.itemView.setOnClickListener(v -> {
             if (clickListener != null) {
                 clickListener.onClick(device);
@@ -72,13 +109,17 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.VH> {
     }
 
     static class VH extends RecyclerView.ViewHolder {
+        final View vOnlineDot;
         final TextView tvName;
         final TextView tvAddr;
+        final TextView tvProgress;
 
         VH(@NonNull View itemView) {
             super(itemView);
+            vOnlineDot = itemView.findViewById(R.id.vOnlineDot);
             tvName = itemView.findViewById(R.id.tvDeviceName);
             tvAddr = itemView.findViewById(R.id.tvDeviceAddr);
+            tvProgress = itemView.findViewById(R.id.tvDeviceProgress);
         }
     }
 }

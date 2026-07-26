@@ -7,11 +7,13 @@ import android.os.Handler;
 import android.os.Looper;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.SettingsStore;
 import github.linsmod.sharetopc.util.LogX;
 
@@ -34,6 +36,8 @@ public class NsdDiscoveryManager {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, DiscoveredDevice> devices = new LinkedHashMap<>();
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
+    private final SettingsStore settingsStore;
+    private final DeviceStore deviceStore;
 
     /** 解析串行化：NsdManager 同时只能处理一个 resolveService。 */
     private final List<NsdServiceInfo> resolveQueue = new ArrayList<>();
@@ -41,12 +45,13 @@ public class NsdDiscoveryManager {
 
     private NsdManager.DiscoveryListener discoveryListener;
     private boolean discovering = false;
-    private final SettingsStore settingsStore;
     private final Runnable timeoutStopTask = this::stopDiscovery;
 
-    public NsdDiscoveryManager(Context context) {
+    public NsdDiscoveryManager(Context context, DeviceStore deviceStore) {
         nsdManager = (NsdManager) context.getSystemService(Context.NSD_SERVICE);
         settingsStore = new SettingsStore(context);
+        this.deviceStore = deviceStore;
+        loadKnownDevices();
     }
 
     public void addListener(Listener listener) {
@@ -62,7 +67,23 @@ public class NsdDiscoveryManager {
         for (DiscoveredDevice d : list) {
             d.alias = settingsStore.getDeviceAlias(d.host, d.port);
         }
+        // 在线设备在前，同组内按名称排序
+        Collections.sort(list, (a, b) -> {
+            if (a.isOnline != b.isOnline) {
+                return a.isOnline ? -1 : 1;
+            }
+            return a.displayName().compareToIgnoreCase(b.displayName());
+        });
         return list;
+    }
+
+    /** 加载已知设备到内存（离线状态），启动时调用。 */
+    private synchronized void loadKnownDevices() {
+        for (DiscoveredDevice d : deviceStore.loadAll()) {
+            if (!devices.containsKey(d.key())) {
+                devices.put(d.key(), d);
+            }
+        }
     }
 
     public boolean isDiscovering() {
@@ -79,6 +100,11 @@ public class NsdDiscoveryManager {
             return;
         }
         discovering = true;
+        // 扫描前将所有设备标记为离线
+        for (DiscoveredDevice d : devices.values()) {
+            d.isOnline = false;
+        }
+        notifyChanged();
         discoveryListener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
@@ -176,10 +202,17 @@ public class NsdDiscoveryManager {
                             ? serviceInfo.getHost().getHostAddress() : null;
                     if (host != null) {
                         DiscoveredDevice device = new DiscoveredDevice(
-                                serviceInfo.getServiceName(), host, serviceInfo.getPort());
+                                serviceInfo.getServiceName(), host, serviceInfo.getPort(), true);
                         synchronized (NsdDiscoveryManager.this) {
-                            devices.put(device.key(), device);
+                            // 如果已存在同 key 的离线设备，替换为在线设备（保留 alias）
+                            DiscoveredDevice existing = devices.get(device.key());
+                            if (existing != null) {
+                                existing.isOnline = true;
+                            } else {
+                                devices.put(device.key(), device);
+                            }
                         }
+                        deviceStore.saveDevice(device);
                         notifyChanged();
                     }
                     resolveNext();
@@ -192,19 +225,19 @@ public class NsdDiscoveryManager {
     }
 
     private void removeByName(String serviceName) {
+        boolean changed = false;
         synchronized (this) {
-            String removeKey = null;
             for (DiscoveredDevice d : devices.values()) {
-                if (d.name.equals(serviceName)) {
-                    removeKey = d.key();
+                if (d.name.equals(serviceName) && d.isOnline) {
+                    d.isOnline = false;
+                    changed = true;
                     break;
                 }
             }
-            if (removeKey != null) {
-                devices.remove(removeKey);
-            }
         }
-        notifyChanged();
+        if (changed) {
+            notifyChanged();
+        }
     }
 
     private void notifyChanged() {

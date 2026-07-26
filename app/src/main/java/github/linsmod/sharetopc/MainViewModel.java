@@ -14,6 +14,7 @@ import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
 import github.linsmod.sharetopc.transfer.TransferListener;
 import github.linsmod.sharetopc.transfer.TransferManager;
+import github.linsmod.sharetopc.ui.DeviceAdapter;
 
 /** 主界面状态：设备/连接状态/传输进度/历史。 */
 public class MainViewModel extends AndroidViewModel {
@@ -33,6 +34,8 @@ public class MainViewModel extends AndroidViewModel {
 
     private final MutableLiveData<List<DiscoveredDevice>> devices = new MutableLiveData<>();
     private final MutableLiveData<String> connState = new MutableLiveData<>();
+    private final MutableLiveData<String> searchHint = new MutableLiveData<>();
+    private final MutableLiveData<DeviceAdapter.DeviceTransferInfo> deviceTransfer = new MutableLiveData<>();
     private final MutableLiveData<Boolean> scanning = new MutableLiveData<>(false);
     private final MutableLiveData<TransferProgress> progress = new MutableLiveData<>();
     private final MutableLiveData<List<TransferRecord>> history = new MutableLiveData<>();
@@ -100,9 +103,14 @@ public class MainViewModel extends AndroidViewModel {
             }
             if (state == TransferManager.State.IDLE) {
                 progress.setValue(null);
+                deviceTransfer.setValue(new DeviceAdapter.DeviceTransferInfo(
+                        null, null, 0, false));
             } else {
                 String name = jobName != null ? jobName : "";
                 progress.setValue(new TransferProgress(name, -1, text));
+                String deviceKey = app.transferManager.getCurrentDeviceKey();
+                deviceTransfer.setValue(new DeviceAdapter.DeviceTransferInfo(
+                        deviceKey, name, -1, true));
             }
         }
 
@@ -111,6 +119,9 @@ public class MainViewModel extends AndroidViewModel {
             int percent = totalBytes > 0 ? (int) (sentBytes * 100 / totalBytes) : 0;
             progress.setValue(new TransferProgress(itemName, percent,
                     app.getString(R.string.state_sending)));
+            String deviceKey = app.transferManager.getCurrentDeviceKey();
+            deviceTransfer.setValue(new DeviceAdapter.DeviceTransferInfo(
+                    deviceKey, itemName, percent, true));
         }
 
         @Override
@@ -132,6 +143,9 @@ public class MainViewModel extends AndroidViewModel {
         app.discoveryManager.addListener(discoveryListener);
         app.transferManager.addListener(transferListener);
         refreshHistory();
+        // 立即显示已知设备（离线状态）
+        devices.setValue(app.discoveryManager.getDevices());
+        updateConnState();
     }
 
     public LiveData<List<DiscoveredDevice>> getDevices() {
@@ -140,6 +154,14 @@ public class MainViewModel extends AndroidViewModel {
 
     public LiveData<String> getConnState() {
         return connState;
+    }
+
+    public LiveData<String> getSearchHint() {
+        return searchHint;
+    }
+
+    public LiveData<DeviceAdapter.DeviceTransferInfo> getDeviceTransfer() {
+        return deviceTransfer;
     }
 
     public LiveData<Boolean> getScanning() {
@@ -153,8 +175,10 @@ public class MainViewModel extends AndroidViewModel {
         boolean isScanning = Boolean.TRUE.equals(scanning.getValue());
         if (isScanning) {
             long remainingSec = Math.max(0, (scanEndAtMillis - System.currentTimeMillis() + 999) / 1000);
+            searchHint.setValue("搜索中...（" + remainingSec + "s）");
             connState.setValue(app.getString(R.string.status_searching, remainingSec));
         } else {
+            searchHint.setValue(null);
             connState.setValue(count > 0
                     ? app.getString(R.string.status_found, count)
                     : app.getString(R.string.status_not_found));

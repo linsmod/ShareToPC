@@ -8,6 +8,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import github.linsmod.sharetopc.cleanup.CleanupScheduler;
+import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.HistoryStore;
 import github.linsmod.sharetopc.data.SettingsStore;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
@@ -21,6 +22,7 @@ public class App extends Application {
     public ExecutorService ioExecutor;
     public Handler mainHandler;
     public SettingsStore settingsStore;
+    public DeviceStore deviceStore;
     public HistoryStore historyStore;
     public NsdDiscoveryManager discoveryManager;
     public TransferManager transferManager;
@@ -37,8 +39,9 @@ public class App extends Application {
         ioExecutor = Executors.newFixedThreadPool(4);
         mainHandler = new Handler(Looper.getMainLooper());
         settingsStore = new SettingsStore(this);
+        deviceStore = new DeviceStore(this);
         historyStore = new HistoryStore(this);
-        discoveryManager = new NsdDiscoveryManager(this);
+        discoveryManager = new NsdDiscoveryManager(this, deviceStore);
         cleanupScheduler = new CleanupScheduler(this);
         transferManager = new TransferManager(this, historyStore, cleanupScheduler);
         cleanupScheduler.ensurePeriodicScan();

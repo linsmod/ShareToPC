@@ -10,11 +10,18 @@ public class DiscoveredDevice {
     public final int port;
     /** 用户备注名（可选），由 SettingsStore 填充。 */
     public String alias;
+    /** 是否在线（当前扫描中发现）。 */
+    public boolean isOnline;
 
     public DiscoveredDevice(String name, String host, int port) {
+        this(name, host, port, true);
+    }
+
+    public DiscoveredDevice(String name, String host, int port, boolean isOnline) {
         this.name = name;
         this.host = host;
         this.port = port;
+        this.isOnline = isOnline;
     }
 
     public String key() {

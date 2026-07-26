@@ -62,6 +62,13 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/refresh" />
+
+            <TextView
+                android:id="@+id/tvSearchingStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?android:attr/textColorSecondary"
+                android:visibility="gone" />
         </LinearLayout>
 
         <androidx.recyclerview.widget.RecyclerView

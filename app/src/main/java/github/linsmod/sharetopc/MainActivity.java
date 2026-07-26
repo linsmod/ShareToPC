@@ -44,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private HistoryAdapter historyAdapter;
 
     private TextView tvDevicesTitle;
+    private TextView tvSearchingStatus;
     private RecyclerView rvDevices;
     private View btnAddManual;
     private View progressSection;
@@ -89,6 +90,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progressBar);
 
         tvDevicesTitle = findViewById(R.id.tvDevicesTitle);
+        tvSearchingStatus = findViewById(R.id.tvSearchingStatus);
         progressSection = findViewById(R.id.progressSection);
         btnAddManual = findViewById(R.id.btnAddManual);
         btnExpandHistory = findViewById(R.id.btnExpandHistory);
@@ -203,9 +205,12 @@ public class MainActivity extends AppCompatActivity {
 
         View btnRefreshDevices = findViewById(R.id.btnRefreshDevices);
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
-        viewModel.getScanning().observe(this, isScanning ->
-                btnRefreshDevices.setVisibility(
-                        Boolean.TRUE.equals(isScanning) ? View.INVISIBLE : View.VISIBLE));
+        viewModel.getScanning().observe(this, isScanning -> {
+            boolean scanning = Boolean.TRUE.equals(isScanning);
+            tvConnState.setVisibility(scanning ? View.GONE : View.VISIBLE);
+            btnRefreshDevices.setVisibility(scanning ? View.GONE : View.VISIBLE);
+            tvSearchingStatus.setVisibility(scanning ? View.VISIBLE : View.GONE);
+        });
         findViewById(R.id.btnSelectAll).setOnClickListener(v -> historyAdapter.toggleSelectAll());
         findViewById(R.id.btnResendSelected).setOnClickListener(v -> resendSelected());
         findViewById(R.id.btnDeleteSelected).setOnClickListener(v -> confirmDeleteSelected());
@@ -227,6 +232,8 @@ public class MainActivity extends AppCompatActivity {
 
         viewModel.getDevices().observe(this, deviceAdapter::submitList);
         viewModel.getConnState().observe(this, tvConnState::setText);
+        viewModel.getSearchHint().observe(this, tvSearchingStatus::setText);
+        viewModel.getDeviceTransfer().observe(this, deviceAdapter::setCurrentTransfer);
         viewModel.getHistory().observe(this, historyAdapter::submitList);
         viewModel.getProgress().observe(this, p -> {
             if (p == null) {
