@@ -207,8 +207,9 @@ namespace ShareToPcReciver
             ShowWindow();
         }
 
-        private void ToolStripMenuItemExit_Click(object sender, EventArgs e)
+        private async void ToolStripMenuItemExit_Click(object sender, EventArgs e)
         {
+            await ShutdownAsync();
             Application.Exit();
         }
 
@@ -219,7 +220,7 @@ namespace ShareToPcReciver
             this.BringToFront();
         }
 
-        private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
+        private async void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             if (e.CloseReason == CloseReason.UserClosing)
             {
@@ -227,6 +228,32 @@ namespace ShareToPcReciver
                 this.WindowState = FormWindowState.Minimized;
                 this.Hide();
                 notifyIcon.Visible = true;
+                return;
+            }
+
+            // Windows 关机 / 注销等 → 清理资源
+            if (e.CloseReason == CloseReason.WindowsShutDown ||
+                e.CloseReason == CloseReason.TaskManagerClosing)
+            {
+                await ShutdownAsync();
+            }
+        }
+
+        private async Task ShutdownAsync()
+        {
+            try
+            {
+                // 1. 先停 mDNS 广播，Android 端更快感知
+                _advertiser.Stop();
+
+                // 2. 广播 OFFLINE 给所有已连接设备，然后停 TCP 服务
+                await _server.ShutdownAsync();
+
+                Log.Info("Services shut down cleanly");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failed to shutdown services", ex);
             }
         }
 

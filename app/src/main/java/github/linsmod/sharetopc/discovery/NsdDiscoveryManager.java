@@ -224,6 +224,34 @@ public class NsdDiscoveryManager {
         }
     }
 
+    /** 外部（心跳）标记设备在线，仅当状态变化时才通知 UI。 */
+    public void markOnline(String host, int port) {
+        String key = host + ":" + port;
+        synchronized (this) {
+            DiscoveredDevice device = devices.get(key);
+            if (device != null && !device.isOnline) {
+                device.isOnline = true;
+            } else {
+                return; // 未变化，不通知
+            }
+        }
+        notifyChanged();
+    }
+
+    /** 外部（心跳）标记设备离线，仅当状态变化时才通知 UI。 */
+    public void markOffline(String host, int port) {
+        String key = host + ":" + port;
+        synchronized (this) {
+            DiscoveredDevice device = devices.get(key);
+            if (device != null && device.isOnline) {
+                device.isOnline = false;
+            } else {
+                return; // 未变化，不通知
+            }
+        }
+        notifyChanged();
+    }
+
     private void removeByName(String serviceName) {
         boolean changed = false;
         synchronized (this) {

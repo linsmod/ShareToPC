@@ -11,6 +11,7 @@ import github.linsmod.sharetopc.cleanup.CleanupScheduler;
 import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.HistoryStore;
 import github.linsmod.sharetopc.data.SettingsStore;
+import github.linsmod.sharetopc.discovery.HeartbeatManager;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
 import github.linsmod.sharetopc.transfer.TransferManager;
 
@@ -25,6 +26,7 @@ public class App extends Application {
     public DeviceStore deviceStore;
     public HistoryStore historyStore;
     public NsdDiscoveryManager discoveryManager;
+    public HeartbeatManager heartbeatManager;
     public TransferManager transferManager;
     public CleanupScheduler cleanupScheduler;
 
@@ -42,6 +44,8 @@ public class App extends Application {
         deviceStore = new DeviceStore(this);
         historyStore = new HistoryStore(this);
         discoveryManager = new NsdDiscoveryManager(this, deviceStore);
+        heartbeatManager = new HeartbeatManager(discoveryManager);
+        heartbeatManager.start();
         cleanupScheduler = new CleanupScheduler(this);
         transferManager = new TransferManager(this, historyStore, cleanupScheduler);
         cleanupScheduler.ensurePeriodicScan();

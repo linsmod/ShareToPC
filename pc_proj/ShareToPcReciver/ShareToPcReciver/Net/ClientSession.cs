@@ -22,6 +22,9 @@ namespace ShareToPcReciver.Net
 
         public string DeviceName { get; private set; } = "Unknown";
 
+        /// <summary>会话断开时触发，用于 TransferServer 清理会话列表。</summary>
+        public event Action<ClientSession> Disconnected;
+
         public ClientSession(TcpClient client, TransferServer server)
         {
             _client = client;
@@ -88,7 +91,23 @@ namespace ShareToPcReciver.Net
             }
             finally
             {
+                Disconnected?.Invoke(this);
                 _client.Close();
+            }
+        }
+
+        /// <summary>向客户端发送 OFFLINE 通知。</summary>
+        public async Task SendOfflineAsync()
+        {
+            try
+            {
+                var stream = _client.GetStream();
+                await Protocol.WriteOfflineAsync(stream, CancellationToken.None);
+                Util.Log.Info($"Sent OFFLINE to {DeviceName}");
+            }
+            catch (Exception ex)
+            {
+                Util.Log.Warn($"Failed to send OFFLINE to {DeviceName}: {ex.Message}");
             }
         }
 
@@ -183,7 +202,7 @@ namespace ShareToPcReciver.Net
 
         private async Task HandlePing(Stream stream)
         {
-            await Protocol.WriteAckAsync(stream, true, "", _ct);
+            await Protocol.WritePongAsync(stream, _ct);
         }
     }
 }

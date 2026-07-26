@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -14,6 +15,8 @@ namespace ShareToPcReciver.Net
         private TcpListener _listener;
         private CancellationTokenSource _cts;
         private Task _serverTask;
+        private readonly List<ClientSession> _sessions = new List<ClientSession>();
+        private readonly object _sessionsLock = new object();
 
         public int Port { get; private set; }
         public bool IsRunning => _listener?.Server != null && _listener.Server.IsBound;
@@ -54,6 +57,53 @@ namespace ShareToPcReciver.Net
             Util.Log.Info("TCP server stopped");
         }
 
+        /// <summary>广播 OFFLINE 给所有活跃会话并停止服务。</summary>
+        public async Task ShutdownAsync()
+        {
+            Util.Log.Info("Shutting down, sending OFFLINE to all clients...");
+            await BroadcastOfflineAsync();
+            Stop();
+        }
+
+        private async Task BroadcastOfflineAsync()
+        {
+            List<ClientSession> snapshot;
+            lock (_sessionsLock)
+            {
+                snapshot = new List<ClientSession>(_sessions);
+            }
+
+            foreach (var session in snapshot)
+            {
+                try
+                {
+                    await session.SendOfflineAsync();
+                }
+                catch (Exception ex)
+                {
+                    Util.Log.Warn($"Failed to send OFFLINE to {session.DeviceName}: {ex.Message}");
+                }
+            }
+
+            Util.Log.Info($"Sent OFFLINE to {snapshot.Count} client(s)");
+        }
+
+        internal void AddSession(ClientSession session)
+        {
+            lock (_sessionsLock)
+            {
+                _sessions.Add(session);
+            }
+        }
+
+        internal void RemoveSession(ClientSession session)
+        {
+            lock (_sessionsLock)
+            {
+                _sessions.Remove(session);
+            }
+        }
+
         private async Task RunLoopAsync(CancellationToken ct)
         {
             try
@@ -62,6 +112,8 @@ namespace ShareToPcReciver.Net
                 {
                     TcpClient client = await _listener.AcceptTcpClientAsync();
                     var session = new ClientSession(client, this);
+                    session.Disconnected += s => RemoveSession(s);
+                    AddSession(session);
                     _ = Task.Run(() => session.ProcessAsync(), ct);
                 }
             }

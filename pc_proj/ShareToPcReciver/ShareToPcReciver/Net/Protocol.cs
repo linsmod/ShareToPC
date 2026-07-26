@@ -51,6 +51,28 @@ namespace ShareToPcReciver.Net
             return (headerJson, payloadLength);
         }
 
+        public static async Task WritePongAsync(Stream stream, CancellationToken ct)
+        {
+            var pong = new { type = "PONG" };
+            string json = JsonSerializer.Serialize(pong);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+
+        public static async Task WriteOfflineAsync(Stream stream, CancellationToken ct)
+        {
+            var offline = new { type = "OFFLINE" };
+            string json = JsonSerializer.Serialize(offline);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+
         public static async Task WriteAckAsync(Stream stream, bool ok, string msg, CancellationToken ct)
         {
             var ack = new { type = "ACK", status = ok ? "OK" : "ERROR", msg = msg ?? "" };
