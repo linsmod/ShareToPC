@@ -2,13 +2,6 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <ListPreference
-        android:defaultValue="AFTER_SEND"
-        android:entries="@array/cleanup_policy_entries"
-        android:entryValues="@array/cleanup_policy_values"
-        android:key="cleanup_policy"
-        android:title="@string/pref_cleanup_policy_title" />
-
     <EditTextPreference
         android:defaultValue=""
         android:key="manual_host"

@@ -1,5 +1,7 @@
 package github.linsmod.sharetopc.data;
 
+import android.os.ParcelFileDescriptor;
+
 import java.util.UUID;
 
 /** 待发送内容：文本（内存）或文件（content:// URI，实时读流，不落地）。 */
@@ -15,6 +17,8 @@ public class PendingContent {
     public String localPath;
     /** TYPE_FILE 时的 content:// URI（含已申请的持久读权限），新分享的主数据源 */
     public String contentUri;
+    /** TYPE_FILE 时的内核文件句柄（预打开，支持可靠的 skip/seek 断点续传）。不持久化，进程死亡自动关闭。 */
+    public transient ParcelFileDescriptor pfd;
     /** 文件名或文本预览名 */
     public String name;
     public long size;

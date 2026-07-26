@@ -4,24 +4,30 @@ import android.content.Context;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.ParcelFileDescriptor;
 
 import androidx.annotation.Nullable;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FilterInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import github.linsmod.sharetopc.cleanup.CleanupPolicy;
-import github.linsmod.sharetopc.cleanup.CleanupScheduler;
 import github.linsmod.sharetopc.data.HistoryStore;
 import github.linsmod.sharetopc.data.PendingContent;
 import github.linsmod.sharetopc.data.TransferRecord;
@@ -43,22 +49,20 @@ public class TransferManager {
         public final String host;
         public final int port;
         public final String deviceName;
-        public final CleanupPolicy policy;
         /** 关联的历史记录 id（重试/补发）：完成时原地更新该记录，不再新增条目。 */
         public final String recordId;
 
         public SendJob(List<PendingContent> items, String host, int port,
-                       String deviceName, CleanupPolicy policy) {
-            this(items, host, port, deviceName, policy, null);
+                       String deviceName) {
+            this(items, host, port, deviceName, null);
         }
 
         public SendJob(List<PendingContent> items, String host, int port,
-                       String deviceName, CleanupPolicy policy, String recordId) {
+                       String deviceName, String recordId) {
             this.items = items;
             this.host = host;
             this.port = port;
             this.deviceName = deviceName;
-            this.policy = policy;
             this.recordId = recordId;
             // 为每个 item 分配唯一 transferId，支持同名文件多次传输
             for (PendingContent item : items) {
@@ -85,11 +89,13 @@ public class TransferManager {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final List<TransferListener> listeners = new CopyOnWriteArrayList<>();
     private final HistoryStore historyStore;
-    private final CleanupScheduler cleanupScheduler;
     private final Context appContext;
 
     /** 队列状态 LiveData：入队/出队/取消时更新，供 UI 响应式观察。 */
     private final MutableLiveData<List<SendJob>> queueJobsLiveData = new MutableLiveData<>();
+
+    /** PFD 注册表：transferId → FileChannel，供重试/继续时复用内核文件句柄。 */
+    private final Map<String, PfdHandle> pfdHandles = new ConcurrentHashMap<>();
 
     private volatile State state = State.IDLE;
     private volatile SendJob currentJob;
@@ -97,11 +103,9 @@ public class TransferManager {
     private volatile boolean cancelRequested;
     private volatile long lastProgressNotifyMs;
 
-    public TransferManager(Context context, HistoryStore historyStore,
-                           CleanupScheduler cleanupScheduler) {
+    public TransferManager(Context context, HistoryStore historyStore) {
         this.appContext = context.getApplicationContext();
         this.historyStore = historyStore;
-        this.cleanupScheduler = cleanupScheduler;
         worker.execute(this::consumeLoop);
     }
 
@@ -190,20 +194,30 @@ public class TransferManager {
     /** 重发一条历史记录（完成后原地更新该记录状态）。 */
     public String retry(TransferRecord record) {
         PendingContent content = record.toPendingContent();
+        // 从 registry 中查找未释放的 PFD，附加到 PendingContent 以支持可靠续传
+        if (content.transferId != null && content.type == PendingContent.TYPE_FILE) {
+            PfdHandle handle = pfdHandles.get(content.transferId);
+            if (handle != null) {
+                content.pfd = handle.pfd;
+            }
+        }
         List<PendingContent> items = new ArrayList<>();
         items.add(content);
-        CleanupPolicy policy = CleanupPolicy.fromName(record.policy, CleanupPolicy.AFTER_SEND);
-        return enqueue(items, record.host, record.port, record.targetName, policy, record.id);
+        return enqueue(items, record.host, record.port, record.targetName, record.id);
     }
 
     public String enqueue(List<PendingContent> items, String host, int port,
-                          String deviceName, CleanupPolicy policy) {
-        return enqueue(items, host, port, deviceName, policy, null);
+                          String deviceName) {
+        return enqueue(items, host, port, deviceName, null);
     }
 
     public String enqueue(List<PendingContent> items, String host, int port,
-                          String deviceName, CleanupPolicy policy, String recordId) {
-        SendJob job = new SendJob(items, host, port, deviceName, policy, recordId);
+                          String deviceName, String recordId) {
+        SendJob job = new SendJob(items, host, port, deviceName, recordId);
+        // 注册 PFD（如果 item 携带了预打开的文件句柄）
+        for (PendingContent item : items) {
+            registerPfdIfNeeded(item);
+        }
         queue.offer(job);
         emitQueueChanged();
         LogX.d("enqueue job: " + job.displayName() + " -> " + host + ":" + port);
@@ -324,16 +338,17 @@ public class TransferManager {
             if (cancelRequested) {
                 setState(State.CANCELLED, job.displayName());
                 notifyJobCancelled(job.id, job.displayName());
+                // 取消不释放 PFD：用户可能点"继续"重试
             } else if (failed.isEmpty()) {
-                cleanupScheduler.onTransferSuccess(job.items, job.policy);
                 setState(State.DONE, job.displayName());
                 notifyJobFinished(job.id, true, null);
+                // 全部成功 → 释放 PFD
+                releasePfds(job.items);
             } else {
-                if (!succeeded.isEmpty()) {
-                    cleanupScheduler.onTransferSuccess(succeeded, job.policy);
-                }
                 setState(State.FAILED, job.displayName());
                 notifyJobFinished(job.id, false, error);
+                // 最终失败（已重试 MAX_ATTEMPTS 次）→ 释放 PFD
+                releasePfds(job.items);
             }
         } catch (Throwable t) {
             LogX.e("bookkeeping failed for job: " + job.displayName(), t);
@@ -352,14 +367,28 @@ public class TransferManager {
         if (item.isText()) {
             client.sendText(item.text);
         } else {
-            // 优先从 content:// URI 直接读流发送（新分享路径，无本地文件）
+            // 优先通过 PFD→FileChannel 读文件（内核文件句柄，skip/seek 可靠，支持断点续传）
+            if (item.transferId != null) {
+                PfdHandle handle = pfdHandles.get(item.transferId);
+                if (handle != null) {
+                    try {
+                        InputStream in = handle.newInputStream();
+                        client.sendFileFromStream(item.name, item.mime, item.size, in, item.transferId,
+                                (sent, total) -> notifyProgress(item.name, sent, total, item.transferId));
+                        return;
+                    } catch (Exception e) {
+                        LogX.e("PFD send failed for " + item.name + ", fallback to URI", e);
+                    }
+                }
+            }
+            // 次选：从 content:// URI 直接读流发送
             if (item.contentUri != null) {
                 Uri uri = Uri.parse(item.contentUri);
                 try (InputStream in = appContext.getContentResolver().openInputStream(uri)) {
                     if (in == null) {
                         throw new Exception("无法读取内容：" + item.name);
                     }
-                    client.sendFileFromStream(item.name, item.mime, item.size, in,
+                    client.sendFileFromStream(item.name, item.mime, item.size, in, item.transferId,
                             (sent, total) -> notifyProgress(item.name, sent, total, item.transferId));
                     return;
                 }
@@ -368,7 +397,7 @@ public class TransferManager {
             if (item.localPath != null) {
                 File file = new File(item.localPath);
                 if (file.exists()) {
-                    client.sendFile(item.name, item.mime, file,
+                    client.sendFile(item.name, item.mime, file, item.transferId,
                             (sent, total) -> notifyProgress(item.name, sent, total, item.transferId));
                     return;
                 }
@@ -386,7 +415,7 @@ public class TransferManager {
         } else {
             // 首次发送：创建新记录
             TransferRecord r = TransferRecord.sending(item, job.host, job.port,
-                    job.deviceName, job.policy.name());
+                    job.deviceName, "");
             historyStore.add(r);
         }
         mainHandler.post(() -> {
@@ -463,5 +492,74 @@ public class TransferManager {
                 l.onJobCancelled(jobId, jobName);
             }
         });
+    }
+
+    // ---- PFD 管理：内核文件句柄，支持可靠的 skip/seek 断点续传 ----
+
+    /** 持有 PFD 及其 FileChannel，每次发送前重置位置。 */
+    private static class PfdHandle {
+        final ParcelFileDescriptor pfd;
+        final FileChannel channel;
+        /** 保持引用防止 GC finalizer 意外关闭 FileDescriptor。 */
+        @SuppressWarnings("unused")
+        private final FileInputStream fisGuard;
+
+        PfdHandle(ParcelFileDescriptor pfd) throws IOException {
+            this.pfd = pfd;
+            this.fisGuard = new FileInputStream(pfd.getFileDescriptor());
+            this.channel = fisGuard.getChannel();
+        }
+
+        /** 重置文件位置到 0 并返回新的 InputStream（不关闭底层 channel）。 */
+        InputStream newInputStream() throws IOException {
+            channel.position(0);
+            InputStream raw = Channels.newInputStream(channel);
+            return new FilterInputStream(raw) {
+                @Override public void close() throws IOException {
+                    // 不关闭底层 channel/PFD
+                }
+            };
+        }
+
+        void close() {
+            try { channel.close(); } catch (Exception ignored) {}
+            try { fisGuard.close(); } catch (Exception ignored) {}
+            try { pfd.close(); } catch (Exception ignored) {}
+        }
+    }
+
+    /** 为 PendingContent 注册 PFD（如果尚未注册）。 */
+    private void registerPfdIfNeeded(PendingContent item) {
+        if (item.pfd == null || item.transferId == null) return;
+        pfdHandles.computeIfAbsent(item.transferId, id -> {
+            try {
+                return new PfdHandle(item.pfd);
+            } catch (Exception e) {
+                LogX.e("Failed to create PfdHandle for " + item.name, e);
+                return null;
+            }
+        });
+    }
+
+    /** 释放指定 transferId 的 PFD。 */
+    private void releasePfd(String transferId) {
+        PfdHandle handle = pfdHandles.remove(transferId);
+        if (handle != null) {
+            handle.close();
+        }
+    }
+
+    /** 释放一组 PendingContent 中所有文件的 PFD。 */
+    private void releasePfds(List<PendingContent> items) {
+        for (PendingContent item : items) {
+            if (item.transferId != null) {
+                releasePfd(item.transferId);
+            }
+        }
+    }
+
+    /** 查询指定 transferId 是否仍有 PFD 可用（用于 UI 判断是否允许重试/继续）。 */
+    public boolean hasPfd(String transferId) {
+        return transferId != null && pfdHandles.containsKey(transferId);
     }
 }

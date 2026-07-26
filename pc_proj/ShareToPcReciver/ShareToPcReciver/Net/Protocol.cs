@@ -84,6 +84,18 @@ namespace ShareToPcReciver.Net
             await stream.FlushAsync(ct);
         }
 
+        /// <summary>发送断点续传响应，告知安卓端从 offset 位置继续传输。</summary>
+        public static async Task WriteResumeAckAsync(Stream stream, long offset, CancellationToken ct)
+        {
+            var ack = new { type = "ACK", status = "RESUME", msg = "", offset };
+            string json = JsonSerializer.Serialize(ack);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+
         public static byte[] WriteFrame(string type, string jsonPayload, byte[] filePayload)
         {
             byte[] typeBytes = Encoding.UTF8.GetBytes(type);

@@ -117,6 +117,67 @@ public final class TransferProtocol {
         out.write(data, offset, length);
     }
 
+    /** 发送断点续传首帧：[headerLen][{"type":"RESUME_CHUNK","offset":O,"len":L}][L bytes data]。 */
+    private static void writeResumeChunkFrame(DataOutputStream out, byte[] data,
+                                              int offset, int length, long resumeOffset) throws IOException {
+        JsonObject chunk = new JsonObject();
+        chunk.addProperty("type", "RESUME_CHUNK");
+        chunk.addProperty("offset", resumeOffset);
+        chunk.addProperty("len", length);
+        writeHeader(out, chunk);
+        out.write(data, offset, length);
+    }
+
+    // ---- 仅写内容（不含 FILE 头）的变体，用于头已单独发送的场景 ----
+
+    /** 仅写数据块（CHUNK + payload），不写 FILE 头。headless 模式，FILE 头已在之前单独发送。 */
+    public static void writeFileContent(DataOutputStream out, InputStream contentStream,
+                                        long total, Progress progress,
+                                        CancelChecker cancelChecker) throws IOException {
+        writeContentLoop(out, contentStream, total, 0, progress, cancelChecker);
+    }
+
+    /** 断点续传数据写入：首包 RESUME_CHUNK，后续 CHUNK。不写 FILE 头。 */
+    public static void writeFileContentWithResume(DataOutputStream out, InputStream contentStream,
+                                                  long total, long startOffset,
+                                                  Progress progress,
+                                                  CancelChecker cancelChecker) throws IOException {
+        writeContentLoop(out, contentStream, total, startOffset, progress, cancelChecker);
+    }
+
+    /** 通用数据块循环：startOffset == 0 时全部用 CHUNK；> 0 时首包用 RESUME_CHUNK。 */
+    private static void writeContentLoop(DataOutputStream out, InputStream contentStream,
+                                         long total, long startOffset,
+                                         Progress progress,
+                                         CancelChecker cancelChecker) throws IOException {
+        long sent = 0;
+        byte[] buf = new byte[FileUtils.BUFFER_SIZE];
+        int n;
+        boolean isResume = startOffset > 0;
+        boolean firstChunk = true;
+        while ((n = contentStream.read(buf)) != -1) {
+            if (cancelChecker != null && cancelChecker.isCancelled()) {
+                JsonObject cancel = createCancelHeader();
+                writeFrame(out, cancel);
+                writeFrame(out, cancel);
+                writeFrame(out, cancel);
+                out.flush();
+                throw new IOException("Transfer cancelled by user");
+            }
+            if (isResume && firstChunk) {
+                writeResumeChunkFrame(out, buf, 0, n, startOffset);
+                firstChunk = false;
+            } else {
+                writeChunkFrame(out, buf, 0, n);
+            }
+            sent += n;
+            if (progress != null) {
+                progress.onProgress(startOffset + sent, total > 0 ? total : startOffset + sent);
+            }
+        }
+        out.flush();
+    }
+
     private static void writeHeader(DataOutputStream out, JsonObject header) throws IOException {
         byte[] bytes = gson.toJson(header).getBytes(StandardCharsets.UTF_8);
         if (bytes.length > MAX_HEADER_BYTES) {
@@ -146,6 +207,19 @@ public final class TransferProtocol {
         return header != null
                 && "ACK".equals(optString(header, "type"))
                 && "OK".equals(optString(header, "status"));
+    }
+
+    /** PC 返回断点续传偏移量时，ACK status 为 "RESUME"。 */
+    public static boolean isAckResume(JsonObject header) {
+        return header != null
+                && "ACK".equals(optString(header, "type"))
+                && "RESUME".equals(optString(header, "status"));
+    }
+
+    /** 从 RESUME ACK 中提取 offset 字段，若缺失则返回 0。 */
+    public static long getAckOffset(JsonObject header) {
+        return header != null && header.has("offset") && !header.get("offset").isJsonNull()
+                ? header.get("offset").getAsLong() : 0L;
     }
 
     public static String ackError(JsonObject header) {

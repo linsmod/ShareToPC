@@ -159,10 +159,37 @@ namespace ShareToPcReciver.Net
             long size = header.TryGetProperty("size", out JsonElement s) ? s.GetInt64() : 0;
             string mime = header.TryGetProperty("mime", out JsonElement m) ? m.GetString() ?? "" : "";
             long time = header.TryGetProperty("time", out JsonElement ts) ? ts.GetInt64() : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            string transferId = header.TryGetProperty("id", out JsonElement idProp) ? idProp.GetString() ?? "" : "";
 
-            Util.Log.Info($"FILE from {DeviceName}: {name} ({size} bytes)");
+            // ---- 断点续传：通过 transferId 查找未完成的 .part 文件 ----
+            string partPath;
+            string filePath;
+            long resumeOffset = 0;
+            bool isResume = false;
 
-            string filePath = _storage.CreateFile(name, out string partPath);
+            if (!string.IsNullOrEmpty(transferId))
+            {
+                isResume = _storage.FindPartFile(transferId, out partPath, out resumeOffset, out filePath, out string resumedName)
+                           && resumeOffset > 0;
+                if (isResume && !string.IsNullOrEmpty(resumedName))
+                    name = resumedName;
+            }
+            else
+            {
+                partPath = null;
+                filePath = null;
+            }
+
+            if (isResume)
+            {
+                Util.Log.Info($"RESUME FILE from {DeviceName}: {name} (id={transferId}) at offset {resumeOffset}/{size} bytes");
+            }
+            else
+            {
+                filePath = _storage.CreateFile(name, transferId, out partPath);
+                Util.Log.Info($"FILE from {DeviceName}: {name} ({size} bytes, id={transferId})");
+            }
+
             ReceivedFile received = new ReceivedFile
             {
                 FileName = name,
@@ -170,101 +197,188 @@ namespace ShareToPcReciver.Net
                 Size = size,
                 DeviceName = DeviceName,
                 Time = time,
-                Progress = 0
+                Progress = 0,
+                TotalBytes = size,
+                ReceivedBytes = resumeOffset
             };
 
             var progressWatch = System.Diagnostics.Stopwatch.StartNew();
             long lastReportMs = 0;
-            long totalReceived = 0;
+            long totalReceived = resumeOffset;
 
             try
             {
-                using var fs = new FileStream(partPath, FileMode.CreateNew, FileAccess.Write,
-                    FileShare.None, 64 * 1024, FileOptions.Asynchronous);
+                // 告诉安卓端从哪里开始传
+                if (isResume)
+                    await Protocol.WriteResumeAckAsync(stream, resumeOffset, _ct);
+                else
+                    await Protocol.WriteAckAsync(stream, true, "", _ct);
 
-                // 逐 chunk 读取，CANCEL 帧可以在 chunk 之间插入
-                while (totalReceived < size && !_ct.IsCancellationRequested)
+                FileStream fs;
+                if (isResume)
                 {
-                    var (headerJson, _) = await Protocol.ReadFrameAsync(stream, _ct);
-                    var frame = JsonSerializer.Deserialize<JsonElement>(headerJson);
-                    string frameType = frame.GetProperty("type").GetString() ?? "";
+                    fs = new FileStream(partPath, FileMode.Open, FileAccess.Write,
+                        FileShare.None, 64 * 1024, FileOptions.Asynchronous);
+                    fs.Seek(resumeOffset, SeekOrigin.Begin);
+                }
+                else
+                {
+                    fs = new FileStream(partPath, FileMode.CreateNew, FileAccess.Write,
+                        FileShare.None, 64 * 1024, FileOptions.Asynchronous);
+                }
 
-                    if (frameType == "CANCEL")
+                using (fs)
+                {
+                    bool needResumeChunk = isResume;
+
+                    // 逐 chunk 读取，CANCEL 帧可以在 chunk 之间插入
+                    while (totalReceived < size && !_ct.IsCancellationRequested)
                     {
-                        Util.Log.Info($"Transfer cancelled from {DeviceName} for {name}");
-                        _storage.DiscardFile(partPath);
-                        _server.OnFileProgress(new FileProgressInfo
-                        {
-                            FileName = name,
-                            DeviceName = DeviceName,
-                            Total = size,
-                            Cancelled = true
-                        });
-                        _sessionCts.Cancel(); // 让外层 ProcessAsync 循环退出
-                        return;
-                    }
+                        var (headerJson, _) = await Protocol.ReadFrameAsync(stream, _ct);
+                        var frame = JsonSerializer.Deserialize<JsonElement>(headerJson);
+                        string frameType = frame.GetProperty("type").GetString() ?? "";
 
-                    if (frameType == "CHUNK")
-                    {
-                        int chunkLen = frame.TryGetProperty("len", out JsonElement lenProp)
-                            ? lenProp.GetInt32() : 0;
-                        if (chunkLen <= 0) continue;
-
-                        byte[] chunkBuf = new byte[chunkLen];
-                        int read = 0;
-                        while (read < chunkLen)
+                        if (frameType == "CANCEL")
                         {
-                            int r = await stream.ReadAsync(chunkBuf, read, chunkLen - read, _ct);
-                            if (r == 0)
-                                throw new IOException("Connection closed while reading chunk");
-                            read += r;
-                        }
-                        await fs.WriteAsync(chunkBuf, 0, chunkLen, _ct);
-                        totalReceived += chunkLen;
-
-                        // 进度节流上报
-                        long now = progressWatch.ElapsedMilliseconds;
-                        if (now - lastReportMs >= 100 || totalReceived >= size)
-                        {
-                            lastReportMs = now;
+                            Util.Log.Info($"Transfer cancelled from {DeviceName} for {name}");
+                            _storage.DiscardFile(partPath);
                             _server.OnFileProgress(new FileProgressInfo
                             {
                                 FileName = name,
                                 DeviceName = DeviceName,
+                                TransferId = transferId,
+                                Received = totalReceived,
+                                Total = size,
+                                Cancelled = true
+                            });
+                            _sessionCts.Cancel();
+                            return;
+                        }
+
+                        // 断点续传首包必须是 RESUME_CHUNK
+                        if (needResumeChunk)
+                        {
+                            if (frameType != "RESUME_CHUNK")
+                                throw new ProtocolViolationException(
+                                    $"Expected RESUME_CHUNK for resume, got {frameType}");
+
+                            int chunkOffset = frame.TryGetProperty("offset", out JsonElement offProp)
+                                ? offProp.GetInt32() : -1;
+                            if (chunkOffset != resumeOffset)
+                                throw new ProtocolViolationException(
+                                    $"RESUME_CHUNK offset mismatch: expected {resumeOffset}, got {chunkOffset}");
+
+                            int chunkLen = frame.TryGetProperty("len", out JsonElement lenProp)
+                                ? lenProp.GetInt32() : 0;
+                            if (chunkLen <= 0) continue;
+
+                            byte[] chunkBuf = new byte[chunkLen];
+                            int read = 0;
+                            while (read < chunkLen)
+                            {
+                                int r = await stream.ReadAsync(chunkBuf, read, chunkLen - read, _ct);
+                                if (r == 0)
+                                    throw new IOException("Connection closed while reading resume chunk");
+                                read += r;
+                            }
+                            await fs.WriteAsync(chunkBuf, 0, chunkLen, _ct);
+                            totalReceived += chunkLen;
+                            needResumeChunk = false;
+
+                            // 进度上报
+                            lastReportMs = progressWatch.ElapsedMilliseconds;
+                            _server.OnFileProgress(new FileProgressInfo
+                            {
+                                FileName = name,
+                                DeviceName = DeviceName,
+                                TransferId = transferId,
                                 Received = totalReceived,
                                 Total = size
                             });
+                            continue;
+                        }
+
+                        if (frameType == "CHUNK")
+                        {
+                            int chunkLen = frame.TryGetProperty("len", out JsonElement lenProp2)
+                                ? lenProp2.GetInt32() : 0;
+                            if (chunkLen <= 0) continue;
+
+                            byte[] chunkBuf = new byte[chunkLen];
+                            int read = 0;
+                            while (read < chunkLen)
+                            {
+                                int r = await stream.ReadAsync(chunkBuf, read, chunkLen - read, _ct);
+                                if (r == 0)
+                                    throw new IOException("Connection closed while reading chunk");
+                                read += r;
+                            }
+                            await fs.WriteAsync(chunkBuf, 0, chunkLen, _ct);
+                            totalReceived += chunkLen;
+
+                            // 进度节流上报
+                            long now = progressWatch.ElapsedMilliseconds;
+                            if (now - lastReportMs >= 100 || totalReceived >= size)
+                            {
+                                lastReportMs = now;
+                                _server.OnFileProgress(new FileProgressInfo
+                                {
+                                    FileName = name,
+                                    DeviceName = DeviceName,
+                                    TransferId = transferId,
+                                    Received = totalReceived,
+                                    Total = size
+                                });
+                            }
+                        }
+                        else
+                        {
+                            throw new ProtocolViolationException(
+                                $"Unexpected frame in file transfer: {frameType}");
                         }
                     }
-                    else
-                    {
-                        throw new ProtocolViolationException(
-                            $"Unexpected frame in file transfer: {frameType}");
-                    }
+
+                    fs.Close();
+                    _storage.CompleteFile(partPath);
+                    received.FilePath = filePath;
+                    received.Progress = 100;
+                    received.ReceivedBytes = size;
+
+                    Util.Log.Info($"FILE saved: {filePath}");
+                    _server.OnFileReceived(received);
+                    await Protocol.WriteAckAsync(stream, true, "", _ct);
                 }
-
-                fs.Close();
-                _storage.CompleteFile(partPath);
-                received.FilePath = filePath;
-                received.Progress = 100;
-
-                Util.Log.Info($"FILE saved: {filePath}");
-                _server.OnFileReceived(received);
-                await Protocol.WriteAckAsync(stream, true, "", _ct);
             }
             catch (OperationCanceledException)
             {
                 // PC 侧主动取消，资源已在外部清理
                 throw;
             }
-            catch (Exception ex)
+            catch (IOException ex)
             {
-                Util.Log.Error($"Failed to receive file {name}", ex);
-                _storage.DiscardFile(partPath);
+                // 连接断开：保留 .part 文件用于断点续传
+                Util.Log.Info($"File transfer interrupted for {name} at {totalReceived}/{size} bytes: {ex.Message}");
                 _server.OnFileProgress(new FileProgressInfo
                 {
                     FileName = name,
                     DeviceName = DeviceName,
+                    TransferId = transferId,
+                    Received = totalReceived,
+                    Total = size,
+                    Failed = true
+                });
+                try { await Protocol.WriteAckAsync(stream, false, ex.Message, _ct); } catch { }
+            }
+            catch (Exception ex)
+            {
+                Util.Log.Error($"Failed to receive file {name}", ex);
+                // 非 IO 错误也保留 .part（如协议异常），方便重试
+                _server.OnFileProgress(new FileProgressInfo
+                {
+                    FileName = name,
+                    DeviceName = DeviceName,
+                    TransferId = transferId,
+                    Received = totalReceived,
                     Total = size,
                     Failed = true
                 });

@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
+import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
 import android.text.TextUtils;
 
@@ -100,6 +101,17 @@ public final class ShareParser {
 
         return PendingContent.ofFileFromUri(uri.toString(),
                 FileUtils.sanitizeFileName(displayName), size, mime);
+    }
+
+    /** 为已创建的 PendingContent 打开 PFD（内核文件句柄），支持可靠的 skip/seek 断点续传。 */
+    public static void attachPfd(Context context, PendingContent item) {
+        if (item.type != PendingContent.TYPE_FILE || item.contentUri == null) return;
+        try {
+            Uri uri = Uri.parse(item.contentUri);
+            item.pfd = context.getContentResolver().openFileDescriptor(uri, "r");
+        } catch (Exception e) {
+            LogX.e("Failed to open PFD for " + item.name, e);
+        }
     }
 
     private static Uri getParcelable(Intent intent, String key) {

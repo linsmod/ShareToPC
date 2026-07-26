@@ -200,7 +200,7 @@ public class MainActivity extends AppCompatActivity {
                     showTextPreview(record);
                 }
             }
-        });
+        }, transferId -> viewModel.hasPfd(transferId));
         rvHistory.setAdapter(historyAdapter);
 
         findViewById(R.id.btnSettings).setOnClickListener(v ->

@@ -7,7 +7,6 @@ import android.os.Looper;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import github.linsmod.sharetopc.cleanup.CleanupScheduler;
 import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.HistoryStore;
 import github.linsmod.sharetopc.data.SettingsStore;
@@ -29,7 +28,6 @@ public class App extends Application {
     public NsdDiscoveryManager discoveryManager;
     public HeartbeatManager heartbeatManager;
     public TransferManager transferManager;
-    public CleanupScheduler cleanupScheduler;
 
     public static App get() {
         return instance;
@@ -47,9 +45,7 @@ public class App extends Application {
         discoveryManager = new NsdDiscoveryManager(this, deviceStore);
         heartbeatManager = new HeartbeatManager(discoveryManager);
         heartbeatManager.start();
-        cleanupScheduler = new CleanupScheduler(this);
-        transferManager = new TransferManager(this, historyStore, cleanupScheduler);
-        cleanupScheduler.ensurePeriodicScan();
+        transferManager = new TransferManager(this, historyStore);
         // 创建前台服务通知渠道
         ShareForegroundService.createNotificationChannel(this);
     }

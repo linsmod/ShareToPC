@@ -19,12 +19,6 @@
     <string name="cancel">取消</string>
     <string name="share_send_to">发送文件到</string>
     <string name="share_target_device">目标设备</string>
-    <string name="share_cleanup_policy">清理策略</string>
-    <string name="policy_after_send">发送后清理</string>
-    <string name="clean_after_sent">发送成功后清理临时拷贝</string>
-    <string name="policy_one_week">一周后清理</string>
-    <string name="policy_one_month">一月后清理</string>
-    <string name="policy_never">不清理</string>
     <string name="send_success">发送成功</string>
     <string name="send_failed">发送失败：%1$s</string>
     <string name="parsing_share">正在处理分享内容…</string>
@@ -34,7 +28,6 @@
     <string name="manual_port_hint">端口，默认 51234</string>
     <string name="ok">确定</string>
     <string name="history_cleared">历史已清空</string>
-    <string name="pref_cleanup_policy_title">默认清理策略</string>
     <string name="pref_manual_host_title">手动设备 IP</string>
     <string name="pref_manual_port_title">手动设备端口</string>
     <string name="pref_scan_timeout_title">扫描超时时长（秒）</string>
@@ -52,6 +45,7 @@
     <string name="result_sending">发送中</string>
     <string name="result_failed">失败</string>
     <string name="result_cancelled">已取消</string>
+    <string name="action_resume">继续</string>
     <string name="stash">暂存</string>
     <string name="stashed">已暂存，可在主界面历史中选择设备发送</string>
     <string name="result_pending">需要选择目标设备</string>

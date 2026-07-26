@@ -32,6 +32,10 @@ namespace ShareToPcReciver.Storage
             public string FileName { get; set; }
             public string FilePath { get; set; }
             public long Size { get; set; }
+            public string Status { get; set; }
+            public long TotalBytes { get; set; }
+            public long ReceivedBytes { get; set; }
+            public string TransferId { get; set; }
         }
 
         public List<object> Load()
@@ -65,7 +69,11 @@ namespace ShareToPcReciver.Storage
                                 FilePath = e.FilePath ?? "",
                                 Size = e.Size,
                                 Time = e.Time,
-                                Progress = 100
+                                Progress = 100,
+                                Status = string.IsNullOrEmpty(e.Status) ? "success" : e.Status,
+                                TotalBytes = e.TotalBytes > 0 ? e.TotalBytes : e.Size,
+                                ReceivedBytes = e.ReceivedBytes,
+                                TransferId = e.TransferId ?? ""
                             });
                         }
                     }
@@ -121,7 +129,11 @@ namespace ShareToPcReciver.Storage
                         Time = f.Time,
                         FileName = f.FileName,
                         FilePath = f.FilePath,
-                        Size = f.Size
+                        Size = f.Size,
+                        Status = f.Status,
+                        TotalBytes = f.TotalBytes,
+                        ReceivedBytes = f.ReceivedBytes,
+                        TransferId = f.TransferId
                     };
                 default:
                     return null;

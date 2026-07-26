@@ -70,33 +70,85 @@ public class TransferClient implements Closeable {
     }
 
     /** 从 File 读文件发送（历史兼容：本地 inbox 仍有副本时使用）。 */
-    public void sendFile(String fileName, String mime, File file,
+    public void sendFile(String fileName, String mime, File file, String transferId,
                          TransferProtocol.Progress progress) throws IOException {
-        JsonObject header = new JsonObject();
-        header.addProperty("type", "FILE");
-        header.addProperty("name", FileUtils.sanitizeFileName(fileName));
-        header.addProperty("size", file.length());
-        header.addProperty("mime", mime != null ? mime
-                : FileUtils.guessMimeType(fileName));
-        header.addProperty("time", System.currentTimeMillis());
-        TransferProtocol.writeFileFrame(out, header, file, progress, () -> cancelled);
+        sendFileHeader(fileName, mime, file.length(), transferId);
+        long resumeOffset = expectAckForFile();
+        try (java.io.FileInputStream fin = new java.io.FileInputStream(file)) {
+            skipExactly(fin, resumeOffset);
+            if (resumeOffset > 0) {
+                TransferProtocol.writeFileContentWithResume(out, fin, file.length(),
+                        resumeOffset, progress, () -> cancelled);
+            } else {
+                TransferProtocol.writeFileContent(out, fin, file.length(), progress,
+                        () -> cancelled);
+            }
+        }
         expectAck();
     }
 
     /** 从 InputStream 读文件发送（新路径：直接从 content:// URI 读流，无需本地文件）。 */
     public void sendFileFromStream(String fileName, String mime, long totalSize,
-                                   InputStream contentStream,
+                                   InputStream contentStream, String transferId,
                                    TransferProtocol.Progress progress) throws IOException {
+        sendFileHeader(fileName, mime, totalSize, transferId);
+        long resumeOffset = expectAckForFile();
+        skipExactly(contentStream, resumeOffset);
+        if (resumeOffset > 0) {
+            TransferProtocol.writeFileContentWithResume(out, contentStream, totalSize,
+                    resumeOffset, progress, () -> cancelled);
+        } else {
+            TransferProtocol.writeFileContent(out, contentStream, totalSize, progress,
+                    () -> cancelled);
+        }
+        expectAck();
+    }
+
+    /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */
+    private void sendFileHeader(String fileName, String mime, long size, String transferId) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "FILE");
         header.addProperty("name", FileUtils.sanitizeFileName(fileName));
-        header.addProperty("size", totalSize);
+        header.addProperty("size", size);
         header.addProperty("mime", mime != null ? mime
                 : FileUtils.guessMimeType(fileName));
         header.addProperty("time", System.currentTimeMillis());
-        TransferProtocol.writeFileFrame(out, header, contentStream, totalSize,
-                progress, () -> cancelled);
-        expectAck();
+        if (transferId != null) {
+            header.addProperty("id", transferId);
+        }
+        TransferProtocol.writeFrame(out, header);
+    }
+
+    /** 读取 FILE 的 ACK：普通 ACK/OK → 返回 0；RESUME → 返回 offset；否则抛异常。 */
+    private long expectAckForFile() throws IOException {
+        JsonObject ack = TransferProtocol.readHeader(in);
+        if (TransferProtocol.isAckOk(ack)) {
+            return 0;
+        }
+        if (TransferProtocol.isAckResume(ack)) {
+            return TransferProtocol.getAckOffset(ack);
+        }
+        if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
+            throw new IOException("peer error: " + TransferProtocol.ackError(ack));
+        }
+        throw new IOException("unexpected frame: " + ack);
+    }
+
+    /** 跳过 InputStream 中指定字节数（兼容 skip() 返回 < bytesToSkip 的情况）。 */
+    private static void skipExactly(InputStream in, long bytesToSkip) throws IOException {
+        if (bytesToSkip <= 0) return;
+        long remaining = bytesToSkip;
+        while (remaining > 0) {
+            long skipped = in.skip(remaining);
+            if (skipped > 0) {
+                remaining -= skipped;
+            } else {
+                // skip() 返回 0：逐字节跳过
+                int b = in.read();
+                if (b < 0) throw new IOException("Unexpected end of stream during skip");
+                remaining--;
+            }
+        }
     }
 
     /** 阻塞等待 ACK；收到 ERROR 或异常类型时抛 IOException。 */

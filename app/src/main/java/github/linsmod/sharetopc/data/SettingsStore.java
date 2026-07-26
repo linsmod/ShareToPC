@@ -13,13 +13,11 @@ import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
 
-import github.linsmod.sharetopc.cleanup.CleanupPolicy;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 
 /** 设置存储：默认 SharedPreferences（与 PreferenceFragmentCompat 共用）。 */
 public class SettingsStore {
 
-    public static final String KEY_POLICY = "cleanup_policy";
     public static final String KEY_MANUAL_HOST = "manual_host";
     public static final String KEY_MANUAL_PORT = "manual_port";
     public static final String KEY_ALIASES = "device_aliases";
@@ -34,15 +32,6 @@ public class SettingsStore {
 
     public SettingsStore(Context context) {
         this.prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    }
-
-    public CleanupPolicy getCleanupPolicy() {
-        String value = prefs.getString(KEY_POLICY, CleanupPolicy.AFTER_SEND.name());
-        try {
-            return CleanupPolicy.valueOf(value);
-        } catch (IllegalArgumentException e) {
-            return CleanupPolicy.AFTER_SEND;
-        }
     }
 
     public String getManualHost() {

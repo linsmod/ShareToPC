@@ -9,7 +9,6 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -25,7 +24,6 @@ import java.util.List;
 
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.cleanup.CleanupPolicy;
 import github.linsmod.sharetopc.data.PendingContent;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
@@ -39,8 +37,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
     private ContentAdapter contentAdapter;
     private TextView tvNoDeviceHint;
     private Spinner spinnerDevices;
-    private TextView tvPolicyTitle;
-    private CheckBox cbCleanAfterSent;
     private Button btnSend;
     private Button btnStash;
     private Button btnCancel;
@@ -70,8 +66,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
         lvContentList.setAdapter(contentAdapter);
         tvNoDeviceHint = findViewById(R.id.tvNoDeviceHint);
         spinnerDevices = findViewById(R.id.spinnerDevices);
-        tvPolicyTitle = findViewById(R.id.tvPolicyTitle);
-        cbCleanAfterSent = findViewById(R.id.cbCleanAfterSent);
         btnSend = findViewById(R.id.btnSend);
         btnStash = findViewById(R.id.btnStash);
         btnCancel = findViewById(R.id.btnCancel);
@@ -112,10 +106,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
         };
         spinnerDevices.setAdapter(deviceAdapter);
 
-        // 默认清理策略取设置值
-        CleanupPolicy defaultPolicy = App.get().settingsStore.getCleanupPolicy();
-        cbCleanAfterSent.setChecked(defaultPolicy != CleanupPolicy.NEVER);
-
         btnCancel.setOnClickListener(v -> finish());
         btnSend.setOnClickListener(v -> doSend());
         btnStash.setOnClickListener(v -> doStash());
@@ -142,17 +132,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
                 tvContentCount.setVisibility(View.VISIBLE);
                 lvContentList.setVisibility(View.VISIBLE);
                 tvContentCount.setText(buildCountSummary(items));
-                // 清理策略仅对文件类型内容显示（生效层在 CleanupScheduler 已按类型过滤）
-                boolean hasFile = false;
-                for (PendingContent item : items) {
-                    if (!item.isText()) {
-                        hasFile = true;
-                        break;
-                    }
-                }
-                int policyVis = hasFile ? View.VISIBLE : View.GONE;
-                tvPolicyTitle.setVisibility(policyVis);
-                cbCleanAfterSent.setVisibility(policyVis);
                 updateSendEnabled();
             });
         });
@@ -201,10 +180,9 @@ public class ShareReceiverActivity extends AppCompatActivity {
         if (pendingItems == null || pendingItems.isEmpty()) {
             return;
         }
-        CleanupPolicy policy = cbCleanAfterSent.isChecked() ? CleanupPolicy.AFTER_SEND : CleanupPolicy.NEVER;
         for (PendingContent item : pendingItems) {
             App.get().historyStore.add(
-                    github.linsmod.sharetopc.data.TransferRecord.pending(item, policy.name()));
+                    github.linsmod.sharetopc.data.TransferRecord.pending(item, ""));
         }
         Toast.makeText(this, R.string.stashed, Toast.LENGTH_LONG).show();
         finish();
@@ -270,9 +248,12 @@ public class ShareReceiverActivity extends AppCompatActivity {
             return;
         }
         App.get().settingsStore.saveLastDevice(target.host, target.port);
-        CleanupPolicy policy = cbCleanAfterSent.isChecked() ? CleanupPolicy.AFTER_SEND : CleanupPolicy.NEVER;
+        // 为每个文件预打开 PFD，获取内核文件句柄以支持可靠 skip/seek 断点续传
+        for (PendingContent item : pendingItems) {
+            ShareParser.attachPfd(getApplicationContext(), item);
+        }
         App.get().transferManager.enqueue(pendingItems,
-                target.host, target.port, target.displayName(), policy);
+                target.host, target.port, target.displayName());
         // 立即关闭窗口，传输在后台继续
         finish();
     }

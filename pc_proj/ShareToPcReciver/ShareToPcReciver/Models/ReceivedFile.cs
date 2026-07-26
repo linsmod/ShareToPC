@@ -10,6 +10,10 @@ namespace ShareToPcReciver.Models
         public string DeviceName { get; set; } = "";
         public long Time { get; set; }
         public int Progress { get; set; }
+        public string Status { get; set; } = "success";  // success | failed | cancelled
+        public long TotalBytes { get; set; }               // 文件总大小
+        public long ReceivedBytes { get; set; }            // 已接收字节数（断点续传用）
+        public string TransferId { get; set; } = "";       // 传输标识，用于定位 .part 文件
         public DateTime ReceivedAt => DateTimeOffset.FromUnixTimeMilliseconds(Time).LocalDateTime;
     }
 
@@ -17,6 +21,7 @@ namespace ShareToPcReciver.Models
     {
         public string FileName { get; set; } = "";
         public string DeviceName { get; set; } = "";
+        public string TransferId { get; set; } = "";
         public long Received { get; set; }
         public long Total { get; set; }
         public bool Failed { get; set; }

@@ -245,6 +245,11 @@ public class MainViewModel extends AndroidViewModel {
         app.transferManager.retry(record);
     }
 
+    /** 查询指定 transferId 是否仍有 PFD 可用（用于 UI 判断是否允许重试/继续）。 */
+    public boolean hasPfd(String transferId) {
+        return app.transferManager.hasPfd(transferId);
+    }
+
     /** 批量删除历史记录。 */
     public void deleteRecords(java.util.Collection<String> ids) {
         app.historyStore.removeByIds(ids);
@@ -253,12 +258,9 @@ public class MainViewModel extends AndroidViewModel {
 
     /** 暂存记录补发：入列发送并关联原记录，完成后原地更新为最终状态（保持单个条目）。 */
     public void sendPending(TransferRecord record, DiscoveredDevice device) {
-        github.linsmod.sharetopc.cleanup.CleanupPolicy policy =
-                github.linsmod.sharetopc.cleanup.CleanupPolicy.fromName(
-                        record.policy, github.linsmod.sharetopc.cleanup.CleanupPolicy.AFTER_SEND);
         List<github.linsmod.sharetopc.data.PendingContent> items = new java.util.ArrayList<>();
         items.add(record.toPendingContent());
-        app.transferManager.enqueue(items, device.host, device.port, device.displayName(), policy, record.id);
+        app.transferManager.enqueue(items, device.host, device.port, device.displayName(), record.id);
     }
 
     /** 取消当前正在进行的传输。 */

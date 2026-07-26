@@ -8,6 +8,7 @@ import android.widget.CheckBox;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.AsyncListDiffer;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
@@ -36,6 +37,11 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         void onItemClick(TransferRecord record);
     }
 
+    /** 查询 transferId 对应的 PFD 是否仍然可用（用于判断断点续传是否可能）。 */
+    public interface PfdChecker {
+        boolean hasPfd(String transferId);
+    }
+
     private static final DiffUtil.ItemCallback<TransferRecord> DIFF = new DiffUtil.ItemCallback<TransferRecord>() {
         @Override
         public boolean areItemsTheSame(@NonNull TransferRecord old, @NonNull TransferRecord n) {
@@ -56,12 +62,15 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
     private final AsyncListDiffer<TransferRecord> differ = new AsyncListDiffer<>(this, DIFF);
     private final Set<String> selectedIds = new HashSet<>();
     private final ActionListener actionListener;
+    @Nullable
+    private final PfdChecker pfdChecker;
     private final SimpleDateFormat timeFormat =
             new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
     private boolean selectionMode = false;
 
-    public HistoryAdapter(ActionListener actionListener) {
+    public HistoryAdapter(ActionListener actionListener, @Nullable PfdChecker pfdChecker) {
         this.actionListener = actionListener;
+        this.pfdChecker = pfdChecker;
     }
 
     public void submitList(List<TransferRecord> list) {
@@ -200,10 +209,16 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
             bindAction(holder.btnRetry, ctx.getString(R.string.action_send),
                     record.canDeliver(), () -> actionListener.onSendPending(record));
         } else if (!selectionMode && !record.success
-                && !TransferRecord.STATUS_CANCELLED.equals(record.statusOrLegacy())
                 && !TransferRecord.STATUS_SENDING.equals(record.statusOrLegacy())) {
-            bindAction(holder.btnRetry, ctx.getString(R.string.retry),
-                    record.canDeliver(), () -> actionListener.onRetry(record));
+            boolean isCancelled = TransferRecord.STATUS_CANCELLED.equals(record.statusOrLegacy());
+            String label = isCancelled ? ctx.getString(R.string.action_resume)
+                    : ctx.getString(R.string.retry);
+            // 文件类型需要 PFD 才能可靠断点续传；PFD 丢失则不显示按钮
+            boolean canRetry = record.canDeliver()
+                    && (record.contentType == PendingContent.TYPE_TEXT
+                        || pfdChecker == null
+                        || pfdChecker.hasPfd(record.transferId));
+            bindAction(holder.btnRetry, label, canRetry, () -> actionListener.onRetry(record));
         } else {
             holder.btnRetry.setVisibility(View.GONE);
             holder.btnRetry.setOnClickListener(null);

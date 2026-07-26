@@ -27,7 +27,7 @@ namespace ShareToPcReciver
         private readonly HistoryStore _historyStore = new HistoryStore();
         private string _lastFilePath;
         private ListViewItem _activeRow;
-        private const int ProgressColumnIndex = 4;
+        private const int ProgressColumnIndex = 6;
 
         public MainForm()
         {
@@ -81,13 +81,18 @@ namespace ShareToPcReciver
                     case ReceivedText text:
                     {
                         string preview = text.Text.Length > 80 ? text.Text.Substring(0, 80) + "..." : text.Text;
-                        AddHistoryRow(text.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, text.DeviceName, text);
+                        AddHistoryRow(text.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, "", text.Text.Length + " 字符", text.DeviceName, text);
                         break;
                     }
                     case ReceivedFile file:
                     {
-                        string preview = $"{file.FileName} ({FormatSize(file.Size)})";
-                        AddHistoryRow(file.ReceivedAt.ToString("HH:mm:ss"), "文件", preview, file.DeviceName, file);
+                        string ext = GetFileExtension(file.FileName);
+                        string sizeText;
+                        if ((file.Status == "failed" || file.Status == "cancelled") && file.ReceivedBytes > 0)
+                            sizeText = $"{FormatSize(file.ReceivedBytes)} / {FormatSize(file.Size)}";
+                        else
+                            sizeText = FormatSize(file.Size);
+                        AddHistoryRow(file.ReceivedAt.ToString("HH:mm:ss"), "文件", file.FileName, ext, sizeText, file.DeviceName, file);
                         break;
                     }
                 }
@@ -313,7 +318,7 @@ namespace ShareToPcReciver
             this.BeginInvoke(new Action(() =>
             {
                 string preview = msg.Text.Length > 80 ? msg.Text.Substring(0, 80) + "..." : msg.Text;
-                AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, msg.DeviceName, msg);
+                AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, "", msg.Text.Length + " 字符", msg.DeviceName, msg);
                 PerformTextAction(msg);
 
                 if (_config.ShowBalloon)
@@ -337,19 +342,23 @@ namespace ShareToPcReciver
 
             this.BeginInvoke(new Action(() =>
             {
-                string preview = $"{msg.FileName} ({FormatSize(msg.Size)})";
                 if (_activeRow != null)
                 {
                     // 传输中插入的行转为正式文件行
                     _activeRow.Text = msg.ReceivedAt.ToString("HH:mm:ss");
-                    _activeRow.SubItems[2].Text = preview;
+                    _activeRow.SubItems[1].Text = "文件";
+                    _activeRow.SubItems[2].Text = msg.FileName;
+                    _activeRow.SubItems[3].Text = GetFileExtension(msg.FileName);
+                    _activeRow.SubItems[4].Text = FormatSize(msg.Size);
+                    _activeRow.SubItems[5].Text = msg.DeviceName;
                     _activeRow.Tag = msg;
                     RefreshRow(_activeRow);
                     _activeRow = null;
                 }
                 else
                 {
-                    AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文件", preview, msg.DeviceName, msg);
+                    string ext = GetFileExtension(msg.FileName);
+                    AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文件", msg.FileName, ext, FormatSize(msg.Size), msg.DeviceName, msg);
                 }
                 PerformFileAction(msg);
 
@@ -357,7 +366,7 @@ namespace ShareToPcReciver
                 {
                     _lastFilePath = msg.FilePath;
                     notifyIcon.BalloonTipTitle = "收到文件";
-                    notifyIcon.BalloonTipText = preview;
+                    notifyIcon.BalloonTipText = $"{msg.FileName} ({FormatSize(msg.Size)})";
                     notifyIcon.ShowBalloonTip(5000);
                 }
             }));
@@ -375,6 +384,10 @@ namespace ShareToPcReciver
                     {
                         _activeRow.Tag = p;
                         RefreshRow(_activeRow);
+                        // 写入历史，重启后可恢复
+                        var rf = MakeFailedRecord(p, "failed");
+                        lock (_historyLock) { _history.Insert(0, rf); }
+                        SaveHistory();
                         _activeRow = null;
                     }
                     return;
@@ -385,23 +398,29 @@ namespace ShareToPcReciver
                     {
                         _activeRow.Tag = p;
                         RefreshRow(_activeRow);
+                        // 写入历史
+                        var rf = MakeFailedRecord(p, "cancelled");
+                        lock (_historyLock) { _history.Insert(0, rf); }
+                        SaveHistory();
                         _activeRow = null;
                     }
                     else
                     {
                         // 取消时可能还没有 activeRow（传输未开始时取消）
-                        string content = p.FileName.Length > 0
-                            ? $"{p.FileName} ({FormatSize(p.Total)})"
-                            : $"来自 {p.DeviceName}";
-                        var item = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", content, p.DeviceName, p);
+                        string name = p.FileName.Length > 0 ? p.FileName : "(未知文件)";
+                        string ext = GetFileExtension(p.FileName);
+                        var item = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", name, ext, FormatSize(p.Total), p.DeviceName, p);
                         RefreshRow(item);
+                        var rf = MakeFailedRecord(p, "cancelled");
+                        lock (_historyLock) { _history.Insert(0, rf); }
+                        SaveHistory();
                     }
                     return;
                 }
                 if (_activeRow == null)
                 {
-                    string content = $"{p.FileName} ({FormatSize(p.Total)})";
-                    _activeRow = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", content, p.DeviceName, p);
+                    string ext = GetFileExtension(p.FileName);
+                    _activeRow = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", p.FileName, ext, FormatSize(p.Total), p.DeviceName, p);
                 }
                 else
                 {
@@ -409,6 +428,21 @@ namespace ShareToPcReciver
                 }
                 RefreshRow(_activeRow);
             }));
+        }
+
+        private ReceivedFile MakeFailedRecord(FileProgressInfo p, string status)
+        {
+            return new ReceivedFile
+            {
+                FileName = p.FileName,
+                Size = p.Total,
+                DeviceName = p.DeviceName,
+                Time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                Status = status,
+                TotalBytes = p.Total,
+                ReceivedBytes = p.Received,
+                TransferId = p.TransferId ?? ""
+            };
         }
 
         private void RefreshRow(ListViewItem item)
@@ -419,34 +453,57 @@ namespace ShareToPcReciver
 
         private void LvHistory_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
         {
-            if (e.ColumnIndex != ProgressColumnIndex || !(e.Item.Tag is FileProgressInfo p))
+            if (e.ColumnIndex != ProgressColumnIndex)
             {
                 e.DrawDefault = true;
                 return;
             }
 
+            // 传输中：FileProgressInfo（实时进度条）
+            if (e.Item.Tag is FileProgressInfo p)
+            {
+                string label = p.Failed ? $"{p.Percent}% 失败"
+                             : p.Cancelled ? $"{p.Percent}% 已取消"
+                             : $"{p.Percent}%";
+                Color clr = p.Failed ? Color.DarkRed : p.Cancelled ? Color.Gray : SystemColors.ControlText;
+                DrawProgressCell(e, p.Percent, label, clr);
+                return;
+            }
+
+            // 重启后加载的历史记录：ReceivedFile
+            if (e.Item.Tag is ReceivedFile rf)
+            {
+                if (rf.Status == "failed" || rf.Status == "cancelled")
+                {
+                    int pct = rf.TotalBytes > 0 ? (int)(rf.ReceivedBytes * 100 / rf.TotalBytes) : 0;
+                    Color clr = rf.Status == "failed" ? Color.DarkRed : Color.Gray;
+                    string label = $"{pct}% {(rf.Status == "failed" ? "失败" : "已取消")}";
+                    DrawProgressCell(e, pct, label, clr);
+                }
+                else
+                {
+                    e.DrawBackground();
+                    TextRenderer.DrawText(e.Graphics, "完成", lvHistory.Font, e.Bounds,
+                        e.Item.Selected ? SystemColors.HighlightText : Color.Green,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                }
+                return;
+            }
+
+            e.DrawDefault = true;
+        }
+
+        private void DrawProgressCell(DrawListViewSubItemEventArgs e, int percent,
+                                       string label, Color textColor)
+        {
             e.DrawBackground();
-
-            if (p.Failed)
-            {
-                TextRenderer.DrawText(e.Graphics, "失败", lvHistory.Font, e.Bounds, Color.DarkRed,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-                return;
-            }
-
-            if (p.Cancelled)
-            {
-                TextRenderer.DrawText(e.Graphics, "已取消", lvHistory.Font, e.Bounds, Color.Gray,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-                return;
-            }
 
             var rect = new Rectangle(e.Bounds.X + 3, e.Bounds.Y + 3,
                 Math.Max(0, e.Bounds.Width - 6), Math.Max(0, e.Bounds.Height - 6));
             if (ProgressBarRenderer.IsSupported && rect.Width > 4 && rect.Height > 4)
             {
                 ProgressBarRenderer.DrawHorizontalBar(e.Graphics, rect);
-                int fillWidth = (rect.Width - 2) * p.Percent / 100;
+                int fillWidth = (rect.Width - 2) * percent / 100;
                 if (fillWidth > 0)
                 {
                     var fill = new Rectangle(rect.X + 1, rect.Y + 1, fillWidth, rect.Height - 2);
@@ -456,14 +513,14 @@ namespace ShareToPcReciver
             else
             {
                 e.Graphics.FillRectangle(SystemBrushes.ControlLight, rect);
-                int fillWidth = rect.Width * p.Percent / 100;
+                int fillWidth = rect.Width * percent / 100;
                 if (fillWidth > 0)
                     e.Graphics.FillRectangle(Brushes.ForestGreen, rect.X, rect.Y, fillWidth, rect.Height);
                 e.Graphics.DrawRectangle(SystemPens.ControlDark, rect);
             }
 
-            Color textColor = e.Item.Selected ? SystemColors.HighlightText : SystemColors.ControlText;
-            TextRenderer.DrawText(e.Graphics, $"{p.Percent}%", lvHistory.Font, e.Bounds, textColor,
+            Color finalColor = e.Item.Selected ? SystemColors.HighlightText : textColor;
+            TextRenderer.DrawText(e.Graphics, label, lvHistory.Font, e.Bounds, finalColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
 
@@ -476,11 +533,21 @@ namespace ShareToPcReciver
                     : $"{size}B";
         }
 
-        private ListViewItem AddHistoryRow(string time, string type, string content, string source, object tag)
+        private static string GetFileExtension(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName))
+                return "-";
+            string ext = Path.GetExtension(fileName);
+            return string.IsNullOrEmpty(ext) ? "-" : ext.TrimStart('.').ToLowerInvariant();
+        }
+
+        private ListViewItem AddHistoryRow(string time, string type, string name, string extension, string size, string source, object tag)
         {
             var item = new ListViewItem(time);
             item.SubItems.Add(type);
-            item.SubItems.Add(content);
+            item.SubItems.Add(name);
+            item.SubItems.Add(extension);
+            item.SubItems.Add(size);
             item.SubItems.Add(source);
             item.SubItems.Add(""); // 进度列（自绘，文本留空）
             item.Tag = tag;
@@ -705,14 +772,27 @@ namespace ShareToPcReciver
             int deletedFiles = 0;
             foreach (ListViewItem item in selectedItems)
             {
-                if (deleteFiles && item.Tag is ReceivedFile rf
-                    && !string.IsNullOrEmpty(rf.FilePath) && File.Exists(rf.FilePath))
+                if (item.Tag is ReceivedFile rf)
                 {
-                    try { File.Delete(rf.FilePath); deletedFiles++; }
-                    catch (Exception ex) { Log.Error($"Failed to delete file: {rf.FilePath}", ex); }
+                    // 删除已完成文件的实体
+                    if (deleteFiles
+                        && !string.IsNullOrEmpty(rf.FilePath) && File.Exists(rf.FilePath))
+                    {
+                        try { File.Delete(rf.FilePath); deletedFiles++; }
+                        catch (Exception ex) { Log.Error($"Failed to delete file: {rf.FilePath}", ex); }
+                    }
+
+                    // 删除未完成/失败传输的 .part 临时文件
+                    if (rf.Status == "failed" || rf.Status == "cancelled")
+                    {
+                        if (!string.IsNullOrEmpty(rf.TransferId))
+                        {
+                            try { _storage.DiscardPartByTransferId(rf.TransferId); }
+                            catch (Exception ex) { Log.Error($"Failed to discard part for {rf.FileName}", ex); }
+                        }
+                    }
                 }
 
-                // 从内存历史中移除
                 lock (_historyLock)
                 {
                     _history.Remove(item.Tag);

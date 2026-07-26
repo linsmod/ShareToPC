@@ -27,6 +27,8 @@ namespace ShareToPcReciver
             this.columnHeader1 = new System.Windows.Forms.ColumnHeader();
             this.columnHeader2 = new System.Windows.Forms.ColumnHeader();
             this.columnHeader3 = new System.Windows.Forms.ColumnHeader();
+            this.columnHeader6 = new System.Windows.Forms.ColumnHeader();
+            this.columnHeader7 = new System.Windows.Forms.ColumnHeader();
             this.columnHeader4 = new System.Windows.Forms.ColumnHeader();
             this.columnHeader5 = new System.Windows.Forms.ColumnHeader();
             this.btnOpenDir = new System.Windows.Forms.Button();
@@ -97,27 +99,37 @@ namespace ShareToPcReciver
             // columnHeader1
             // 
             this.columnHeader1.Text = "时间";
-            this.columnHeader1.Width = 120;
+            this.columnHeader1.Width = 110;
             // 
             // columnHeader2
             // 
             this.columnHeader2.Text = "类型";
-            this.columnHeader2.Width = 60;
+            this.columnHeader2.Width = 50;
             // 
             // columnHeader3
             // 
-            this.columnHeader3.Text = "内容/文件";
-            this.columnHeader3.Width = 300;
+            this.columnHeader3.Text = "名称";
+            this.columnHeader3.Width = 200;
+            // 
+            // columnHeader6
+            // 
+            this.columnHeader6.Text = "扩展名";
+            this.columnHeader6.Width = 60;
+            // 
+            // columnHeader7
+            // 
+            this.columnHeader7.Text = "大小";
+            this.columnHeader7.Width = 75;
             // 
             // columnHeader4
             // 
             this.columnHeader4.Text = "来源";
-            this.columnHeader4.Width = 120;
+            this.columnHeader4.Width = 110;
             // 
             // columnHeader5
             // 
             this.columnHeader5.Text = "进度";
-            this.columnHeader5.Width = 110;
+            this.columnHeader5.Width = 100;
             // 
             // btnOpenDir
             // 
@@ -192,6 +204,8 @@ namespace ShareToPcReciver
             this.columnHeader1,
             this.columnHeader2,
             this.columnHeader3,
+            this.columnHeader6,
+            this.columnHeader7,
             this.columnHeader4,
             this.columnHeader5});
             this.lvHistory.ContextMenuStrip = this.lvHistoryMenu;
@@ -313,6 +327,8 @@ namespace ShareToPcReciver
         private System.Windows.Forms.ColumnHeader columnHeader1;
         private System.Windows.Forms.ColumnHeader columnHeader2;
         private System.Windows.Forms.ColumnHeader columnHeader3;
+        private System.Windows.Forms.ColumnHeader columnHeader6;
+        private System.Windows.Forms.ColumnHeader columnHeader7;
         private System.Windows.Forms.ColumnHeader columnHeader4;
         private System.Windows.Forms.ColumnHeader columnHeader5;
         private System.Windows.Forms.Button btnOpenDir;

@@ -112,13 +112,19 @@ public class TransferRecord {
     }
 
     public PendingContent toPendingContent() {
+        PendingContent c;
         if (contentType == PendingContent.TYPE_TEXT) {
-            return PendingContent.ofText(textContent);
+            c = PendingContent.ofText(textContent);
+        } else if (contentUri != null) {
+            // 优先用 contentUri（新路径 / 回退），其次用 localPath（历史兼容）
+            c = PendingContent.ofFileFromUri(contentUri, name, size, mime);
+        } else {
+            c = PendingContent.ofFile(localPath, name, size, mime, null);
         }
-        // 优先用 contentUri（新路径 / 回退），其次用 localPath（历史兼容）
-        if (contentUri != null) {
-            return PendingContent.ofFileFromUri(contentUri, name, size, mime);
+        // 保留原 transferId，确保重试时 PC 侧能匹配到同一个 .part 文件
+        if (transferId != null) {
+            c.transferId = transferId;
         }
-        return PendingContent.ofFile(localPath, name, size, mime, null);
+        return c;
     }
 }

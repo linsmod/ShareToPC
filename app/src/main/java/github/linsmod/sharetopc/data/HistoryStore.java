@@ -149,10 +149,39 @@ public class HistoryStore {
         }
     }
 
-    /** 返回按时间倒序的副本。 */
+    /** 返回按时间倒序的副本（浅拷贝每个记录，避免原地修改导致 DiffUtil 失效）。 */
     public synchronized List<TransferRecord> all() {
         ensureLoaded();
-        return new ArrayList<>(records);
+        List<TransferRecord> snapshot = new ArrayList<>(records.size());
+        for (TransferRecord r : records) {
+            snapshot.add(copy(r));
+        }
+        return snapshot;
+    }
+
+    /** 浅拷贝 TransferRecord，DiffUtil 比较时需要不同对象引用。 */
+    private static TransferRecord copy(TransferRecord src) {
+        TransferRecord r = new TransferRecord();
+        r.id = src.id;
+        r.timeMillis = src.timeMillis;
+        r.contentType = src.contentType;
+        r.name = src.name;
+        r.size = src.size;
+        r.mime = src.mime;
+        r.transferId = src.transferId;
+        r.success = src.success;
+        r.status = src.status;
+        r.sentBytes = src.sentBytes;
+        r.totalBytes = src.totalBytes;
+        r.errorMsg = src.errorMsg;
+        r.textContent = src.textContent;
+        r.localPath = src.localPath;
+        r.contentUri = src.contentUri;
+        r.host = src.host;
+        r.port = src.port;
+        r.targetName = src.targetName;
+        r.policy = src.policy;
+        return r;
     }
 
     public synchronized void clear() {

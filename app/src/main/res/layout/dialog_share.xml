@@ -63,22 +63,6 @@
         android:textSize="12sp"
         android:visibility="gone" />
 
-    <TextView
-        android:id="@+id/tvPolicyTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="@string/share_cleanup_policy"
-        android:textStyle="bold"
-        android:visibility="gone" />
-
-    <CheckBox
-        android:id="@+id/cbCleanAfterSent"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/clean_after_sent"
-        android:visibility="gone" />
-
     <ProgressBar
         android:id="@+id/progressSend"
         style="?android:attr/progressBarStyleHorizontal"
