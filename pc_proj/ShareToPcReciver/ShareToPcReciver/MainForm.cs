@@ -334,7 +334,7 @@ namespace ShareToPcReciver
         {
             lock (_historyLock)
             {
-                _history.Insert(0, msg);
+                ReplaceHistoryEntry(msg);
                 if (_history.Count > 500)
                     _history.RemoveAt(_history.Count - 1);
             }
@@ -386,7 +386,7 @@ namespace ShareToPcReciver
                         RefreshRow(_activeRow);
                         // 写入历史，重启后可恢复
                         var rf = MakeFailedRecord(p, "failed");
-                        lock (_historyLock) { _history.Insert(0, rf); }
+                        lock (_historyLock) { ReplaceHistoryEntry(rf); }
                         SaveHistory();
                         _activeRow = null;
                     }
@@ -400,7 +400,7 @@ namespace ShareToPcReciver
                         RefreshRow(_activeRow);
                         // 写入历史
                         var rf = MakeFailedRecord(p, "cancelled");
-                        lock (_historyLock) { _history.Insert(0, rf); }
+                        lock (_historyLock) { ReplaceHistoryEntry(rf); }
                         SaveHistory();
                         _activeRow = null;
                     }
@@ -409,18 +409,40 @@ namespace ShareToPcReciver
                         // 取消时可能还没有 activeRow（传输未开始时取消）
                         string name = p.FileName.Length > 0 ? p.FileName : "(未知文件)";
                         string ext = GetFileExtension(p.FileName);
-                        var item = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", name, ext, FormatSize(p.Total), p.DeviceName, p);
+                        var existingRow = FindRowByTransferId(p.TransferId);
+                        ListViewItem item;
+                        if (existingRow != null)
+                        {
+                            existingRow.Tag = p;
+                            item = existingRow;
+                        }
+                        else
+                        {
+                            item = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", name, ext, FormatSize(p.Total), p.DeviceName, p);
+                        }
                         RefreshRow(item);
                         var rf = MakeFailedRecord(p, "cancelled");
-                        lock (_historyLock) { _history.Insert(0, rf); }
+                        lock (_historyLock) { ReplaceHistoryEntry(rf); }
                         SaveHistory();
                     }
                     return;
                 }
                 if (_activeRow == null)
                 {
-                    string ext = GetFileExtension(p.FileName);
-                    _activeRow = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", p.FileName, ext, FormatSize(p.Total), p.DeviceName, p);
+                    // 检查是否已有同 TransferId 的行（恢复取消的传输），有则复用
+                    var existingRow = FindRowByTransferId(p.TransferId);
+                    if (existingRow != null)
+                    {
+                        existingRow.Tag = p;
+                        _activeRow = existingRow;
+                        lock (_historyLock) { RemoveHistoryByTransferId(p.TransferId); }
+                        SaveHistory();
+                    }
+                    else
+                    {
+                        string ext = GetFileExtension(p.FileName);
+                        _activeRow = AddHistoryRow(DateTime.Now.ToString("HH:mm:ss"), "文件", p.FileName, ext, FormatSize(p.Total), p.DeviceName, p);
+                    }
                 }
                 else
                 {
@@ -561,6 +583,48 @@ namespace ShareToPcReciver
                 lvHistory.Items.RemoveAt(lvHistory.Items.Count - 1);
             }
             return item;
+        }
+
+        /// <summary>按 TransferId 在列表中查找已有行，用于恢复取消的传输时复用</summary>
+        private ListViewItem FindRowByTransferId(string transferId)
+        {
+            if (string.IsNullOrEmpty(transferId))
+                return null;
+            foreach (ListViewItem item in lvHistory.Items)
+            {
+                if (item.Tag is ReceivedFile rf && rf.TransferId == transferId)
+                    return item;
+                if (item.Tag is FileProgressInfo pi && pi.TransferId == transferId)
+                    return item;
+            }
+            return null;
+        }
+
+        /// <summary>将新记录写入 _history，同时移除同 TransferId 的旧条目，避免重复</summary>
+        private void ReplaceHistoryEntry(object newEntry)
+        {
+            string tid = null;
+            if (newEntry is ReceivedFile rf)
+                tid = rf.TransferId;
+            else if (newEntry is FileProgressInfo pi)
+                tid = pi.TransferId;
+
+            if (!string.IsNullOrEmpty(tid))
+                _history.RemoveAll(obj =>
+                    (obj is ReceivedFile r && r.TransferId == tid) ||
+                    (obj is FileProgressInfo p && p.TransferId == tid));
+
+            _history.Insert(0, newEntry);
+        }
+
+        /// <summary>仅移除历史中同 TransferId 的条目（不插入新条目）</summary>
+        private void RemoveHistoryByTransferId(string transferId)
+        {
+            if (string.IsNullOrEmpty(transferId))
+                return;
+            _history.RemoveAll(obj =>
+                (obj is ReceivedFile r && r.TransferId == transferId) ||
+                (obj is FileProgressInfo p && p.TransferId == transferId));
         }
 
         // ---- 内容到达动作 ----

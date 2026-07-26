@@ -200,6 +200,11 @@ public class MainActivity extends AppCompatActivity {
                     showTextPreview(record);
                 }
             }
+
+            @Override
+            public void onPauseTransfer() {
+                viewModel.pauseCurrentTransfer();
+            }
         }, transferId -> viewModel.hasPfd(transferId));
         rvHistory.setAdapter(historyAdapter);
 
@@ -208,7 +213,10 @@ public class MainActivity extends AppCompatActivity {
 
         View btnRefreshDevices = findViewById(R.id.btnRefreshDevices);
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
+        // 设备传输子项操作
         deviceAdapter.setOnCancelTransferListener(() -> viewModel.cancelCurrentTransfer());
+        deviceAdapter.setOnPauseTransferListener(() -> viewModel.pauseCurrentTransfer());
+        deviceAdapter.setOnResumeTransferListener(recordId -> viewModel.resumeTransfer(recordId));
         viewModel.getScanning().observe(this, isScanning -> {
             // 刷新按钮始终显示，connState 自身带倒计时，不再单独控制可见性
         });
@@ -280,8 +288,27 @@ public class MainActivity extends AppCompatActivity {
         if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
             deviceQueueDialog.dismiss();
         }
-        deviceQueueDialog = new DeviceQueueDialog(this, device, this::showTextPreview,
-                this, viewModel.getHistory());
+        deviceQueueDialog = new DeviceQueueDialog(this, device, new DeviceQueueDialog.Listener() {
+            @Override
+            public void onTextPreviewRequested(github.linsmod.sharetopc.data.TransferRecord record) {
+                showTextPreview(record);
+            }
+
+            @Override
+            public void onPauseTransfer() {
+                viewModel.pauseCurrentTransfer();
+            }
+
+            @Override
+            public void onCancelTransfer() {
+                viewModel.cancelCurrentTransfer();
+            }
+
+            @Override
+            public void onResumeOrRetry(github.linsmod.sharetopc.data.TransferRecord record) {
+                viewModel.retry(record);
+            }
+        }, this, viewModel.getHistory(), transferId -> viewModel.hasPfd(transferId));
         deviceQueueDialog.show();
     }
 

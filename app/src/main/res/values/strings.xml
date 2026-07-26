@@ -46,6 +46,8 @@
     <string name="result_failed">失败</string>
     <string name="result_cancelled">已取消</string>
     <string name="action_resume">继续</string>
+    <string name="action_pause">暂停</string>
+    <string name="state_paused">已暂停</string>
     <string name="stash">暂存</string>
     <string name="stashed">已暂存，可在主界面历史中选择设备发送</string>
     <string name="result_pending">需要选择目标设备</string>

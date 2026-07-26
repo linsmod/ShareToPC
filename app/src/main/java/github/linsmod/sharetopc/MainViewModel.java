@@ -268,6 +268,23 @@ public class MainViewModel extends AndroidViewModel {
         app.transferManager.cancelCurrentJob();
     }
 
+    /** 暂停当前传输（= cancel + 标记 paused，PFD 不释放，支持继续）。 */
+    public void pauseCurrentTransfer() {
+        app.transferManager.cancelCurrentJob();
+    }
+
+    /** 继续/重试指定记录。 */
+    public void resumeTransfer(String recordId) {
+        if (recordId == null) return;
+        java.util.List<TransferRecord> records = app.historyStore.all();
+        for (TransferRecord r : records) {
+            if (recordId.equals(r.id)) {
+                retry(r);
+                return;
+            }
+        }
+    }
+
     /** 取消队列中指定 ID 的任务。 */
     public boolean cancelQueuedJob(String jobId) {
         boolean result = app.transferManager.cancelQueuedJob(jobId);

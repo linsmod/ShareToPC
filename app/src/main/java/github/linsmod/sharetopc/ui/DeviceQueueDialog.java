@@ -9,6 +9,7 @@ import android.view.Window;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.lifecycle.LifecycleOwner;
 import androidx.lifecycle.LiveData;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -23,18 +24,27 @@ import java.util.List;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
+import github.linsmod.sharetopc.util.TransferStatusHelper;
 
 /** 设备任务弹窗，仅观察传输历史 LiveData，单一数据源。 */
 public class DeviceQueueDialog extends Dialog {
 
     public interface Listener {
         void onTextPreviewRequested(TransferRecord record);
+        /** 用户请求暂停当前传输。 */
+        void onPauseTransfer();
+        /** 用户请求取消当前传输。 */
+        void onCancelTransfer();
+        /** 用户请求继续/重试一条记录。 */
+        void onResumeOrRetry(TransferRecord record);
     }
 
     private final DiscoveredDevice device;
     private final Listener listener;
     private final LifecycleOwner lifecycleOwner;
     private final LiveData<List<TransferRecord>> historyLiveData;
+    @Nullable
+    private final TransferStatusHelper.PfdChecker pfdChecker;
 
     private DeviceTaskAdapter adapter;
     private RecyclerView rvTaskList;
@@ -50,12 +60,14 @@ public class DeviceQueueDialog extends Dialog {
                              @NonNull DiscoveredDevice device,
                              Listener listener,
                              @NonNull LifecycleOwner lifecycleOwner,
-                             @NonNull LiveData<List<TransferRecord>> historyLiveData) {
+                             @NonNull LiveData<List<TransferRecord>> historyLiveData,
+                             @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
         super(context);
         this.device = device;
         this.listener = listener;
         this.lifecycleOwner = lifecycleOwner;
         this.historyLiveData = historyLiveData;
+        this.pfdChecker = pfdChecker;
     }
 
     @Override
@@ -92,15 +104,40 @@ public class DeviceQueueDialog extends Dialog {
         rvTaskList = findViewById(R.id.rvTaskList);
         rvTaskList.setLayoutManager(new LinearLayoutManager(getContext()));
         adapter = new DeviceTaskAdapter();
+        adapter.setTaskActionListener(new DeviceTaskAdapter.TaskActionListener() {
+            @Override
+            public void onPauseTransfer(String taskId) {
+                if (listener != null) listener.onPauseTransfer();
+            }
+
+            @Override
+            public void onCancelTransfer(String taskId) {
+                if (listener != null) listener.onCancelTransfer();
+            }
+
+            @Override
+            public void onResumeOrRetry(DeviceTaskAdapter.TaskItem item) {
+                if (listener != null) {
+                    // 从历史数据中找回原件
+                    List<TransferRecord> records = historyLiveData.getValue();
+                    if (records != null) {
+                        for (TransferRecord r : records) {
+                            if (r.id.equals(item.id)) {
+                                listener.onResumeOrRetry(r);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        });
         rvTaskList.setAdapter(adapter);
 
         tvEmpty = findViewById(R.id.tvEmpty);
 
-        // 仅观察历史数据
         historyLiveData.observe(lifecycleOwner, ignored -> computeAndSubmit());
     }
 
-    /** 从传输历史中筛选本设备的记录并提交。 */
     private void computeAndSubmit() {
         String deviceKey = device.key();
         List<TransferRecord> list = historyLiveData.getValue();
@@ -109,9 +146,8 @@ public class DeviceQueueDialog extends Dialog {
         for (TransferRecord tr : list != null ? list : Collections.<TransferRecord>emptyList()) {
             if (tr.host == null) continue;
             if (!deviceKey.equals(tr.host + ":" + tr.port)) continue;
-
             String s = tr.statusOrLegacy();
-            if (TransferRecord.STATUS_PENDING.equals(s)) continue; // 暂存无设备归属
+            if (TransferRecord.STATUS_PENDING.equals(s)) continue;
 
             int status;
             boolean isCurrent;
@@ -129,11 +165,13 @@ public class DeviceQueueDialog extends Dialog {
                 isCurrent = false;
             }
 
+            boolean canResume = (status == DeviceTaskAdapter.STATUS_CANCELLED
+                    || status == DeviceTaskAdapter.STATUS_FAILED)
+                    && TransferStatusHelper.canResumeOrRetry(tr, pfdChecker);
             allItems.add(new DeviceTaskAdapter.TaskItem(
-                    tr.id, tr.name, tr.size, tr.timeMillis, status, -1, isCurrent));
+                    tr.id, tr.name, tr.size, tr.timeMillis, status, -1, isCurrent, canResume));
         }
 
-        // 筛选
         List<DeviceTaskAdapter.TaskItem> filtered;
         switch (currentFilter) {
             case FILTER_ALL:
@@ -142,26 +180,20 @@ public class DeviceQueueDialog extends Dialog {
             case FILTER_TRANSFERRING:
                 filtered = new ArrayList<>();
                 for (DeviceTaskAdapter.TaskItem item : allItems) {
-                    if (item.status == DeviceTaskAdapter.STATUS_TRANSFERRING) {
-                        filtered.add(item);
-                    }
+                    if (item.status == DeviceTaskAdapter.STATUS_TRANSFERRING) filtered.add(item);
                 }
                 break;
             case FILTER_COMPLETED:
                 filtered = new ArrayList<>();
                 for (DeviceTaskAdapter.TaskItem item : allItems) {
-                    if (item.status == DeviceTaskAdapter.STATUS_SUCCESS) {
-                        filtered.add(item);
-                    }
+                    if (item.status == DeviceTaskAdapter.STATUS_SUCCESS) filtered.add(item);
                 }
                 break;
             case FILTER_FAILED:
                 filtered = new ArrayList<>();
                 for (DeviceTaskAdapter.TaskItem item : allItems) {
                     if (item.status == DeviceTaskAdapter.STATUS_FAILED
-                            || item.status == DeviceTaskAdapter.STATUS_CANCELLED) {
-                        filtered.add(item);
-                    }
+                            || item.status == DeviceTaskAdapter.STATUS_CANCELLED) filtered.add(item);
                 }
                 break;
             default:
@@ -179,7 +211,7 @@ public class DeviceQueueDialog extends Dialog {
         adapter.submitList(filtered);
     }
 
-    /** 外部更新进度时调用（只更新传输中条目的百分比，不重建列表）。 */
+    /** 外部更新进度时调用。 */
     public void updateProgress(int percent) {
         adapter.updateTransferProgress(percent);
     }

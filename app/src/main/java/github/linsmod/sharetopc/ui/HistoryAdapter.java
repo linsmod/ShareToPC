@@ -1,11 +1,7 @@
 package github.linsmod.sharetopc.ui;
 
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.CheckBox;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,12 +18,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.PendingContent;
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.util.FileUtils;
+import github.linsmod.sharetopc.util.TransferStatusHelper;
 
-/** 传输历史适配器。用 DiffUtil 精准更新，避免 notifyDataSetChanged() 导致的整列表跳动。 */
+/** 传输历史适配器。 */
 public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
 
     public interface ActionListener {
@@ -35,11 +31,8 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         void onSendPending(TransferRecord record);
         void onSelectionChanged(int count);
         void onItemClick(TransferRecord record);
-    }
-
-    /** 查询 transferId 对应的 PFD 是否仍然可用（用于判断断点续传是否可能）。 */
-    public interface PfdChecker {
-        boolean hasPfd(String transferId);
+        /** 暂停当前传输（点击 SENDING 记录的暂停按钮）。 */
+        void onPauseTransfer();
     }
 
     private static final DiffUtil.ItemCallback<TransferRecord> DIFF = new DiffUtil.ItemCallback<TransferRecord>() {
@@ -47,7 +40,6 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         public boolean areItemsTheSame(@NonNull TransferRecord old, @NonNull TransferRecord n) {
             return old.id.equals(n.id);
         }
-
         @Override
         public boolean areContentsTheSame(@NonNull TransferRecord old, @NonNull TransferRecord n) {
             return old.success == n.success
@@ -63,12 +55,11 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
     private final Set<String> selectedIds = new HashSet<>();
     private final ActionListener actionListener;
     @Nullable
-    private final PfdChecker pfdChecker;
-    private final SimpleDateFormat timeFormat =
-            new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
+    private final TransferStatusHelper.PfdChecker pfdChecker;
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
     private boolean selectionMode = false;
 
-    public HistoryAdapter(ActionListener actionListener, @Nullable PfdChecker pfdChecker) {
+    public HistoryAdapter(ActionListener actionListener, @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
         this.actionListener = actionListener;
         this.pfdChecker = pfdChecker;
     }
@@ -78,153 +69,144 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         differ.submitList(new ArrayList<>(newList), () -> {
             if (selectionMode) {
                 Set<String> alive = new HashSet<>();
-                for (TransferRecord r : newList) {
-                    alive.add(r.id);
-                }
-                if (selectedIds.retainAll(alive)) {
-                    notifySelectionChanged();
-                }
+                for (TransferRecord r : newList) alive.add(r.id);
+                if (selectedIds.retainAll(alive)) notifySelectionChanged();
             }
         });
     }
 
-    public boolean isSelectionMode() {
-        return selectionMode;
-    }
+    public boolean isSelectionMode() { return selectionMode; }
+    public List<String> getSelectedIds() { return new ArrayList<>(selectedIds); }
 
-    public List<String> getSelectedIds() {
-        return new ArrayList<>(selectedIds);
-    }
-
-    /** 当前选中的记录对象（保持列表顺序）。 */
     public List<TransferRecord> getSelectedRecords() {
         List<TransferRecord> result = new ArrayList<>();
         for (TransferRecord r : differ.getCurrentList()) {
-            if (selectedIds.contains(r.id)) {
-                result.add(r);
-            }
+            if (selectedIds.contains(r.id)) result.add(r);
         }
         return result;
     }
 
-    /** 长按进入多选模式，并选中触发项。 */
     public void enterSelectionMode(String firstId) {
-        if (selectionMode) {
-            return;
-        }
+        if (selectionMode) return;
         selectionMode = true;
         selectedIds.clear();
-        if (firstId != null) {
-            selectedIds.add(firstId);
-        }
+        if (firstId != null) selectedIds.add(firstId);
         notifyDataSetChanged();
         notifySelectionChanged();
     }
 
     public void exitSelectionMode() {
-        if (!selectionMode) {
-            return;
-        }
+        if (!selectionMode) return;
         selectionMode = false;
         selectedIds.clear();
         notifyDataSetChanged();
         notifySelectionChanged();
     }
 
-    /** 全选 / 取消全选。 */
     public void toggleSelectAll() {
-        if (!selectionMode) {
-            return;
-        }
+        if (!selectionMode) return;
         List<TransferRecord> current = differ.getCurrentList();
         if (selectedIds.size() == current.size()) {
             selectedIds.clear();
         } else {
             selectedIds.clear();
-            for (TransferRecord r : current) {
-                selectedIds.add(r.id);
-            }
+            for (TransferRecord r : current) selectedIds.add(r.id);
         }
         notifyDataSetChanged();
         notifySelectionChanged();
     }
 
     private void toggleSelection(TransferRecord record, int position) {
-        if (!selectedIds.remove(record.id)) {
-            selectedIds.add(record.id);
-        }
+        if (!selectedIds.remove(record.id)) selectedIds.add(record.id);
         notifyItemChanged(position);
         notifySelectionChanged();
     }
 
     private void notifySelectionChanged() {
-        if (actionListener != null) {
-            actionListener.onSelectionChanged(selectedIds.size());
-        }
+        if (actionListener != null) actionListener.onSelectionChanged(selectedIds.size());
     }
 
     @NonNull
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_history, parent, false);
-        return new VH(view);
+        TransferItemView item = new TransferItemView(parent.getContext());
+        // 历史记录不显示进度条和百分比
+        item.setProgressBarVisible(false);
+        item.setPercentVisible(false);
+        return new VH(item);
     }
 
     @Override
     public void onBindViewHolder(@NonNull VH holder, int position) {
         TransferRecord record = differ.getCurrentList().get(position);
-        android.content.Context ctx = holder.itemView.getContext();
+        TransferItemView view = holder.item;
+        android.content.Context ctx = view.getContext();
+        String status = record.statusOrLegacy();
 
+        // 文件名
         String prefix = record.contentType == PendingContent.TYPE_TEXT
-                ? "[" + ctx.getString(R.string.type_text) + "] "
-                : "";
-        holder.tvName.setText(prefix + record.name);
+                ? "[" + ctx.getString(github.linsmod.sharetopc.R.string.type_text) + "] " : "";
+        view.setName(prefix + record.name);
 
-        // 文件已不存在：灰化
+        // 文件已不存在 → 灰化
         boolean fileGone = record.isFileGone();
-        holder.tvName.setAlpha(fileGone ? 0.4f : 1.0f);
-        holder.tvMeta.setAlpha(fileGone ? 0.4f : 1.0f);
+        float alpha = fileGone ? 0.4f : 1.0f;
+        view.setNameAlpha(alpha);
 
-        // 状态方块颜色
-        holder.vStatus.setAlpha(fileGone ? 0.4f : 1.0f);
-        holder.vStatus.setBackgroundColor(statusDotColor(ctx, record));
+        // 状态圆点
+        view.setTransferStatus(status);
 
-        String status = statusText(ctx, record);
-        StringBuilder meta = new StringBuilder(status);
+        // 元信息
+        StringBuilder meta = new StringBuilder(TransferItemView.statusLabel(ctx, status));
         String target = record.targetName != null ? record.targetName
                 : (record.host != null ? record.host + ":" + record.port : null);
-        if (target != null) {
-            meta.append(" · ").append(target);
-        }
+        if (target != null) meta.append(" · ").append(target);
         meta.append(" · ").append(FileUtils.formatSize(record.size))
                 .append(" · ").append(timeFormat.format(new Date(record.timeMillis)));
-        holder.tvMeta.setText(meta.toString());
+        view.setMeta(meta.toString());
+        view.setMetaVisible(true);
 
-        // 多选模式：显示勾选框，隐藏重试/发送按钮
-        holder.cbSelect.setVisibility(selectionMode ? View.VISIBLE : View.GONE);
-        holder.cbSelect.setChecked(selectedIds.contains(record.id));
+        // 多选框
+        view.setCheckboxVisible(selectionMode, selectedIds.contains(record.id));
 
-        if (!selectionMode && record.isPending()) {
-            bindAction(holder.btnRetry, ctx.getString(R.string.action_send),
-                    record.canDeliver(), () -> actionListener.onSendPending(record));
-        } else if (!selectionMode && !record.success
-                && !TransferRecord.STATUS_SENDING.equals(record.statusOrLegacy())) {
-            boolean isCancelled = TransferRecord.STATUS_CANCELLED.equals(record.statusOrLegacy());
-            String label = isCancelled ? ctx.getString(R.string.action_resume)
-                    : ctx.getString(R.string.retry);
-            // 文件类型需要 PFD 才能可靠断点续传；PFD 丢失则不显示按钮
-            boolean canRetry = record.canDeliver()
-                    && (record.contentType == PendingContent.TYPE_TEXT
-                        || pfdChecker == null
-                        || pfdChecker.hasPfd(record.transferId));
-            bindAction(holder.btnRetry, label, canRetry, () -> actionListener.onRetry(record));
+        // 按钮
+        if (selectionMode) {
+            view.setActionMode(TransferItemView.ActionMode.NONE, null, false);
+        } else if (record.isPending()) {
+            view.setActionMode(TransferItemView.ActionMode.RETRY,
+                    ctx.getString(github.linsmod.sharetopc.R.string.action_send),
+                    record.canDeliver());
+        } else if (TransferRecord.STATUS_SENDING.equals(status)) {
+            view.setActionMode(TransferItemView.ActionMode.ACTIVE, null, false);
+        } else if (!record.success) {
+            boolean isCancelled = TransferRecord.STATUS_CANCELLED.equals(status);
+            String label = isCancelled ? ctx.getString(github.linsmod.sharetopc.R.string.action_resume)
+                    : ctx.getString(github.linsmod.sharetopc.R.string.retry);
+            boolean canRetry = TransferStatusHelper.canResumeOrRetry(record, pfdChecker);
+            view.setActionMode(TransferItemView.ActionMode.RETRY, label, canRetry);
         } else {
-            holder.btnRetry.setVisibility(View.GONE);
-            holder.btnRetry.setOnClickListener(null);
+            view.setActionMode(TransferItemView.ActionMode.NONE, null, false);
         }
 
-        holder.itemView.setOnClickListener(v -> {
+        // 操作回调
+        view.setOnActionListener(new TransferItemView.OnActionListener() {
+            @Override public void onPause() {
+                if (actionListener != null) actionListener.onPauseTransfer();
+            }
+            @Override public void onCancel() {
+                if (actionListener != null) actionListener.onPauseTransfer();
+            }
+            @Override public void onResume() {
+                if (record.isPending()) {
+                    if (actionListener != null) actionListener.onSendPending(record);
+                } else {
+                    if (actionListener != null) actionListener.onRetry(record);
+                }
+            }
+        });
+
+        // 点击 / 长按
+        view.setOnClickListener(v -> {
             if (selectionMode) {
                 int pos = holder.getAdapterPosition();
                 if (pos != RecyclerView.NO_POSITION) {
@@ -234,7 +216,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
                 actionListener.onItemClick(record);
             }
         });
-        holder.itemView.setOnLongClickListener(v -> {
+        view.setOnLongClickListener(v -> {
             if (!selectionMode) {
                 enterSelectionMode(record.id);
                 return true;
@@ -243,67 +225,11 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
         });
     }
 
-    private void bindAction(Button button, String text, boolean enabled, Runnable action) {
-        button.setText(text);
-        button.setVisibility(View.VISIBLE);
-        button.setEnabled(enabled);
-        button.setOnClickListener(v -> {
-            if (actionListener != null) {
-                action.run();
-            }
-        });
-    }
-
-    private String statusText(android.content.Context ctx, TransferRecord record) {
-        switch (record.statusOrLegacy()) {
-            case TransferRecord.STATUS_SUCCESS:
-                return ctx.getString(R.string.result_ok);
-            case TransferRecord.STATUS_SENDING:
-                return ctx.getString(R.string.result_sending);
-            case TransferRecord.STATUS_PENDING:
-                return ctx.getString(R.string.result_pending);
-            case TransferRecord.STATUS_CANCELLED:
-                return ctx.getString(R.string.result_cancelled);
-            default:
-                return ctx.getString(R.string.result_failed);
-        }
-    }
-
-    /** 状态方块颜色，与 DeviceTaskAdapter 风格统一。 */
-    private int statusDotColor(android.content.Context ctx, TransferRecord record) {
-        switch (record.statusOrLegacy()) {
-            case TransferRecord.STATUS_SUCCESS:
-                return ctx.getColor(android.R.color.holo_green_dark);
-            case TransferRecord.STATUS_SENDING:
-                return ctx.getColor(android.R.color.holo_blue_light);
-            case TransferRecord.STATUS_PENDING:
-                return ctx.getColor(android.R.color.holo_orange_light);
-            case TransferRecord.STATUS_CANCELLED:
-                return ctx.getColor(android.R.color.darker_gray);
-            default: // FAILED
-                return ctx.getColor(android.R.color.holo_red_dark);
-        }
-    }
-
     @Override
-    public int getItemCount() {
-        return differ.getCurrentList().size();
-    }
+    public int getItemCount() { return differ.getCurrentList().size(); }
 
     static class VH extends RecyclerView.ViewHolder {
-        final View vStatus;
-        final CheckBox cbSelect;
-        final TextView tvName;
-        final TextView tvMeta;
-        final Button btnRetry;
-
-        VH(@NonNull View itemView) {
-            super(itemView);
-            vStatus = itemView.findViewById(R.id.vHistoryStatus);
-            cbSelect = itemView.findViewById(R.id.cbSelect);
-            tvName = itemView.findViewById(R.id.tvHistoryName);
-            tvMeta = itemView.findViewById(R.id.tvHistoryMeta);
-            btnRetry = itemView.findViewById(R.id.btnRetry);
-        }
+        final TransferItemView item;
+        VH(TransferItemView v) { super(v); item = v; }
     }
 }

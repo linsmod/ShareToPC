@@ -49,13 +49,38 @@
             android:progress="0" />
     </LinearLayout>
 
-    <ImageButton
-        android:id="@+id/btnCancelTransferSub"
-        android:layout_width="32dp"
-        android:layout_height="32dp"
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:contentDescription="@string/cancel_transfer"
-        android:src="@android:drawable/ic_menu_close_clear_cancel"
-        android:tint="?attr/colorError" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/btnPauseTransferSub"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/action_pause"
+            android:src="@android:drawable/ic_media_pause"
+            android:tint="?attr/colorPrimary"
+            android:visibility="gone" />
+
+        <ImageButton
+            android:id="@+id/btnCancelTransferSub"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/cancel_transfer"
+            android:src="@android:drawable/ic_menu_close_clear_cancel"
+            android:tint="?attr/colorError" />
+
+        <Button
+            android:id="@+id/btnResumeTransferSub"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/action_resume"
+            android:visibility="gone" />
+    </LinearLayout>
 </LinearLayout>

@@ -1,12 +1,9 @@
 package github.linsmod.sharetopc.ui;
 
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -16,30 +13,40 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
-import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.util.FileUtils;
 
-/** 设备任务队列适配器。展示排队中/传输中/已完成的混合列表。 */
+/** 设备任务队列适配器。 */
 public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH> {
 
-    /** 任务状态类型。 */
-    public static final int STATUS_TRANSFERRING = 1; // 传输中
-    public static final int STATUS_SUCCESS = 2;      // 成功
-    public static final int STATUS_FAILED = 3;       // 失败
-    public static final int STATUS_CANCELLED = 4;    // 已取消
+    public static final int STATUS_TRANSFERRING = 1;
+    public static final int STATUS_SUCCESS = 2;
+    public static final int STATUS_FAILED = 3;
+    public static final int STATUS_CANCELLED = 4;
 
-    /** 统一的任务展示模型。 */
+    public interface TaskActionListener {
+        void onPauseTransfer(String taskId);
+        void onCancelTransfer(String taskId);
+        void onResumeOrRetry(TaskItem item);
+    }
+
     public static class TaskItem {
         public final String id;
         public final String name;
         public final long size;
         public final long time;
-        public final int status; // STATUS_*
-        public final int percent; // -1 表示无进度
-        public final boolean isCurrent; // 是否正在传输中（展示 progressBar）
+        public final int status;
+        public final int percent;   // -1 无进度
+        public final boolean isCurrent;
+        /** 重试/继续按钮是否可用（内容仍存在 + PFD 仍有效）。 */
+        public final boolean canResume;
 
         public TaskItem(String id, String name, long size, long time,
                         int status, int percent, boolean isCurrent) {
+            this(id, name, size, time, status, percent, isCurrent, true);
+        }
+
+        public TaskItem(String id, String name, long size, long time,
+                        int status, int percent, boolean isCurrent, boolean canResume) {
             this.id = id;
             this.name = name;
             this.size = size;
@@ -47,13 +54,26 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
             this.status = status;
             this.percent = percent;
             this.isCurrent = isCurrent;
+            this.canResume = canResume;
+        }
+
+        private String statusString() {
+            switch (status) {
+                case STATUS_TRANSFERRING: return "SENDING";
+                case STATUS_SUCCESS:      return "SUCCESS";
+                case STATUS_FAILED:       return "FAILED";
+                case STATUS_CANCELLED:    return "CANCELLED";
+                default:                  return "FAILED";
+            }
         }
     }
 
     private final List<TaskItem> items = new ArrayList<>();
-    private final SimpleDateFormat timeFormat =
-            new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
     private RecyclerView recyclerView;
+
+    @androidx.annotation.Nullable
+    private TaskActionListener actionListener;
 
     @Override
     public void onAttachedToRecyclerView(@NonNull RecyclerView rv) {
@@ -67,9 +87,12 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
         this.recyclerView = null;
     }
 
+    public void setTaskActionListener(@androidx.annotation.Nullable TaskActionListener l) {
+        this.actionListener = l;
+    }
+
     public void submitList(List<TaskItem> list) {
         List<TaskItem> newList = list != null ? list : new ArrayList<>();
-        // 有一方为空时跳过 DiffUtil 动画，避免从空列表切到有数据时逐项插入的闪烁
         if (items.isEmpty() || newList.isEmpty()) {
             items.clear();
             items.addAll(newList);
@@ -82,156 +105,106 @@ public class DeviceTaskAdapter extends RecyclerView.Adapter<DeviceTaskAdapter.VH
         diff.dispatchUpdatesTo(this);
     }
 
-    /** DiffUtil 回调：按 id 匹配，按 status/percent 判断内容变化。 */
     private static class DiffCallback extends DiffUtil.Callback {
-        private final List<TaskItem> oldList;
-        private final List<TaskItem> newList;
-
-        DiffCallback(List<TaskItem> oldList, List<TaskItem> newList) {
-            this.oldList = oldList;
-            this.newList = newList;
+        private final List<TaskItem> oldList, newList;
+        DiffCallback(List<TaskItem> o, List<TaskItem> n) { oldList = o; newList = n; }
+        @Override public int getOldListSize() { return oldList.size(); }
+        @Override public int getNewListSize() { return newList.size(); }
+        @Override public boolean areItemsTheSame(int o, int n) {
+            return oldList.get(o).id.equals(newList.get(n).id);
         }
-
-        @Override
-        public int getOldListSize() { return oldList.size(); }
-
-        @Override
-        public int getNewListSize() { return newList.size(); }
-
-        @Override
-        public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
-            return oldList.get(oldItemPosition).id.equals(newList.get(newItemPosition).id);
-        }
-
-        @Override
-        public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
-            TaskItem o = oldList.get(oldItemPosition);
-            TaskItem n = newList.get(newItemPosition);
-            return o.status == n.status && o.percent == n.percent
-                    && o.isCurrent == n.isCurrent && o.name.equals(n.name);
+        @Override public boolean areContentsTheSame(int o, int n) {
+            TaskItem a = oldList.get(o), b = newList.get(n);
+            return a.status == b.status && a.percent == b.percent
+                    && a.isCurrent == b.isCurrent && a.canResume == b.canResume
+                    && a.name.equals(b.name);
         }
     }
 
-    /** 直接操作 ViewHolder 更新进度百分比，不走 onBindViewHolder。 */
+    /** 直接操作 ViewHolder 更新进度，不走 onBindViewHolder。 */
     public void updateTransferProgress(int percent) {
         if (recyclerView == null) return;
         for (int i = 0; i < items.size(); i++) {
             TaskItem item = items.get(i);
             if (item.isCurrent && item.status == STATUS_TRANSFERRING) {
-                // 更新数据源（供滚动回屏时 onBindViewHolder 读取）
                 items.set(i, new TaskItem(item.id, item.name, item.size, item.time,
                         item.status, percent, item.isCurrent));
-                // 直接操作可见的 ViewHolder
                 VH holder = (VH) recyclerView.findViewHolderForAdapterPosition(i);
                 if (holder != null) {
-                    android.content.Context ctx = holder.itemView.getContext();
-                    holder.tvPercent.setVisibility(View.VISIBLE);
-                    holder.tvPercent.setText(percent + "%");
-                    holder.tvPercent.setTextColor(percent >= 100
-                            ? ctx.getColor(android.R.color.holo_green_dark)
-                            : ctx.getColor(android.R.color.holo_blue_dark));
+                    holder.item.setPercent(percent);
                 }
                 return;
             }
         }
     }
 
-    public int getCount() {
-        return items.size();
-    }
-
     @NonNull
     @Override
     public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        View view = LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.item_device_task, parent, false);
+        TransferItemView view = new TransferItemView(parent.getContext());
+        view.setProgressBarVisible(false); // 任务弹窗不显示进度条
+        view.setStatusDotVisible(true);
+        view.setMetaVisible(true);
         return new VH(view);
     }
 
     @Override
     public void onBindViewHolder(@NonNull VH holder, int position) {
         TaskItem item = items.get(position);
-        android.content.Context ctx = holder.itemView.getContext();
+        TransferItemView view = holder.item;
+        android.content.Context ctx = view.getContext();
+        String statusStr = item.statusString();
 
-        holder.tvName.setText(item.name);
+        view.setName(item.name);
+        view.setTransferStatus(statusStr);
 
-        // 状态文案
-        String statusText;
-        switch (item.status) {
-            case STATUS_TRANSFERRING:
-                statusText = ctx.getString(R.string.queue_status_transferring);
-                break;
-            case STATUS_SUCCESS:
-                statusText = ctx.getString(R.string.result_ok);
-                break;
-            case STATUS_FAILED:
-                statusText = ctx.getString(R.string.result_failed);
-                break;
-            case STATUS_CANCELLED:
-                statusText = ctx.getString(R.string.result_cancelled);
-                break;
-            default:
-                statusText = "";
-        }
-
-        StringBuilder meta = new StringBuilder(statusText);
+        // 元信息
+        StringBuilder meta = new StringBuilder(TransferItemView.statusLabel(ctx, statusStr));
         meta.append(" · ").append(FileUtils.formatSize(item.size))
                 .append(" · ").append(timeFormat.format(new Date(item.time)));
-        holder.tvMeta.setText(meta.toString());
+        view.setMeta(meta.toString());
 
-        // 状态圆点颜色
-        int dotColor;
-        switch (item.status) {
-            case STATUS_TRANSFERRING:
-                dotColor = ctx.getColor(android.R.color.holo_blue_light);
-                break;
-            case STATUS_SUCCESS:
-                dotColor = ctx.getColor(android.R.color.holo_green_dark);
-                break;
-            case STATUS_FAILED:
-                dotColor = ctx.getColor(android.R.color.holo_red_dark);
-                break;
-            case STATUS_CANCELLED:
-                dotColor = ctx.getColor(android.R.color.darker_gray);
-                break;
-            default:
-                dotColor = ctx.getColor(android.R.color.darker_gray);
-        }
-        holder.vStatus.setBackgroundColor(dotColor);
-
-        // 进度百分比
+        // 百分比
         if (item.isCurrent && item.percent >= 0) {
-            holder.tvPercent.setVisibility(View.VISIBLE);
-            holder.tvPercent.setText(item.percent + "%");
-            int textColor;
-            if (item.percent >= 100) {
-                textColor = ctx.getColor(android.R.color.holo_green_dark);
-            } else {
-                textColor = ctx.getColor(android.R.color.holo_blue_dark);
-            }
-            holder.tvPercent.setTextColor(textColor);
+            view.setPercent(item.percent);
         } else {
-            holder.tvPercent.setVisibility(View.GONE);
+            view.setPercent(-1); // 隐藏
         }
+
+        // 隐藏多选框
+        view.setCheckboxVisible(false, false);
+
+        // 按钮
+        if (item.status == STATUS_TRANSFERRING) {
+            view.setActionMode(TransferItemView.ActionMode.ACTIVE, null, false);
+        } else if (item.status == STATUS_FAILED || item.status == STATUS_CANCELLED) {
+            String label = item.status == STATUS_CANCELLED
+                    ? ctx.getString(github.linsmod.sharetopc.R.string.action_resume)
+                    : ctx.getString(github.linsmod.sharetopc.R.string.retry);
+            view.setActionMode(TransferItemView.ActionMode.RETRY, label, item.canResume);
+        } else {
+            view.setActionMode(TransferItemView.ActionMode.NONE, null, false);
+        }
+
+        // 操作回调
+        view.setOnActionListener(new TransferItemView.OnActionListener() {
+            @Override public void onPause() {
+                if (actionListener != null) actionListener.onPauseTransfer(item.id);
+            }
+            @Override public void onCancel() {
+                if (actionListener != null) actionListener.onCancelTransfer(item.id);
+            }
+            @Override public void onResume() {
+                if (actionListener != null) actionListener.onResumeOrRetry(item);
+            }
+        });
     }
 
     @Override
-    public int getItemCount() {
-        return items.size();
-    }
+    public int getItemCount() { return items.size(); }
 
     static class VH extends RecyclerView.ViewHolder {
-        final View vStatus;
-        final TextView tvName;
-        final TextView tvMeta;
-        final TextView tvPercent;
-
-        VH(@NonNull View itemView) {
-            super(itemView);
-            vStatus = itemView.findViewById(R.id.vTaskStatus);
-            tvName = itemView.findViewById(R.id.tvTaskName);
-            tvMeta = itemView.findViewById(R.id.tvTaskMeta);
-            tvPercent = itemView.findViewById(R.id.tvTaskPercent);
-        }
+        final TransferItemView item;
+        VH(TransferItemView v) { super(v); item = v; }
     }
 }
