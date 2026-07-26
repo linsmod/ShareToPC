@@ -44,6 +44,11 @@ namespace ShareToPcReciver
             this.menuOpenFolder = new System.Windows.Forms.ToolStripMenuItem();
             this.menuCopyContent = new System.Windows.Forms.ToolStripMenuItem();
             this.menuViewDetail = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuSeparator1 = new System.Windows.Forms.ToolStripSeparator();
+            this.menuCancelTransfer = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuSeparator2 = new System.Windows.Forms.ToolStripSeparator();
+            this.menuDeleteRecord = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuDeleteWithFile = new System.Windows.Forms.ToolStripMenuItem();
             this.SuspendLayout();
             // 
             // statusStrip
@@ -86,7 +91,7 @@ namespace ShareToPcReciver
             this.btnCopyIp.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
             this.btnCopyIp.Name = "btnCopyIp";
             this.btnCopyIp.Size = new System.Drawing.Size(44, 17);
-            this.btnCopyIp.Text = "复制";
+            this.btnCopyIp.Text = "复制IP";
             this.btnCopyIp.Click += new System.EventHandler(this.BtnCopyIp_Click);
             // 
             // columnHeader1
@@ -194,7 +199,7 @@ namespace ShareToPcReciver
             this.lvHistory.GridLines = true;
             this.lvHistory.HideSelection = false;
             this.lvHistory.Location = new System.Drawing.Point(12, 44);
-            this.lvHistory.MultiSelect = false;
+            this.lvHistory.MultiSelect = true;
             this.lvHistory.Name = "lvHistory";
             this.lvHistory.OwnerDraw = true;
             this.lvHistory.Size = new System.Drawing.Size(760, 345);
@@ -209,7 +214,12 @@ namespace ShareToPcReciver
             this.menuOpenFile,
             this.menuOpenFolder,
             this.menuCopyContent,
-            this.menuViewDetail});
+            this.menuViewDetail,
+            this.menuSeparator1,
+            this.menuCancelTransfer,
+            this.menuSeparator2,
+            this.menuDeleteRecord,
+            this.menuDeleteWithFile});
             this.lvHistoryMenu.Name = "lvHistoryMenu";
             this.lvHistoryMenu.Size = new System.Drawing.Size(181, 92);
             this.lvHistoryMenu.Opening += new System.ComponentModel.CancelEventHandler(this.LvHistoryMenu_Opening);
@@ -241,6 +251,37 @@ namespace ShareToPcReciver
             this.menuViewDetail.Size = new System.Drawing.Size(180, 22);
             this.menuViewDetail.Text = "查看详情";
             this.menuViewDetail.Click += new System.EventHandler(this.MenuViewDetail_Click);
+            // 
+            // menuSeparator1
+            // 
+            this.menuSeparator1.Name = "menuSeparator1";
+            this.menuSeparator1.Size = new System.Drawing.Size(177, 6);
+            // 
+            // menuCancelTransfer
+            // 
+            this.menuCancelTransfer.Name = "menuCancelTransfer";
+            this.menuCancelTransfer.Size = new System.Drawing.Size(180, 22);
+            this.menuCancelTransfer.Text = "取消传输";
+            this.menuCancelTransfer.Click += new System.EventHandler(this.MenuCancelTransfer_Click);
+            // 
+            // menuSeparator2
+            // 
+            this.menuSeparator2.Name = "menuSeparator2";
+            this.menuSeparator2.Size = new System.Drawing.Size(177, 6);
+            // 
+            // menuDeleteRecord
+            // 
+            this.menuDeleteRecord.Name = "menuDeleteRecord";
+            this.menuDeleteRecord.Size = new System.Drawing.Size(180, 22);
+            this.menuDeleteRecord.Text = "删除记录";
+            this.menuDeleteRecord.Click += new System.EventHandler(this.MenuDeleteRecord_Click);
+            // 
+            // menuDeleteWithFile
+            // 
+            this.menuDeleteWithFile.Name = "menuDeleteWithFile";
+            this.menuDeleteWithFile.Size = new System.Drawing.Size(180, 22);
+            this.menuDeleteWithFile.Text = "删除记录 + 文件";
+            this.menuDeleteWithFile.Click += new System.EventHandler(this.MenuDeleteWithFile_Click);
             // 
             // MainForm
             // 
@@ -289,5 +330,10 @@ namespace ShareToPcReciver
         private System.Windows.Forms.ToolStripMenuItem menuOpenFolder;
         private System.Windows.Forms.ToolStripMenuItem menuCopyContent;
         private System.Windows.Forms.ToolStripMenuItem menuViewDetail;
+        private System.Windows.Forms.ToolStripSeparator menuSeparator1;
+        private System.Windows.Forms.ToolStripMenuItem menuCancelTransfer;
+        private System.Windows.Forms.ToolStripSeparator menuSeparator2;
+        private System.Windows.Forms.ToolStripMenuItem menuDeleteRecord;
+        private System.Windows.Forms.ToolStripMenuItem menuDeleteWithFile;
     }
 }

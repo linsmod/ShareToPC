@@ -3,6 +3,7 @@ package github.linsmod.sharetopc;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.MotionEvent;
@@ -30,7 +31,9 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import github.linsmod.sharetopc.data.SettingsStore;
+import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.ui.DeviceAdapter;
+import github.linsmod.sharetopc.ui.DeviceQueueDialog;
 import github.linsmod.sharetopc.ui.HistoryAdapter;
 import github.linsmod.sharetopc.ui.SettingsActivity;
 
@@ -40,8 +43,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvConnState;
     private TextView tvProgress;
     private ProgressBar progressBar;
+    private android.widget.Button btnCancelTransfer;
     private DeviceAdapter deviceAdapter;
     private HistoryAdapter historyAdapter;
+
+    private DeviceQueueDialog deviceQueueDialog;
 
     private TextView tvDevicesTitle;
     private TextView tvSearchingStatus;
@@ -88,6 +94,7 @@ public class MainActivity extends AppCompatActivity {
         tvConnState = findViewById(R.id.tvConnState);
         tvProgress = findViewById(R.id.tvProgress);
         progressBar = findViewById(R.id.progressBar);
+        btnCancelTransfer = findViewById(R.id.btnCancelTransfer);
 
         tvDevicesTitle = findViewById(R.id.tvDevicesTitle);
         tvSearchingStatus = findViewById(R.id.tvSearchingStatus);
@@ -161,7 +168,7 @@ public class MainActivity extends AppCompatActivity {
         deviceAdapter = new DeviceAdapter(new DeviceAdapter.OnDeviceClickListener() {
             @Override
             public void onClick(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
-                Toast.makeText(MainActivity.this, device.toString(), Toast.LENGTH_SHORT).show();
+                showDeviceQueueDialog(device);
             }
 
             @Override
@@ -205,6 +212,7 @@ public class MainActivity extends AppCompatActivity {
 
         View btnRefreshDevices = findViewById(R.id.btnRefreshDevices);
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
+        btnCancelTransfer.setOnClickListener(v -> viewModel.cancelCurrentTransfer());
         viewModel.getScanning().observe(this, isScanning -> {
             boolean scanning = Boolean.TRUE.equals(isScanning);
             tvConnState.setVisibility(scanning ? View.GONE : View.VISIBLE);
@@ -234,16 +242,26 @@ public class MainActivity extends AppCompatActivity {
         viewModel.getConnState().observe(this, tvConnState::setText);
         viewModel.getSearchHint().observe(this, tvSearchingStatus::setText);
         viewModel.getDeviceTransfer().observe(this, deviceAdapter::setCurrentTransfer);
-        viewModel.getHistory().observe(this, historyAdapter::submitList);
+        viewModel.getHistory().observe(this, records -> {
+            historyAdapter.submitList(records);
+            refreshDeviceQueueIfVisible();
+        });
         viewModel.getProgress().observe(this, p -> {
             if (p == null) {
                 tvProgress.setText(R.string.current_transfer_idle);
                 progressBar.setProgress(0);
+                btnCancelTransfer.setVisibility(View.GONE);
             } else if (p.percent >= 0) {
                 tvProgress.setText(p.statusText + " " + p.name + " " + p.percent + "%");
                 progressBar.setProgress(p.percent);
+                btnCancelTransfer.setVisibility(View.VISIBLE);
+                // 轻量更新队列弹窗中的进度百分比，不重建列表
+                if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
+                    deviceQueueDialog.updateProgress(p.percent);
+                }
             } else {
                 tvProgress.setText(p.statusText + " " + p.name);
+                btnCancelTransfer.setVisibility(View.VISIBLE);
             }
         });
     }
@@ -251,6 +269,14 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        // 启动前台服务，防止切后台后网络受限
+        Intent serviceIntent = new Intent(this, ShareForegroundService.class);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent);
+        } else {
+            startService(serviceIntent);
+        }
+
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
             viewModel.startDiscovery();
@@ -261,7 +287,7 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onStop() {
-        viewModel.stopDiscovery();
+        // 不再停止扫描，保持后台网络连接活跃
         super.onStop();
     }
 
@@ -269,6 +295,22 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         viewModel.refreshHistory();
+    }
+
+    /** 如果设备任务弹窗正在显示，刷新其数据。 */
+    private void refreshDeviceQueueIfVisible() {
+        if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
+            deviceQueueDialog.refresh();
+        }
+    }
+
+    /** 点击设备：弹出该设备的任务队列弹窗。 */
+    private void showDeviceQueueDialog(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
+        if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
+            deviceQueueDialog.dismiss();
+        }
+        deviceQueueDialog = new DeviceQueueDialog(this, device, this::showTextPreview);
+        deviceQueueDialog.show();
     }
 
     /** 文本记录预览：完整内容可选中，提供复制。 */
@@ -302,7 +344,7 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    /** 批量重发：有目标的直接重发；暂存记录弹设备选择器统一补发；无法投递的跳过。 */
+    /** 批量重发：跳过已成功和不可投递的记录，暂存记录弹设备选择器。 */
     private void resendSelected() {
         java.util.List<github.linsmod.sharetopc.data.TransferRecord> selected =
                 historyAdapter.getSelectedRecords();
@@ -313,11 +355,11 @@ public class MainActivity extends AppCompatActivity {
         java.util.List<github.linsmod.sharetopc.data.TransferRecord> pendingList =
                 new java.util.ArrayList<>();
         int resent = 0;
-        int skipped = 0;
         for (github.linsmod.sharetopc.data.TransferRecord r : selected) {
-            if (!r.canDeliver()) {
-                skipped++;
-            } else if (r.isPending() || r.host == null) {
+            if (r.success || !r.canDeliver()) {
+                continue;
+            }
+            if (r.isPending() || r.host == null) {
                 pendingList.add(r);
             } else {
                 viewModel.retry(r);
@@ -326,18 +368,9 @@ public class MainActivity extends AppCompatActivity {
         }
         historyAdapter.exitSelectionMode();
 
-        StringBuilder sb = new StringBuilder();
         if (resent > 0) {
-            sb.append(getString(R.string.resent_count, resent));
-        }
-        if (skipped > 0) {
-            if (sb.length() > 0) {
-                sb.append("；");
-            }
-            sb.append(getString(R.string.resend_skipped, skipped));
-        }
-        if (sb.length() > 0) {
-            Toast.makeText(this, sb.toString(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, getString(R.string.resent_count, resent),
+                    Toast.LENGTH_SHORT).show();
         }
 
         if (!pendingList.isEmpty()) {

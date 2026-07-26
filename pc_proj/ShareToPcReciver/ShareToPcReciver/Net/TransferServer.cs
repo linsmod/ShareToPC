@@ -149,6 +149,21 @@ namespace ShareToPcReciver.Net
             FileProgressChanged?.Invoke(info);
         }
 
+        /// <summary>断开所有活跃会话。</summary>
+        public void DisconnectAllSessions()
+        {
+            List<ClientSession> snapshot;
+            lock (_sessionsLock)
+            {
+                snapshot = new List<ClientSession>(_sessions);
+            }
+            foreach (var session in snapshot)
+            {
+                session.Disconnect();
+            }
+            Util.Log.Info($"Disconnected {snapshot.Count} active session(s)");
+        }
+
         public void Dispose()
         {
             Stop();

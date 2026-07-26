@@ -36,4 +36,8 @@
     <Preference
         android:key="clear_history"
         android:title="@string/pref_clear_history_title" />
+
+    <Preference
+        android:key="view_logs"
+        android:title="@string/pref_view_logs_title" />
 </PreferenceScreen>

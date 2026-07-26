@@ -129,6 +129,12 @@ public class MainViewModel extends AndroidViewModel {
             // 状态由后续 IDLE 覆盖
         }
 
+        @Override
+        public void onJobCancelled(String jobId, String jobName) {
+            progress.setValue(new TransferProgress(jobName != null ? jobName : "", -1,
+                    app.getString(R.string.state_cancelled)));
+        }
+
             @Override
             public void onHistoryChanged() {
                 refreshHistory();
@@ -233,6 +239,20 @@ public class MainViewModel extends AndroidViewModel {
         List<github.linsmod.sharetopc.data.PendingContent> items = new java.util.ArrayList<>();
         items.add(record.toPendingContent());
         app.transferManager.enqueue(items, device.host, device.port, device.displayName(), policy, record.id);
+    }
+
+    /** 取消当前正在进行的传输。 */
+    public void cancelCurrentTransfer() {
+        app.transferManager.cancelCurrentJob();
+    }
+
+    /** 取消队列中指定 ID 的任务。 */
+    public boolean cancelQueuedJob(String jobId) {
+        boolean result = app.transferManager.cancelQueuedJob(jobId);
+        if (result) {
+            refreshHistory();
+        }
+        return result;
     }
 
     @Override

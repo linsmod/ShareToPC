@@ -179,8 +179,11 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
     private void updateSendEnabled() {
         boolean hasContent = pendingItems != null && !pendingItems.isEmpty();
-        btnSend.setEnabled(hasContent && !devices.isEmpty());
+        boolean hasDevice = !devices.isEmpty();
+        btnSend.setEnabled(hasContent && hasDevice);
+        // 有目标设备时不显示暂存，直接发送即可
         btnStash.setEnabled(hasContent);
+        btnStash.setVisibility(hasDevice ? View.GONE : View.VISIBLE);
     }
 
     private void doSend() {

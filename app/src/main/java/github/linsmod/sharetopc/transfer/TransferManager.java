@@ -7,6 +7,8 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.annotation.Nullable;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -34,7 +36,7 @@ import github.linsmod.sharetopc.util.LogX;
 public class TransferManager {
 
     public enum State {
-        IDLE, CONNECTING, SENDING, DONE, FAILED
+        IDLE, CONNECTING, SENDING, DONE, FAILED, CANCELLED
     }
 
     public static class SendJob {
@@ -60,6 +62,12 @@ public class TransferManager {
             this.deviceName = deviceName;
             this.policy = policy;
             this.recordId = recordId;
+            // 为每个 item 分配唯一 transferId，支持同名文件多次传输
+            for (PendingContent item : items) {
+                if (item.transferId == null) {
+                    item.transferId = UUID.randomUUID().toString();
+                }
+            }
         }
 
         public String displayName() {
@@ -72,6 +80,7 @@ public class TransferManager {
 
     private static final int MAX_ATTEMPTS = 2; // 首次 + 重试 1 次
     private static final long RETRY_DELAY_MS = 2000;
+    private static final long PROGRESS_THROTTLE_MS = 500; // 进度刷新最小间隔
 
     private final BlockingQueue<SendJob> queue = new LinkedBlockingQueue<>();
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -83,6 +92,9 @@ public class TransferManager {
 
     private volatile State state = State.IDLE;
     private volatile SendJob currentJob;
+    private volatile TransferClient activeClient;
+    private volatile boolean cancelRequested;
+    private volatile long lastProgressNotifyMs;
 
     public TransferManager(Context context, HistoryStore historyStore,
                            CleanupScheduler cleanupScheduler) {
@@ -104,6 +116,12 @@ public class TransferManager {
         return state;
     }
 
+    /** 当前正在处理的任务，无任务时返回 null。 */
+    @Nullable
+    public SendJob getCurrentJob() {
+        return currentJob;
+    }
+
     /** 当前正在传输的任务的设备标识（host:port），无任务时返回 null。 */
     public String getCurrentDeviceKey() {
         SendJob job = currentJob;
@@ -114,6 +132,43 @@ public class TransferManager {
     public String getCurrentJobName() {
         SendJob job = currentJob;
         return job != null ? job.displayName() : null;
+    }
+
+    /** 获取指定设备的排队任务（不包含正在执行的任务）。 */
+    public List<SendJob> getQueuedJobsForDevice(String deviceKey) {
+        List<SendJob> result = new ArrayList<>();
+        for (SendJob job : queue) {
+            String key = job.host + ":" + job.port;
+            if (key.equals(deviceKey)) {
+                result.add(job);
+            }
+        }
+        return result;
+    }
+
+    /** 取消当前正在传输的任务。 */
+    public void cancelCurrentJob() {
+        cancelRequested = true;
+        TransferClient c = activeClient;
+        if (c != null) {
+            try {
+                c.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** 取消队列中指定 id 的任务（不影响正在执行的）。 */
+    public boolean cancelQueuedJob(String jobId) {
+        for (SendJob job : queue) {
+            if (job.id.equals(jobId)) {
+                if (queue.remove(job)) {
+                    LogX.d("cancelled queued job: " + job.displayName());
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** 重发一条历史记录（完成后原地更新该记录状态）。 */
@@ -153,6 +208,7 @@ public class TransferManager {
 
     private void process(SendJob job) {
         currentJob = job;
+        cancelRequested = false;
         try {
             setState(State.CONNECTING, job.displayName());
             String error = null;
@@ -160,12 +216,22 @@ public class TransferManager {
             List<PendingContent> failed = new ArrayList<>();
 
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+                if (cancelRequested) {
+                    break;
+                }
                 TransferClient client = new TransferClient();
+                activeClient = client;
                 try {
                     client.connect(job.host, job.port);
+                    if (cancelRequested) {
+                        break;
+                    }
                     client.hello();
                     setState(State.SENDING, job.displayName());
                     for (PendingContent item : job.items) {
+                        if (cancelRequested) {
+                            break;
+                        }
                         if (succeeded.contains(item)) {
                             continue;
                         }
@@ -173,9 +239,15 @@ public class TransferManager {
                         succeeded.add(item);
                         recordHistory(job, item, true, null);
                     }
+                    if (cancelRequested) {
+                        break;
+                    }
                     error = null;
                     break;
                 } catch (Exception e) {
+                    if (cancelRequested) {
+                        break;
+                    }
                     error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                     LogX.e("transfer attempt " + attempt + " failed: " + error, e);
                     if (attempt < MAX_ATTEMPTS) {
@@ -188,17 +260,26 @@ public class TransferManager {
                     }
                 } finally {
                     client.close();
+                    activeClient = null;
                 }
             }
 
             for (PendingContent item : job.items) {
                 if (!succeeded.contains(item)) {
+                    // 已取消的项目不记录为失败，等用户重试
+                    if (cancelRequested) {
+                        continue;
+                    }
                     failed.add(item);
                     recordHistory(job, item, false, error);
                 }
             }
 
-            if (failed.isEmpty()) {
+            if (cancelRequested) {
+                // 已取消：仅清理已成功的项，不把未完成的记录为失败
+                setState(State.CANCELLED, job.displayName());
+                notifyJobCancelled(job.id, job.displayName());
+            } else if (failed.isEmpty()) {
                 cleanupScheduler.onTransferSuccess(job.items, job.policy);
                 setState(State.DONE, job.displayName());
                 notifyJobFinished(job.id, true, null);
@@ -212,7 +293,9 @@ public class TransferManager {
             }
             setState(State.IDLE, null);
         } finally {
+            cancelRequested = false;
             currentJob = null;
+            activeClient = null;
         }
     }
 
@@ -285,6 +368,13 @@ public class TransferManager {
     }
 
     private void notifyProgress(String itemName, long sent, long total) {
+        long now = System.currentTimeMillis();
+        // 节流：上次回调不到 200ms 则跳过（但 100% 必须通知）
+        boolean isComplete = total > 0 && sent >= total;
+        if (!isComplete && now - lastProgressNotifyMs < PROGRESS_THROTTLE_MS) {
+            return;
+        }
+        lastProgressNotifyMs = now;
         mainHandler.post(() -> {
             for (TransferListener l : listeners) {
                 l.onProgress(itemName, sent, total);
@@ -296,6 +386,14 @@ public class TransferManager {
         mainHandler.post(() -> {
             for (TransferListener l : listeners) {
                 l.onJobFinished(jobId, success, error);
+            }
+        });
+    }
+
+    private void notifyJobCancelled(String jobId, String jobName) {
+        mainHandler.post(() -> {
+            for (TransferListener l : listeners) {
+                l.onJobCancelled(jobId, jobName);
             }
         });
     }

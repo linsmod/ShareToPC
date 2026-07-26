@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- NSD 服务发现需要（动态申请） -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- 前台服务：保持进程活跃，防止后台网络受限 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <application
         android:name=".App"
@@ -47,6 +50,15 @@
         <activity
             android:name=".ui.SettingsActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".ui.LogViewerActivity"
+            android:exported="false" />
+
+        <service
+            android:name=".service.ShareForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

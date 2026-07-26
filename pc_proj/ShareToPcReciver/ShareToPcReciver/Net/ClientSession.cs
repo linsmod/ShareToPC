@@ -16,6 +16,7 @@ namespace ShareToPcReciver.Net
     {
         private readonly TcpClient _client;
         private readonly TransferServer _server;
+        private readonly CancellationTokenSource _sessionCts;
         private readonly CancellationToken _ct;
         private readonly ReceiveStorage _storage;
         private readonly AppConfig _config;
@@ -29,7 +30,8 @@ namespace ShareToPcReciver.Net
         {
             _client = client;
             _server = server;
-            _ct = _server.Cancellation;
+            _sessionCts = CancellationTokenSource.CreateLinkedTokenSource(server.Cancellation);
+            _ct = _sessionCts.Token;
             _storage = _server.Storage;
             _config = _server.Config;
         }
@@ -108,6 +110,20 @@ namespace ShareToPcReciver.Net
             catch (Exception ex)
             {
                 Util.Log.Warn($"Failed to send OFFLINE to {DeviceName}: {ex.Message}");
+            }
+        }
+
+        /// <summary>断开此会话连接。</summary>
+        public void Disconnect()
+        {
+            try
+            {
+                _sessionCts.Cancel();
+                _client.Close();
+            }
+            catch (Exception ex)
+            {
+                Util.Log.Warn($"Failed to disconnect {DeviceName}: {ex.Message}");
             }
         }
 

@@ -43,9 +43,23 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.VH> {
     private final List<DiscoveredDevice> items = new ArrayList<>();
     private final OnDeviceClickListener clickListener;
     private DeviceTransferInfo currentTransfer;
+    private int lastActivePos = -1;
+    private RecyclerView recyclerView;
 
     public DeviceAdapter(OnDeviceClickListener clickListener) {
         this.clickListener = clickListener;
+    }
+
+    @Override
+    public void onAttachedToRecyclerView(@NonNull RecyclerView rv) {
+        super.onAttachedToRecyclerView(rv);
+        this.recyclerView = rv;
+    }
+
+    @Override
+    public void onDetachedFromRecyclerView(@NonNull RecyclerView rv) {
+        super.onDetachedFromRecyclerView(rv);
+        this.recyclerView = null;
     }
 
     public void submitList(List<DiscoveredDevice> list) {
@@ -57,8 +71,51 @@ public class DeviceAdapter extends RecyclerView.Adapter<DeviceAdapter.VH> {
     }
 
     public void setCurrentTransfer(@Nullable DeviceTransferInfo info) {
+        int oldActivePos = lastActivePos;
+        int newActivePos = findDevicePosition(info != null ? info.deviceKey : null);
         this.currentTransfer = info;
-        notifyDataSetChanged();
+        lastActivePos = newActivePos;
+
+        if (oldActivePos == newActivePos && oldActivePos >= 0) {
+            // 同一设备，仅更新进度文本，不走 onBindViewHolder
+            updateProgressDirect(oldActivePos);
+        } else {
+            // 设备切换：清除旧设备进度，在新设备显示
+            if (oldActivePos >= 0) {
+                updateProgressDirect(oldActivePos);
+            }
+            if (newActivePos >= 0) {
+                updateProgressDirect(newActivePos);
+            }
+        }
+    }
+
+    /** 直接操作 ViewHolder 更新进度显示/隐藏，不触发 onBindViewHolder。 */
+    private void updateProgressDirect(int pos) {
+        if (recyclerView == null || pos < 0 || pos >= items.size()) return;
+        VH holder = (VH) recyclerView.findViewHolderForAdapterPosition(pos);
+        if (holder == null) return; // 不在可见区域，滚动到时 onBindViewHolder 自然刷新
+
+        DiscoveredDevice device = items.get(pos);
+        boolean isActive = currentTransfer != null && currentTransfer.active
+                && currentTransfer.deviceKey.equals(device.key());
+        if (isActive) {
+            holder.tvProgress.setVisibility(View.VISIBLE);
+            holder.tvProgress.setText(currentTransfer.fileName
+                    + "  发送中… " + currentTransfer.percent + "%");
+        } else {
+            holder.tvProgress.setVisibility(View.GONE);
+        }
+    }
+
+    private int findDevicePosition(@Nullable String deviceKey) {
+        if (deviceKey == null) return -1;
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).key().equals(deviceKey)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @NonNull

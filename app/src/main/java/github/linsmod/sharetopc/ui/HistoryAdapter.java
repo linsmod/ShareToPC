@@ -160,6 +160,11 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
                 : "";
         holder.tvName.setText(prefix + record.name);
 
+        // 文件已不存在：灰化
+        boolean fileGone = record.isFileGone();
+        holder.tvName.setAlpha(fileGone ? 0.4f : 1.0f);
+        holder.tvMeta.setAlpha(fileGone ? 0.4f : 1.0f);
+
         String status = statusText(ctx, record);
         StringBuilder meta = new StringBuilder(status);
         String target = record.targetName != null ? record.targetName

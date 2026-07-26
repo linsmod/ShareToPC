@@ -13,6 +13,7 @@ import github.linsmod.sharetopc.data.HistoryStore;
 import github.linsmod.sharetopc.data.SettingsStore;
 import github.linsmod.sharetopc.discovery.HeartbeatManager;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
+import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.transfer.TransferManager;
 
 /** Application：手动 ServiceLocator，持有全局单例。 */
@@ -49,5 +50,7 @@ public class App extends Application {
         cleanupScheduler = new CleanupScheduler(this);
         transferManager = new TransferManager(this, historyStore, cleanupScheduler);
         cleanupScheduler.ensurePeriodicScan();
+        // 创建前台服务通知渠道
+        ShareForegroundService.createNotificationChannel(this);
     }
 }

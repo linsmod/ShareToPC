@@ -16,6 +16,7 @@ public class TransferRecord {
     public String name;          // 文件名或文本预览
     public long size;
     public String mime;
+    public String transferId;    // PendingContent.transferId，用于在多文件传输中匹配已完成项
     public boolean success;
     public String status;        // SUCCESS / FAILED / PENDING（旧数据可能为空，由 success 推导）
     public String errorMsg;
@@ -58,6 +59,7 @@ public class TransferRecord {
         r.name = c.name;
         r.size = c.size;
         r.mime = c.mime;
+        r.transferId = c.transferId;
         r.textContent = c.text;
         r.localPath = c.localPath;
         r.contentUri = c.contentUri;
@@ -84,6 +86,12 @@ public class TransferRecord {
         }
         return (localPath != null && new java.io.File(localPath).exists())
                 || contentUri != null;
+    }
+
+    /** 文件类型的记录，本地副本已不存在（无论是否有 contentUri 回退，用于视觉灰化）。 */
+    public boolean isFileGone() {
+        return contentType == PendingContent.TYPE_FILE
+                && (localPath == null || !new java.io.File(localPath).exists());
     }
 
     public PendingContent toPendingContent() {

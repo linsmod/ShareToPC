@@ -1,5 +1,7 @@
 package github.linsmod.sharetopc.data;
 
+import java.util.UUID;
+
 /** 待发送内容：文本或已落地到 inbox 的文件。 */
 public class PendingContent {
 
@@ -17,6 +19,8 @@ public class PendingContent {
     public String name;
     public long size;
     public String mime;
+    /** 传输实例唯一 ID（多次分享同名文件时用于区分） */
+    public String transferId;
 
     public static PendingContent ofText(String text) {
         PendingContent c = new PendingContent();

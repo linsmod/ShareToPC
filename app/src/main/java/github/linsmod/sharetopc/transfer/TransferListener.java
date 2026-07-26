@@ -12,6 +12,9 @@ public interface TransferListener {
     /** 单个任务完成（成功或失败）。 */
     void onJobFinished(String jobId, boolean success, String errorMsg);
 
+    /** 任务被用户取消。 */
+    void onJobCancelled(String jobId, String jobName);
+
     /** 历史记录有更新。 */
     void onHistoryChanged();
 }

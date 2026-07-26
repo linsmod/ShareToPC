@@ -54,6 +54,7 @@ namespace ShareToPcReciver
 
             lvHistory.DrawColumnHeader += (s, ev) => ev.DrawDefault = true;
             lvHistory.DrawSubItem += LvHistory_DrawSubItem;
+            lvHistory.KeyDown += LvHistory_KeyDown;
 
             UpdateStatus("服务未运行", Color.DarkRed);
             UpdateIpLabel();
@@ -164,7 +165,26 @@ namespace ShareToPcReciver
 
         private void BtnOpenDir_Click(object sender, EventArgs e)
         {
-            _storage.OpenFolder(_config.SaveDir);
+            try
+            {
+                string dir = _config.SaveDir;
+                if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = dir,
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    MessageBox.Show($"接收目录不存在：\n{dir}", "提示", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error($"Failed to open folder: {_config.SaveDir}", ex);
+            }
         }
 
         private void BtnSettings_Click(object sender, EventArgs e)
@@ -491,11 +511,42 @@ namespace ShareToPcReciver
             }
         }
 
-        // ---- 历史记录交互：双击打开 / 右键菜单 ----
+        // ---- 历史记录交互：双击打开 / 键盘操作 / 右键菜单 ----
+
+        private List<object> GetSelectedRecords()
+        {
+            var result = new List<object>();
+            foreach (ListViewItem item in lvHistory.SelectedItems)
+            {
+                if (item.Tag is ReceivedFile || item.Tag is ReceivedText)
+                    result.Add(item.Tag);
+            }
+            return result;
+        }
 
         private object GetSelectedRecord()
         {
             return lvHistory.SelectedItems.Count > 0 ? lvHistory.SelectedItems[0].Tag : null;
+        }
+
+        private void LvHistory_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Control && e.KeyCode == Keys.A)
+            {
+                foreach (ListViewItem item in lvHistory.Items)
+                    item.Selected = true;
+                e.Handled = true;
+            }
+            else if (e.KeyCode == Keys.Delete)
+            {
+                DeleteSelectedRecords(false);
+                e.Handled = true;
+            }
+            else if (e.Control && e.KeyCode == Keys.D)
+            {
+                DeleteSelectedRecords(true);
+                e.Handled = true;
+            }
         }
 
         private void LvHistory_DoubleClick(object sender, EventArgs e)
@@ -513,24 +564,44 @@ namespace ShareToPcReciver
 
         private void LvHistoryMenu_Opening(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            object record = GetSelectedRecord();
-            if (record == null || record is FileProgressInfo)
+            var selected = GetSelectedRecords();
+            if (selected.Count == 0)
             {
                 e.Cancel = true;
                 return;
             }
 
+            bool singleSelect = selected.Count == 1;
+            object record = selected[0];
             bool isFile = record is ReceivedFile;
+            bool isActiveTransfer = lvHistory.SelectedItems.Count > 0
+                && ReferenceEquals(lvHistory.SelectedItems[0], _activeRow);
             bool fileExists = isFile
                 && !string.IsNullOrEmpty(((ReceivedFile)record).FilePath)
                 && File.Exists(((ReceivedFile)record).FilePath);
 
-            menuOpenFile.Visible = isFile;
+            // 单条时显示操作类菜单
+            menuOpenFile.Visible = singleSelect && isFile;
             menuOpenFile.Enabled = fileExists;
-            menuOpenFolder.Visible = isFile;
+            menuOpenFolder.Visible = singleSelect && isFile;
             menuOpenFolder.Enabled = fileExists;
-            menuCopyContent.Text = isFile ? "复制文件路径" : "复制文本";
-            menuViewDetail.Visible = !isFile;
+            menuCopyContent.Text = singleSelect && isFile ? "复制文件路径" : "复制文本";
+            menuCopyContent.Visible = singleSelect;
+            menuViewDetail.Visible = singleSelect && !isFile;
+
+            // 取消传输菜单：仅对正在进行传输的行显示
+            menuCancelTransfer.Visible = singleSelect && isActiveTransfer;
+            menuSeparator2.Visible = menuCancelTransfer.Visible;
+
+            // 删除菜单始终可见
+            menuSeparator1.Visible = true;
+            int n = selected.Count;
+            menuDeleteRecord.Text = singleSelect ? "删除记录" : $"删除 {n} 条记录";
+
+            bool hasFileToDelete = selected.Any(s => s is ReceivedFile rf
+                && !string.IsNullOrEmpty(rf.FilePath) && File.Exists(rf.FilePath));
+            menuDeleteWithFile.Visible = hasFileToDelete;
+            menuDeleteWithFile.Text = singleSelect ? "删除记录 + 文件" : $"删除 {n} 条记录 + 文件";
         }
 
         private void MenuOpenFile_Click(object sender, EventArgs e)
@@ -569,6 +640,67 @@ namespace ShareToPcReciver
         {
             if (GetSelectedRecord() is ReceivedText text)
                 ShowTextDetail(text);
+        }
+
+        private void MenuCancelTransfer_Click(object sender, EventArgs e)
+        {
+            _server.DisconnectAllSessions();
+            UpdateStatus("已取消当前传输", Color.Black);
+        }
+
+        private void MenuDeleteRecord_Click(object sender, EventArgs e)
+        {
+            DeleteSelectedRecords(false);
+        }
+
+        private void MenuDeleteWithFile_Click(object sender, EventArgs e)
+        {
+            DeleteSelectedRecords(true);
+        }
+
+        private void DeleteSelectedRecords(bool deleteFiles)
+        {
+            var selectedItems = new List<ListViewItem>();
+            foreach (ListViewItem item in lvHistory.SelectedItems)
+            {
+                if (item.Tag is ReceivedFile || item.Tag is ReceivedText)
+                    selectedItems.Add(item);
+            }
+
+            if (selectedItems.Count == 0)
+                return;
+
+            string msg = deleteFiles
+                ? $"确定删除选中的 {selectedItems.Count} 条记录及其关联文件？\n此操作不可恢复。"
+                : $"确定删除选中的 {selectedItems.Count} 条记录？";
+            if (MessageBox.Show(msg, "确认删除", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                return;
+
+            int deletedFiles = 0;
+            foreach (ListViewItem item in selectedItems)
+            {
+                if (deleteFiles && item.Tag is ReceivedFile rf
+                    && !string.IsNullOrEmpty(rf.FilePath) && File.Exists(rf.FilePath))
+                {
+                    try { File.Delete(rf.FilePath); deletedFiles++; }
+                    catch (Exception ex) { Log.Error($"Failed to delete file: {rf.FilePath}", ex); }
+                }
+
+                // 从内存历史中移除
+                lock (_historyLock)
+                {
+                    _history.Remove(item.Tag);
+                }
+
+                lvHistory.Items.Remove(item);
+            }
+
+            SaveHistory();
+
+            string doneMsg = deleteFiles
+                ? $"已删除 {selectedItems.Count} 条记录，{deletedFiles} 个文件"
+                : $"已删除 {selectedItems.Count} 条记录";
+            UpdateStatus(doneMsg, Color.Black);
         }
 
         private void OpenReceivedFile(ReceivedFile file)

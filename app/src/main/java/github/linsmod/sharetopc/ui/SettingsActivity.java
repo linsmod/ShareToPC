@@ -1,5 +1,6 @@
 package github.linsmod.sharetopc.ui;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.Toast;
 
@@ -42,6 +43,14 @@ public class SettingsActivity extends AppCompatActivity {
                     App.get().historyStore.clear();
                     Toast.makeText(requireContext(), R.string.history_cleared,
                             Toast.LENGTH_SHORT).show();
+                    return true;
+                });
+            }
+
+            Preference viewLogs = findPreference("view_logs");
+            if (viewLogs != null) {
+                viewLogs.setOnPreferenceClickListener(preference -> {
+                    startActivity(new Intent(requireContext(), LogViewerActivity.class));
                     return true;
                 });
             }
