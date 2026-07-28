@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
 
     // ---------- job entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -31,6 +31,7 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_PORT = "port";
     public static final String COL_TARGET_NAME = "targetName";
     public static final String COL_POLICY = "policy";
+    public static final String COL_PENDING_ACTION = "pendingAction";
 
     // ---------- Device 表 ----------
     public static final String TABLE_DEVICE = "device";
@@ -72,7 +73,8 @@ public class DBHelper extends SQLiteOpenHelper {
                     COL_HOST + " TEXT, " +
                     COL_PORT + " INTEGER, " +
                     COL_TARGET_NAME + " TEXT, " +
-                    COL_POLICY + " TEXT" +
+                    COL_POLICY + " TEXT, " +
+                    COL_PENDING_ACTION + " INTEGER DEFAULT 0" +
                     ")";
 
     private static final String CREATE_DEVICE_TABLE =
@@ -112,6 +114,9 @@ public class DBHelper extends SQLiteOpenHelper {
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 2) {
             db.execSQL(CREATE_JOB_TABLE);
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE " + TABLE_JOB_ENTRY + " ADD COLUMN " + COL_PENDING_ACTION + " INTEGER DEFAULT 0");
         }
     }
 }

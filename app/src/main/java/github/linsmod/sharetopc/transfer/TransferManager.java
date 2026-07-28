@@ -205,7 +205,7 @@ public class TransferManager {
             SendEntry sendEntry = (SendEntry) record;
             if (!sendEntry.canRequestPause()) return;
             sendEntry.pendingAction = TransferRecord.PENDING_ACTION_END_PAUSE;
-            App.get().jobStore.updateStatus(sendEntry.id, sendEntry.status, sendEntry.idleReason);
+            App.get().jobStore.updateStatus(sendEntry.id, sendEntry.status, sendEntry.idleReason, sendEntry.pendingAction);
         }
     }
 
@@ -220,7 +220,7 @@ public class TransferManager {
             }
             sendEntry.status = TransferRecord.STATUS_IDLE;
             sendEntry.pendingAction = TransferRecord.PENDING_ACTION_END_RESUME;
-            App.get().jobStore.updateStatus(sendEntry.id,sendEntry.status,sendEntry.idleReason);
+            App.get().jobStore.updateStatus(sendEntry.id,sendEntry.status,sendEntry.idleReason, sendEntry.pendingAction);
         }
     }
 
@@ -278,7 +278,7 @@ public class TransferManager {
                             continue;
                         }
                         item.status = TransferRecord.STATUS_SENDING;
-                        jobStore.updateStatus(item.id, item.status, item.idleReason);
+                        jobStore.updateStatus(item.id, item.status, item.idleReason, item.pendingAction);
                         jobStore.updateProgress(item.id, 0, item.size);
                         // 每个 item 重置节流计时器，确保首个进度回调不被上一个文件抑制
                         lastProgressNotifyMs = 0;
@@ -419,7 +419,7 @@ public class TransferManager {
     /** 更新历史记录状态（发送成功后 / 取消 / 失败）。 */
     private void updateJob(SendJob job, SendEntry item) {
         jobStore.updateJobEntry(item.id, job.host, job.port,
-                job.deviceName, item.status, item.idleReason, item.errorMsg);
+                job.deviceName, item.status, item.idleReason, item.errorMsg, item.pendingAction);
     }
 
     private void onProgress(SendEntry entry) {

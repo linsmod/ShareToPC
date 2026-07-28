@@ -49,6 +49,7 @@ public class JobStore {
         values.put(DBHelper.COL_PORT, r.port);
         values.put(DBHelper.COL_TARGET_NAME, r.targetName);
         values.put(DBHelper.COL_POLICY, r.policy);
+        values.put(DBHelper.COL_PENDING_ACTION, r.pendingAction);
         return values;
     }
 
@@ -74,6 +75,7 @@ public class JobStore {
         r.port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PORT));
         r.targetName = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_TARGET_NAME));
         r.policy = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_POLICY));
+        r.pendingAction = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PENDING_ACTION));
         return r;
     }
 
@@ -213,7 +215,8 @@ public class JobStore {
 
     /** 按 id 更新主机、端口、目标名，并更新最终状态。 */
     public synchronized void updateJobEntry(String id, String host, int port,
-                                            String targetName, int status, int idle_reason, String errorMsg) {
+                                            String targetName, int status, int idle_reason, String errorMsg,
+                                            int pendingAction) {
         if (id == null) return;
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_HOST, host);
@@ -222,16 +225,18 @@ public class JobStore {
         values.put(DBHelper.COL_STATUS, status);
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, errorMsg);
+        values.put(DBHelper.COL_PENDING_ACTION, pendingAction);
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
     }
 
-    public synchronized void updateStatus(String id, int status, int idle_reason) {
+    public synchronized void updateStatus(String id, int status, int idle_reason, int pendingAction) {
         if (id == null) return;
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_STATUS, status);
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, "");
+        values.put(DBHelper.COL_PENDING_ACTION, pendingAction);
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
     }
@@ -313,6 +318,7 @@ public class JobStore {
         r.port = src.port;
         r.targetName = src.targetName;
         r.policy = src.policy;
+        r.pendingAction = src.pendingAction;
         return r;
     }
 
