@@ -69,4 +69,8 @@ public class SendEntry extends TransferRecord  {
     public boolean isText() {
         return type == TYPE_TEXT;
     }
+
+    public boolean isSending() {
+        return status== TransferRecord.STATUS_SENDING;
+    }
 }

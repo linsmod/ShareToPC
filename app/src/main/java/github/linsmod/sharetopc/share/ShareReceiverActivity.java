@@ -234,8 +234,8 @@ public class ShareReceiverActivity extends AppCompatActivity {
         }
         if(jobId==null)
             throw new RuntimeException("Null of jobId");
-        App.get().transferManager.enqueue(jobId, pendingItems,
-                target.host, target.port, target.displayName());
+        App.get().transferManager.enqueue(jobId,target.deviceId, pendingItems,
+                target.host, target.port);
         jobId = null;
         // 跳转主页面，传输在后台继续
         Intent intent = new Intent(this, github.linsmod.sharetopc.MainActivity.class);

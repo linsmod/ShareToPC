@@ -32,6 +32,7 @@ import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.JobStore;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.util.LogX;
 
 /**
@@ -44,17 +45,22 @@ public class TransferManager {
         public final List<SendEntry> items;
         public final String host;
         public final int port;
-        public final String deviceName;
+        public final String deviceId;
+        public final Long createMillis;
+        public final Long updateMillis;
         private boolean isCancelRequested;
         private boolean isCancelled;
-
-        public SendJob(String id, List<SendEntry> items, String host, int port,
-                       String deviceName) {
+        @Nullable
+        public SendEntry transferringEntry;
+        public DiscoveredDevice device;
+        public SendJob(String id,String deviceId, List<SendEntry> items, String host, int port) {
             this.id = id;
+            this.deviceId = deviceId;
             this.items = items;
             this.host = host;
             this.port = port;
-            this.deviceName = deviceName;
+            this.createMillis = System.currentTimeMillis();
+            this.updateMillis = System.currentTimeMillis();
         }
 
         public String displayName() {
@@ -85,6 +91,36 @@ public class TransferManager {
 
         public String deviceAddress() {
             return this.host+":"+this.port;
+        }
+
+        public boolean isAllSuccess() {
+            for (var item :
+                    items) {
+                if (!item.isSuccess()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        public int countIdle(int reason){
+            int n = 0;
+            for (var item :
+                    items) {
+                if (item.status==TransferRecord.STATUS_IDLE) {
+                    if( item.idleReason==reason){
+                        n++;
+                    }
+                }
+            }
+            return n;
+        }
+
+        public String summary() {
+            return countIdle(TransferRecord.IDLE_REASON_SUCCESS) + "/" + items.size();
+        }
+
+        public boolean isSending() {
+            return false;
         }
     }
 
@@ -201,9 +237,8 @@ public class TransferManager {
         }
     }
 
-    public void enqueue(String id, List<SendEntry> items, String host, int port,
-                        String deviceName) {
-        SendJob job = new SendJob(id,items, host, port, deviceName);
+    public void enqueue(String id, String deviceId, List<SendEntry> items, String host, int port) {
+        SendJob job = new SendJob(id,deviceId,items, host, port);
         queue.offer(job);
         emitQueueChanged();
         LogX.d("enqueue job: " + job.displayName() + " -> " + host + ":" + port);
@@ -421,8 +456,9 @@ public class TransferManager {
 
     /** 更新历史记录状态（发送成功后 / 取消 / 失败）。 */
     private void updateJob(SendJob job, SendEntry item) {
+        var name = job.device.alias!=null?job.device.alias:job.device.name;
         jobStore.updateJobEntry(item.id, job.host, job.port,
-                job.deviceName, item.status, item.idleReason, item.errorMsg, item.pendingAction);
+                name, item.status, item.idleReason, item.errorMsg, item.pendingAction);
     }
 
     private void onProgress(SendEntry entry) {

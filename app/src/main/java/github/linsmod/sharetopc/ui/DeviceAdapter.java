@@ -1,5 +1,6 @@
 package github.linsmod.sharetopc.ui;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,7 +16,9 @@ import java.util.List;
 import java.util.Locale;
 
 import github.linsmod.sharetopc.R;
+import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
+import github.linsmod.sharetopc.transfer.TransferManager;
 
 /**
  * 设备列表适配器（设备卡片 + 手动添加入口）。
@@ -106,49 +109,45 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         vh.tvAddr.setText(device.address());
 
         // 传输进度
-        DiscoveredDevice.DeviceProgress progress = device.currentProgress;
-        if (progress != null && progress.isActive()) {
-            vh.layoutProgress.setVisibility(View.VISIBLE);
-            vh.pbProgress.setProgress(progress.percent());
-            vh.tvProgress.setText(progress.summary());
-            // 已完成 → 显示 "传输完成 · {时间}"
-            if (progress.state == DiscoveredDevice.DeviceProgress.STATE_COMPLETED
-                    && progress.completedAt > 0) {
+        TransferManager.SendJob latestJob = device.latestJob;
+        if (latestJob != null) {
+            var current = latestJob.transferringEntry;
+            if(current!=null && current.isSending()){
+                vh.layoutProgress.setVisibility(View.VISIBLE);
+                vh.pbProgress.setProgress(current.percent());
+                vh.tvProgress.setText(latestJob.summary());
+            }
+            if(current!=null){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-                vh.tvEntryName.setText("传输完成 · " + TaskAdapter.friendlyTime(progress.completedAt));
-                vh.tvEntrySize.setVisibility(View.GONE);
-            } else if (progress.currentEntryName != null && !progress.currentEntryName.isEmpty()) {
-                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-                vh.tvEntryName.setText(progress.currentEntryName);
-                if (progress.totalBytes > 0) {
+                vh.tvEntryName.setText(current.name);
+                if (current.totalBytes > 0) {
                     vh.tvEntrySize.setVisibility(View.VISIBLE);
-                    vh.tvEntrySize.setText(formatSize(progress.totalBytes));
+                    vh.tvEntrySize.setText(formatSize(current.totalBytes));
                 } else {
                     vh.tvEntrySize.setVisibility(View.GONE);
                 }
-            } else {
-                vh.layoutEntryInfo.setVisibility(View.GONE);
             }
-        } else {
-            vh.layoutProgress.setVisibility(View.GONE);
-            // 进度归 IDLE 但仍保留完成时间时，显示一条简短完成提示
-            if (progress != null && progress.completedAt > 0) {
+            Context context = vh.itemView.getContext();
+            if(latestJob.countIdle(TransferRecord.IDLE_REASON_OUTDATE)>0){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-                vh.tvEntryName.setText("传输完成 · " + TaskAdapter.friendlyTime(progress.completedAt));
+                if(latestJob.countIdle(TransferRecord.IDLE_REASON_SUCCESS)>0){
+                    vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_OUTDATE_PARITAL_SUCCESS,TaskAdapter.friendlyTime(latestJob.updateMillis)));
+                }
+                else {
+                    vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_OUTDATE,TaskAdapter.friendlyTime(latestJob.updateMillis)));
+                }
                 vh.tvEntrySize.setVisibility(View.GONE);
-            } else {
-                vh.layoutEntryInfo.setVisibility(View.GONE);
             }
-        }
-        // 过期 · 部分完成提示优先于"传输完成"
-        if (progress.hasOutdate && progress.partialSuccess) {
-            vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-            vh.tvEntryName.setText("已过期 · 部分完成 · " + TaskAdapter.friendlyTime(progress.lastUpdateAt));
-            vh.tvEntrySize.setVisibility(View.GONE);
-        }
-        else if(progress.hasOutdate){
-            vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-            vh.tvEntryName.setText("已过期 · " + TaskAdapter.friendlyTime(progress.lastUpdateAt));
+            else if(latestJob.countIdle(TransferRecord.IDLE_REASON_NET_ERROR)>0){
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_NET_ERROR,TaskAdapter.friendlyTime(latestJob.updateMillis)));
+                vh.tvEntrySize.setVisibility(View.GONE);
+            }
+            else if(latestJob.countIdle(TransferRecord.IDLE_REASON_IO_ERROR)>0){
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_IO_ERR,TaskAdapter.friendlyTime(latestJob.updateMillis)));
+                vh.tvEntrySize.setVisibility(View.GONE);
+            }
         }
 
         vh.vOnlineDot.setBackgroundResource(

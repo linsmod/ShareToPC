@@ -4,12 +4,18 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.text.TextUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+
+import github.linsmod.sharetopc.transfer.TransferManager;
 
 /**
  * 传输任务：SQLite 持久化。按 jobId 分组，最多保留 200 个任务。
@@ -294,6 +300,70 @@ public class JobStore {
             c.close();
         }
         return result;
+    }
+    public synchronized Map<String, List<TransferRecord>> allMap() {
+        // 直接使用 Stream 流按 jobId 分组
+        return all().stream().collect(Collectors.groupingBy(item -> item.jobId));
+    }
+    // Device.Id -> latest sendJob
+     public synchronized Map<String, TransferManager.SendJob> allDeviceLatestJobs(int hoursSpan) {
+        Map<String, TransferManager.SendJob> result = new HashMap<>();
+        long cutoffTime = System.currentTimeMillis() - (long) hoursSpan * 3600 * 1000;
+
+        Cursor cursor = null;
+        try {
+            // 一次性联结查询：device + job，限制 job.timeMillis >= cutoffTime
+            String sql = "SELECT d." + DBHelper.COL_DEV_ID + ", " +
+                               "j." + DBHelper.COL_JOB_ID_PK + ", " +
+                               "j." + DBHelper.COL_JOB_DEVICE_HOST + ", " +
+                               "j." + DBHelper.COL_JOB_DEVICE_PORT + ", " +
+                               "j." + DBHelper.COL_JOB_DEVICE_NAME + ", " +
+                               "j." + DBHelper.COL_JOB_TIME_MILLIS +
+                        " FROM " + DBHelper.TABLE_DEVICE + " d" +
+                        " INNER JOIN " + DBHelper.TABLE_JOB + " j" +
+                            " ON d." + DBHelper.COL_DEV_LAST_SEND_ID + " = j." + DBHelper.COL_JOB_ID_PK +
+                        " WHERE d." + DBHelper.COL_DEV_LAST_SEND_ID + " IS NOT NULL";
+            if (hoursSpan > 0) {
+                sql += " AND j." + DBHelper.COL_JOB_TIME_MILLIS + " >= " + cutoffTime;
+            }
+            cursor = db.rawQuery(sql, null);
+
+            while (cursor.moveToNext()) {
+                String deviceId = cursor.getString(0);
+                String jobId = cursor.getString(1);
+                String host = cursor.getString(2);
+                int port = cursor.getInt(3);
+                String deviceName = cursor.getString(4);
+                // 时间可不用，但可获取
+                // long timeMillis = cursor.getLong(5);
+
+                List<SendEntry> entries = entriesByJobId(jobId);
+                TransferManager.SendJob job = new TransferManager.SendJob(jobId,deviceId, entries, host, port);
+                result.put(deviceId, job);
+            }
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return result;
+    }
+    private List<SendEntry> entriesByJobId(String jobId) {
+        List<SendEntry> entries = new ArrayList<>();
+        Cursor cursor = db.query(
+                DBHelper.TABLE_JOB_ENTRY, null,
+                DBHelper.COL_JOB_ID + " = ?",
+                new String[]{jobId}, null, null, null
+        );
+        try {
+            while (cursor.moveToNext()) {
+                TransferRecord record = fromCursor(cursor); // 如果 fromCursor 是 public
+                if (record instanceof SendEntry) {
+                    entries.add((SendEntry) record);
+                }
+            }
+        } finally {
+            cursor.close();
+        }
+        return entries;
     }
 
     /** 拷贝方法，与原实现保持一致。 */

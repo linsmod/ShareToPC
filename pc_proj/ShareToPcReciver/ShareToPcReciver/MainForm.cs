@@ -506,9 +506,12 @@ namespace ShareToPcReciver
                 }
                 else
                 {
-                    e.DrawBackground();
-                    TextRenderer.DrawText(e.Graphics, "完成", lvHistory.Font, e.Bounds,
-                        e.Item.Selected ? SystemColors.HighlightText : Color.Green,
+                    bool sel = e.Item.Selected;
+                    var bg = sel ? SystemColors.Highlight : e.Item.BackColor;
+                    using (var bgBrush = new SolidBrush(bg))
+                        e.Graphics.FillRectangle(bgBrush, e.Bounds);
+                    var fg = sel ? SystemColors.HighlightText : Color.Green;
+                    TextRenderer.DrawText(e.Graphics, "完成", lvHistory.Font, e.Bounds, fg,
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 }
                 return;
@@ -520,11 +523,17 @@ namespace ShareToPcReciver
         private void DrawProgressCell(DrawListViewSubItemEventArgs e, int percent,
                                        string label, Color textColor)
         {
-            e.DrawBackground();
+            bool selected = e.Item.Selected;
+
+            // 显式绘制背景（选中/未选中），避免 e.DrawBackground 不可靠
+            Color bgColor = selected ? SystemColors.Highlight : e.Item.BackColor;
+            using (var bgBrush = new SolidBrush(bgColor))
+                e.Graphics.FillRectangle(bgBrush, e.Bounds);
 
             var rect = new Rectangle(e.Bounds.X + 3, e.Bounds.Y + 3,
                 Math.Max(0, e.Bounds.Width - 6), Math.Max(0, e.Bounds.Height - 6));
-            if (ProgressBarRenderer.IsSupported && rect.Width > 4 && rect.Height > 4)
+
+            if (ProgressBarRenderer.IsSupported && !selected && rect.Width > 4 && rect.Height > 4)
             {
                 ProgressBarRenderer.DrawHorizontalBar(e.Graphics, rect);
                 int fillWidth = (rect.Width - 2) * percent / 100;
@@ -534,16 +543,30 @@ namespace ShareToPcReciver
                     ProgressBarRenderer.DrawHorizontalChunks(e.Graphics, fill);
                 }
             }
-            else
+            else if (rect.Width > 4 && rect.Height > 4)
             {
-                e.Graphics.FillRectangle(SystemBrushes.ControlLight, rect);
-                int fillWidth = rect.Width * percent / 100;
-                if (fillWidth > 0)
-                    e.Graphics.FillRectangle(Brushes.ForestGreen, rect.X, rect.Y, fillWidth, rect.Height);
-                e.Graphics.DrawRectangle(SystemPens.ControlDark, rect);
+                // 选中或 ProgressBarRenderer 不支持时，自绘进度条
+                Color trackColor = selected ? SystemColors.Highlight : SystemColors.ControlLight;
+                Color fillColor = selected ? SystemColors.HighlightText : Color.ForestGreen;
+                Color borderColor = selected ? SystemColors.HighlightText : SystemColors.ControlDark;
+
+                using (var fillBrush = new SolidBrush(fillColor))
+                {
+                    int fillWidth = selected
+                        ? (rect.Width - 2) * percent / 100
+                        : rect.Width * percent / 100;
+                    if (fillWidth > 0)
+                        e.Graphics.FillRectangle(fillBrush,
+                            selected ? rect.X + 1 : rect.X,
+                            selected ? rect.Y + 1 : rect.Y,
+                            fillWidth,
+                            selected ? rect.Height - 2 : rect.Height);
+                }
+                using (var pen = new Pen(borderColor))
+                    e.Graphics.DrawRectangle(pen, rect);
             }
 
-            Color finalColor = e.Item.Selected ? SystemColors.HighlightText : textColor;
+            Color finalColor = selected ? SystemColors.HighlightText : textColor;
             TextRenderer.DrawText(e.Graphics, label, lvHistory.Font, e.Bounds, finalColor,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }

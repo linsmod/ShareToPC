@@ -29,6 +29,7 @@ public class MainViewModel extends AndroidViewModel {
     private final MutableLiveData<String> connState = new MutableLiveData<>();
     private boolean scanning = false;
     private List<TransferRecord> history = null;
+    private Map<String, TransferManager.SendJob> deviceJobs;
 
     /** 任务列表变更回调（替代 LiveData，避免 lifecycle 延迟丢失初始值）。 */
     public interface TasksChangeListener {
@@ -197,124 +198,41 @@ public class MainViewModel extends AndroidViewModel {
     // ── 设备进度 ──────────────────────────────────────────
 
     /** 计算每个设备的当前传输进度，用于设备卡片上显示进度条。 */
-    private Map<String, DiscoveredDevice.DeviceProgress> computeDeviceProgress() {
-        Map<String, DiscoveredDevice.DeviceProgress> map = new HashMap<>();
+    private Map<String, TransferManager.SendJob> computeDeviceLatestJob() {
+        Map<String, TransferManager.SendJob> map = new HashMap<>();
 
         // 1) 当前正在传输的 job
         TransferManager.SendJob cur = app.transferManager.getCurrentJob();
         if (cur != null) {
-            DiscoveredDevice.DeviceProgress p = new DiscoveredDevice.DeviceProgress();
-            p.jobId = cur.id;
-            p.state = cur.isCancelRequested() || cur.isCancelled()
-                    ? DiscoveredDevice.DeviceProgress.STATE_PAUSED
-                    : DiscoveredDevice.DeviceProgress.STATE_SENDING;
-            p.totalEntries = cur.items.size();
-            for (SendEntry e : cur.items) {
-                if (e.isSuccess()) p.completedEntries++;
-            }
-            // 进度条只反映当前 entry，不是总体
-            SendEntry curEntry = findCurrentEntry(cur.items);
-            if (curEntry != null) {
-                p.totalBytes = curEntry.totalBytes > 0 ? curEntry.totalBytes : curEntry.size;
-                p.sentBytes = curEntry.sentBytes;
-                p.currentEntryName = curEntry.name;
-            }
-            map.put(cur.host + ":" + cur.port, p);
+            map.put(cur.deviceId, cur);
         }
 
         // 2) 队列中等待的 job（设备当前无活动 job 且有排队任务时显示排队状态）
         for (TransferManager.SendJob job : app.transferManager.getQueueSnapshot()) {
             String key = job.host + ":" + job.port;
             if (!map.containsKey(key)) {
-                DiscoveredDevice.DeviceProgress p = new DiscoveredDevice.DeviceProgress();
-                p.jobId = job.id;
-                p.state = DiscoveredDevice.DeviceProgress.STATE_QUEUED;
-                p.totalEntries = job.items.size();
-                for (SendEntry e : job.items) {
-                    p.totalBytes += e.size;
-                }
-                map.put(key, p);
+                map.put(key, job);
             }
         }
 
-        // 3) 从 DB 历史中，为没有活跃任务的设备补上最近一次已完成的 job 进度
-        List<TransferRecord> history = app.jobStore.all();
-        if (history != null && !history.isEmpty()) {
-            // 找到每个设备的最新 jobId
-            Map<String, String> deviceLatestJobId = new HashMap<>();
-            Map<String, Long> deviceLatestTime = new HashMap<>();
-            for (TransferRecord r : history) {
-                String deviceKey = r.deviceAddress();
-                if (map.containsKey(deviceKey)) continue; // 有活跃任务的不覆盖
-                if (r.jobId == null) continue;
-                Long prev = deviceLatestTime.get(deviceKey);
-                if (prev == null || r.timeMillis > prev) {
-                    deviceLatestTime.put(deviceKey, r.timeMillis);
-                    deviceLatestJobId.put(deviceKey, r.jobId);
-                }
-            }
-                // 为每个设备构造进度（根据 DB 中 entry 的实际状态还原）
-            for (Map.Entry<String, String> e : deviceLatestJobId.entrySet()) {
-                String deviceKey = e.getKey();
-                String jobId = e.getValue();
-                DiscoveredDevice.DeviceProgress p = new DiscoveredDevice.DeviceProgress();
-                p.jobId = jobId;
-                boolean allSuccess = true;
-                boolean hasOutdate = false;
-                long maxTime = 0;
-                for (TransferRecord r : history) {
-                    if (jobId.equals(r.jobId)) {
-                        p.totalEntries++;
-                        p.totalBytes += r.size;
-                        p.sentBytes += r.sentBytes;
-                        if (r.idleReason == TransferRecord.IDLE_REASON_SUCCESS) {
-                            p.completedEntries++;
-                        } else {
-                            allSuccess = false;
-                            if (r.idleReason == TransferRecord.IDLE_REASON_OUTDATE) {
-                                hasOutdate = true;
-                            }
-                        }
-                        if (r.timeMillis > maxTime) maxTime = r.timeMillis;
-                    }
-                }
-                p.state = allSuccess
-                        ? DiscoveredDevice.DeviceProgress.STATE_COMPLETED
-                        : DiscoveredDevice.DeviceProgress.STATE_PAUSED;
-                if (allSuccess) {
-                    p.completedAt = maxTime;
-                }
-                p.lastUpdateAt = maxTime;
-                p.partialSuccess = !allSuccess && p.completedEntries > 0;
-                p.hasOutdate = hasOutdate;
-                map.put(deviceKey, p);
-            }
+        // 3) 从 DB 历史中恢复最近24小时的设备Job记录
+        // cache避免IO频繁
+        if(this.deviceJobs == null){
+            this.deviceJobs = app.jobStore.allDeviceLatestJobs(24);
         }
-
+        this.deviceJobs.keySet().forEach(deviceId->{
+            if(!map.containsKey(deviceId)){
+                map.put(deviceId, deviceJobs.get(deviceId));
+            }
+        });
         return map;
-    }
-
-    /** 从 SendEntry 列表中找出当前正在发送的 entry。 */
-    @Nullable
-    private SendEntry findCurrentEntry(List<SendEntry> items) {
-        if (items == null || items.isEmpty()) return null;
-        // 优先找 STATUS_SENDING 状态的
-        for (SendEntry e : items) {
-            if (e.status == TransferRecord.STATUS_SENDING) return e;
-        }
-        // 找第一个未完成的
-        for (SendEntry e : items) {
-            if (!e.isSuccess()) return e;
-        }
-        return null;
     }
 
     /** 高德设备列表，关联合并传输进度。 */
     private List<DiscoveredDevice> enrichDeviceProgress(List<DiscoveredDevice> list) {
-        Map<String, DiscoveredDevice.DeviceProgress> progressMap = computeDeviceProgress();
+        Map<String, TransferManager.SendJob> progressMap = computeDeviceLatestJob();
         for (DiscoveredDevice d : list) {
-            DiscoveredDevice.DeviceProgress p = progressMap.get(d.address());
-            d.currentProgress = p != null ? p : new DiscoveredDevice.DeviceProgress();
+            d.latestJob = progressMap.get(d.deviceId);
         }
         return list;
     }
@@ -323,10 +241,10 @@ public class MainViewModel extends AndroidViewModel {
     private void updateDeviceProgressInPlace() {
         List<DiscoveredDevice> list = devices.getValue();
         if (list == null || deviceProgressListener == null) return;
-        Map<String, DiscoveredDevice.DeviceProgress> progressMap = computeDeviceProgress();
+        Map<String, TransferManager.SendJob> progressMap = computeDeviceLatestJob();
         for (DiscoveredDevice d : list) {
-            DiscoveredDevice.DeviceProgress p = progressMap.get(d.address());
-            d.currentProgress = p != null ? p : new DiscoveredDevice.DeviceProgress();
+            TransferManager.SendJob p = progressMap.get(d.address());
+            d.latestJob = p;
         }
         for (String addr : progressMap.keySet()) {
             deviceProgressListener.onDeviceProgressChanged(addr);

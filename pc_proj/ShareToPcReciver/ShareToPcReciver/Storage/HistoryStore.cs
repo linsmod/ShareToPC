@@ -26,6 +26,7 @@ namespace ShareToPcReciver.Storage
             public string Kind { get; set; } = ""; // "text" | "file"
             public string DeviceName { get; set; } = "";
             public long Time { get; set; }
+            public string JobId { get; set; }
             // text
             public string Text { get; set; }
             // file
@@ -57,7 +58,8 @@ namespace ShareToPcReciver.Storage
                             {
                                 DeviceName = e.DeviceName ?? "",
                                 Text = e.Text ?? "",
-                                Time = e.Time
+                                Time = e.Time,
+                                JobId = e.JobId ?? ""
                             });
                         }
                         else if (e.Kind == "file")
@@ -73,7 +75,8 @@ namespace ShareToPcReciver.Storage
                                 Status = string.IsNullOrEmpty(e.Status) ? "success" : e.Status,
                                 TotalBytes = e.TotalBytes > 0 ? e.TotalBytes : e.Size,
                                 ReceivedBytes = e.ReceivedBytes,
-                                TransferId = e.TransferId ?? ""
+                                TransferId = e.TransferId ?? "",
+                                JobId = e.JobId ?? ""
                             });
                         }
                     }
@@ -119,6 +122,7 @@ namespace ShareToPcReciver.Storage
                         Kind = "text",
                         DeviceName = t.DeviceName,
                         Time = t.Time,
+                        JobId = t.JobId ?? "",
                         Text = t.Text
                     };
                 case ReceivedFile f:
@@ -127,6 +131,7 @@ namespace ShareToPcReciver.Storage
                         Kind = "file",
                         DeviceName = f.DeviceName,
                         Time = f.Time,
+                        JobId = f.JobId ?? "",
                         FileName = f.FileName,
                         FilePath = f.FilePath,
                         Size = f.Size,
