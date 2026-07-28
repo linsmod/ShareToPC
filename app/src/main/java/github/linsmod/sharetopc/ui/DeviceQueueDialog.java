@@ -3,9 +3,11 @@ package github.linsmod.sharetopc.ui;
 import android.app.Dialog;
 import android.content.Context;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,13 +24,8 @@ import github.linsmod.sharetopc.util.TransferStatusHelper;
 /** 设备任务弹窗，复用 TaskAdapter 树状分组，展示传入的 TaskGroup。 */
 public class DeviceQueueDialog extends Dialog {
 
-    public interface Listener {
-        void onPauseRequested(TransferRecord record);
-        void onResumeRequested(TransferRecord record);
-    }
-
     private final DiscoveredDevice device;
-    private final Listener listener;
+    private final Listeners.TaskActionListener listener;
     @Nullable
     private final TaskGroup group;
     @Nullable
@@ -39,7 +36,7 @@ public class DeviceQueueDialog extends Dialog {
     public DeviceQueueDialog(@NonNull Context context,
                              @NonNull DiscoveredDevice device,
                              @Nullable TaskGroup group,
-                             Listener listener,
+                             Listeners.TaskActionListener listener,
                              @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
         super(context);
         this.device = device;
@@ -70,16 +67,22 @@ public class DeviceQueueDialog extends Dialog {
 
         RecyclerView rvTaskList = findViewById(R.id.rvTaskList);
         rvTaskList.setLayoutManager(new LinearLayoutManager(getContext()));
+        rvTaskList.setItemAnimator(null); // 禁用动画，避免频繁更新闪烁
 
-        adapter = new TaskAdapter(new TaskAdapter.ActionListener() {
+        adapter = new TaskAdapter(new Listeners.TaskActionListener() {
             @Override
             public void onRetryRequested(TransferRecord record) {
-                if (listener != null) listener.onResumeRequested(record);
+                if (listener != null) listener.onRetryRequested(record);
             }
 
             @Override
             public void onPauseRequested(TransferRecord record) {
                 if (listener != null) listener.onPauseRequested(record);
+            }
+
+            @Override
+            public void onGroupMenuRequested(TaskGroup group, View anchor, float touchX) {
+                showGroupMenu(group, anchor, touchX);
             }
         }, pfdChecker);
         rvTaskList.setAdapter(adapter);
@@ -97,5 +100,45 @@ public class DeviceQueueDialog extends Dialog {
             rvTaskList.setVisibility(View.GONE);
             tvEmpty.setVisibility(View.VISIBLE);
         }
+    }
+
+    private void showGroupMenu(TaskGroup group, View anchor, float touchX) {
+        PopupMenu popup = new PopupMenu(getContext(), anchor);
+        popup.getMenuInflater().inflate(R.menu.group_context_menu, popup.getMenu());
+
+        int gravity = touchX > anchor.getWidth() * 0.5f ? Gravity.END : Gravity.START;
+        popup.setGravity(gravity);
+
+        boolean hasActive = group.hasActive();
+        boolean hasResumable = false;
+        for (TransferRecord r : group.entries) {
+            if (r.status == TransferRecord.STATUS_IDLE
+                    && r.idleReason != TransferRecord.IDLE_REASON_SUCCESS
+                    && r.pendingAction == 0
+                    && r.canDeliver()) {
+                hasResumable = true;
+                break;
+            }
+        }
+
+        popup.getMenu().findItem(R.id.action_pause_group).setEnabled(hasActive);
+        popup.getMenu().findItem(R.id.action_resume_group).setEnabled(hasResumable);
+
+        popup.setOnMenuItemClickListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.action_pause_group) {
+                if (listener != null) listener.onGroupPauseRequested(group);
+                return true;
+            } else if (id == R.id.action_resume_group) {
+                if (listener != null) listener.onGroupResumeRequested(group);
+                return true;
+            } else if (id == R.id.action_delete_group) {
+                if (listener != null) listener.onGroupDeleteRequested(group);
+                return true;
+            }
+            return false;
+        });
+
+        popup.show();
     }
 }

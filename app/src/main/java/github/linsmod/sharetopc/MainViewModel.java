@@ -40,6 +40,13 @@ public class MainViewModel extends AndroidViewModel {
     private final List<TasksChangeListener> tasksListeners = new CopyOnWriteArrayList<>();
     private List<TaskGroup> cachedTasks = Collections.emptyList();
 
+    /** 条目进度增量更新回调（替代传输中全量 refreshTasks）。 */
+    public interface EntryUpdateListener {
+        void onEntryUpdated(@NonNull TransferRecord entry);
+    }
+
+    private final List<EntryUpdateListener> entryUpdateListeners = new CopyOnWriteArrayList<>();
+
     private final App app;
 
     /** 设备进度更新回调（不用 LiveData，直接通知 UI 刷新）。 */
@@ -57,7 +64,12 @@ public class MainViewModel extends AndroidViewModel {
         @Override
         public void onProgress(@NonNull TransferManager.SendJob job) {
             updateDeviceProgressInPlace();
-            refreshTasks();
+            // 仅通知受影响的条目增量更新，避免全量 notifyDataSetChanged 导致 UI 卡顿
+            for (SendEntry entry : job.items) {
+                for (EntryUpdateListener l : entryUpdateListeners) {
+                    l.onEntryUpdated(entry);
+                }
+            }
         }
 
         @Override
@@ -160,6 +172,16 @@ public class MainViewModel extends AndroidViewModel {
     /** 取消注册任务变更监听器。 */
     public void removeTasksChangeListener(@NonNull TasksChangeListener l) {
         tasksListeners.remove(l);
+    }
+
+    /** 注册条目进度增量更新监听器。 */
+    public void addEntryUpdateListener(@NonNull EntryUpdateListener l) {
+        entryUpdateListeners.add(l);
+    }
+
+    /** 取消注册条目进度增量更新监听器。 */
+    public void removeEntryUpdateListener(@NonNull EntryUpdateListener l) {
+        entryUpdateListeners.remove(l);
     }
 
     public LiveData<List<TransferRecord>> getHistory() {
@@ -435,12 +457,67 @@ public class MainViewModel extends AndroidViewModel {
         refreshHistory();
     }
 
-    /** 暂停当前传输：cancelJob + 写 PAUSED 状态，PFD 不释放，支持继续。 */
+    /** 删除整个任务分组：先取消传输 + 清理队列，再删除数据库记录。 */
+    public void deleteGroup(TaskGroup group) {
+        // 1. 取消正在传输的任务 + 清理等待队列
+        app.transferManager.cancelAndRemoveJob(group.jobId);
+        // 2. 从数据库删除
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        for (TransferRecord r : group.entries) {
+            if (r.id != null) ids.add(r.id);
+        }
+        app.jobStore.removeByIds(ids);
+        // 3. 刷新 UI
+        refreshHistory();
+    }
+
+    /** 暂停当前传输：设置 pending action + cancel，等 CANCEL 帧发出后 process() 转为 PAUSED。 */
     public void pauseTransfer(TransferRecord record) {
         TransferManager.SendJob job = app.transferManager.getCurrentJob();
-        if (job != null && Objects.equals(job.id, record.id)) {
-            job.cancel();
+        if (job != null) {
+            for (SendEntry entry : job.items) {
+                if (entry.id != null && entry.id.equals(record.id) && entry.canRequestPause()) {
+                    app.transferManager.requestPause(entry);
+                    job.cancel();
+                    break;
+                }
+            }
         }
+    }
+
+    /** 暂停分组：对所有 canRequestPause() 的条目设置 pending pause + cancel。 */
+    public void pauseGroup(TaskGroup group) {
+        TransferManager.SendJob cur = app.transferManager.getCurrentJob();
+        boolean cancelled = false;
+        if (cur != null && cur.id.equals(group.jobId)) {
+            for (SendEntry entry : cur.items) {
+                if (entry.canRequestPause()) {
+                    app.transferManager.requestPause(entry);
+                    cancelled = true;
+                }
+            }
+            if (cancelled) {
+                cur.cancel(); // 触发 CANCEL 帧发送
+            }
+        }
+        // 队列中等待的 job：直接标记 cancel，worker 取到时自动跳过
+        for (TransferManager.SendJob job : app.transferManager.getQueueSnapshot()) {
+            if (job.id.equals(group.jobId)) {
+                job.cancel();
+            }
+        }
+    }
+
+    /** 继续/恢复分组中所有可恢复的条目。 */
+    public void resumeGroup(TaskGroup group) {
+        for (TransferRecord r : group.entries) {
+            if (r.status == TransferRecord.STATUS_IDLE
+                    && r.idleReason != TransferRecord.IDLE_REASON_SUCCESS
+                    && r.pendingAction == 0) {
+                retry(r);
+            }
+        }
+        refreshHistory();
     }
 
     /** 继续/重试指定记录。 */

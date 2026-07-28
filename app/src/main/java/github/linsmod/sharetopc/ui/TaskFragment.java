@@ -1,10 +1,13 @@
 package github.linsmod.sharetopc.ui;
 
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.PopupMenu;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -29,6 +32,13 @@ public class TaskFragment extends Fragment {
         }
     };
 
+    /** 条目进度增量更新回调。 */
+    private final MainViewModel.EntryUpdateListener entryUpdateListener = entry -> {
+        if (taskAdapter != null) {
+            taskAdapter.onEntryProgressChanged(entry);
+        }
+    };
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -40,7 +50,8 @@ public class TaskFragment extends Fragment {
         RecyclerView rvTask = view.findViewById(R.id.rvTask);
 
         rvTask.setLayoutManager(new LinearLayoutManager(requireContext()));
-        taskAdapter = new TaskAdapter(new TaskAdapter.ActionListener() {
+        rvTask.setItemAnimator(null); // 禁用动画，避免频繁 notifyItemChanged 导致闪烁
+        taskAdapter = new TaskAdapter(new Listeners.TaskActionListener() {
             @Override
             public void onRetryRequested(TransferRecord record) {
                 viewModel.retry(record);
@@ -50,12 +61,18 @@ public class TaskFragment extends Fragment {
             public void onPauseRequested(TransferRecord record) {
                 viewModel.pauseTransfer(record);
             }
+
+            @Override
+            public void onGroupMenuRequested(TaskGroup group, View anchor, float touchX) {
+                showGroupMenu(group, anchor, touchX);
+            }
         }, transferId -> viewModel.hasPfd(transferId));
         rvTask.setAdapter(taskAdapter);
 
         tvTaskTitle.setText(R.string.task_title);
 
         viewModel.addTasksChangeListener(tasksListener);
+        viewModel.addEntryUpdateListener(entryUpdateListener);
 
         return view;
     }
@@ -64,11 +81,58 @@ public class TaskFragment extends Fragment {
     public void onDestroyView() {
         super.onDestroyView();
         viewModel.removeTasksChangeListener(tasksListener);
+        viewModel.removeEntryUpdateListener(entryUpdateListener);
     }
 
     @Override
     public void onResume() {
         super.onResume();
         viewModel.refreshTasks();
+    }
+
+    private void showGroupMenu(TaskGroup group, View anchor, float touchX) {
+        PopupMenu popup = new PopupMenu(requireActivity(), anchor);
+        popup.getMenuInflater().inflate(R.menu.group_context_menu, popup.getMenu());
+
+        // 根据触摸横向位置安排菜单对齐方向：按在右半边则菜单右对齐
+        int gravity = touchX > anchor.getWidth() * 0.5f ? Gravity.END : Gravity.START;
+        popup.setGravity(gravity);
+
+        // 根据分组状态启用/禁用菜单项
+        boolean hasActive = group.hasActive();
+        boolean hasResumable = false;
+        for (TransferRecord r : group.entries) {
+            if (r.status == TransferRecord.STATUS_IDLE
+                    && r.idleReason != TransferRecord.IDLE_REASON_SUCCESS
+                    && r.pendingAction == 0
+                    && r.canDeliver()) {
+                hasResumable = true;
+                break;
+            }
+        }
+
+        popup.getMenu().findItem(R.id.action_pause_group).setEnabled(hasActive);
+        popup.getMenu().findItem(R.id.action_resume_group).setEnabled(hasResumable);
+
+        popup.setOnMenuItemClickListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.action_pause_group) {
+                viewModel.pauseGroup(group);
+                Toast.makeText(requireContext(), "已暂停传输", Toast.LENGTH_SHORT).show();
+                return true;
+            } else if (id == R.id.action_resume_group) {
+                viewModel.resumeGroup(group);
+                return true;
+            } else if (id == R.id.action_delete_group) {
+                viewModel.deleteGroup(group);
+                Toast.makeText(requireContext(),
+                        getString(R.string.group_deleted, group.totalEntries),
+                        Toast.LENGTH_SHORT).show();
+                return true;
+            }
+            return false;
+        });
+
+        popup.show();
     }
 }

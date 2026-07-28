@@ -158,6 +158,34 @@ public class TransferManager {
         return currentJob;
     }
 
+    /** 从等待队列中移除指定 jobId 的任务（不影响当前正在执行的任务）。 */
+    public void removeFromQueue(String jobId) {
+        queue.removeIf(job -> job.id.equals(jobId));
+        emitQueueChanged();
+    }
+
+    /** 取消当前正在执行的任务并从等待队列中移除同 jobId 的任务（用于删除分组）。 */
+    public void cancelAndRemoveJob(String jobId) {
+        SendJob cur = currentJob;
+        if (cur != null && cur.id.equals(jobId)) {
+            cur.cancel();
+        }
+        removeFromQueue(jobId);
+    }
+
+    /** 暂停当前或队列中指定 jobId 的任务（走 cancel 请求协议，会发包通知 PC 端）。 */
+    public void cancelJob(String jobId) {
+        SendJob cur = currentJob;
+        if (cur != null && cur.id.equals(jobId)) {
+            cur.cancel(); // 触发 TransferProtocol.writeContentLoop 发送 CANCEL 帧
+        }
+        for (SendJob job : queue) {
+            if (job.id.equals(jobId)) {
+                job.cancel(); // 标记取消，worker 取到时自动跳过
+            }
+        }
+    }
+
     /** 拍快照并通过监听器回调到主线程（入队/出队/取消后调用）。 */
     private void emitQueueChanged() {
         List<SendJob> snapshot = new ArrayList<>(queue);
@@ -166,6 +194,19 @@ public class TransferManager {
                 listener.onQueueChanged(snapshot);
             }
         });
+    }
+
+    /**
+     * 请求暂停一条记录。设置 PENDING_ACTION_END_PAUSE 中间状态，
+     * 等待 TransferProtocol 实际发送 CANCEL 帧后在 process() 中转为 IDLE_REASON_PAUSED。
+     */
+    public void requestPause(TransferRecord record) {
+        if (record instanceof SendEntry) {
+            SendEntry sendEntry = (SendEntry) record;
+            if (!sendEntry.canRequestPause()) return;
+            sendEntry.pendingAction = TransferRecord.PENDING_ACTION_END_PAUSE;
+            App.get().jobStore.updateStatus(sendEntry.id, sendEntry.status, sendEntry.idleReason);
+        }
     }
 
     /**
@@ -285,6 +326,23 @@ public class TransferManager {
             LogX.e("unexpected error in transfer for job: " + job.displayName(), t);
             error = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
         } finally {
+            // 处理取消后的 pending action 状态转换
+            for (SendEntry item : job.items) {
+                if (item.pendingAction == TransferRecord.PENDING_ACTION_END_PAUSE) {
+                    // CANCEL 帧已发送，转为暂停状态
+                    item.status = TransferRecord.STATUS_IDLE;
+                    item.idleReason = TransferRecord.IDLE_REASON_PAUSED;
+                    item.pendingAction = TransferRecord.PENDING_ACTION_NONE;
+                    updateJob(job, item);
+                } else if (item.pendingAction == TransferRecord.PENDING_ACTION_END_RESUME
+                        && job.isCancelRequested()) {
+                    // 恢复请求中途被取消，回退到暂停状态
+                    item.status = TransferRecord.STATUS_IDLE;
+                    item.idleReason = TransferRecord.IDLE_REASON_PAUSED;
+                    item.pendingAction = TransferRecord.PENDING_ACTION_NONE;
+                    updateJob(job, item);
+                }
+            }
             SendJob finished = currentJob;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
             mainHandler.post(() -> {

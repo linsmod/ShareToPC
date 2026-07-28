@@ -28,6 +28,7 @@ import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.ui.DeviceQueueDialog;
 import github.linsmod.sharetopc.ui.DevicesFragment;
+import github.linsmod.sharetopc.ui.Listeners;
 import github.linsmod.sharetopc.ui.TaskFragment;
 import github.linsmod.sharetopc.ui.SettingsActivity;
 
@@ -132,15 +133,41 @@ public class MainActivity extends AppCompatActivity {
         }
 
         deviceQueueDialog = new DeviceQueueDialog(this, device, group,
-                new DeviceQueueDialog.Listener() {
+                new Listeners.TaskActionListener() {
             @Override
             public void onPauseRequested(TransferRecord record) {
                 viewModel.pauseTransfer(record);
             }
 
             @Override
-            public void onResumeRequested(github.linsmod.sharetopc.data.TransferRecord record) {
+            public void onRetryRequested(TransferRecord record) {
                 viewModel.retry(record);
+            }
+
+            @Override
+            public void onGroupMenuRequested(github.linsmod.sharetopc.ui.TaskGroup group,
+                                             View anchor, float touchX) {
+                // 由 DeviceQueueDialog 内部 showGroupMenu 处理
+            }
+
+            @Override
+            public void onGroupPauseRequested(github.linsmod.sharetopc.ui.TaskGroup group) {
+                viewModel.pauseGroup(group);
+                Toast.makeText(MainActivity.this, "已暂停传输", Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onGroupResumeRequested(github.linsmod.sharetopc.ui.TaskGroup group) {
+                viewModel.resumeGroup(group);
+            }
+
+            @Override
+            public void onGroupDeleteRequested(github.linsmod.sharetopc.ui.TaskGroup group) {
+                viewModel.deleteGroup(group);
+                Toast.makeText(MainActivity.this,
+                        getString(R.string.group_deleted, group.totalEntries),
+                        Toast.LENGTH_SHORT).show();
+                if (deviceQueueDialog != null) deviceQueueDialog.dismiss();
             }
         }, transferId -> viewModel.hasPfd(transferId));
         deviceQueueDialog.show();

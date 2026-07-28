@@ -2,6 +2,7 @@ package github.linsmod.sharetopc.ui;
 
 import android.content.Context;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
@@ -29,20 +30,15 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_GROUP = 0;
     private static final int TYPE_ENTRY = 1;
 
-    public interface ActionListener {
-        void onRetryRequested(TransferRecord record);
-        void onPauseRequested(TransferRecord record);
-    }
-
     private final List<TaskGroup> groups = new ArrayList<>();
     /** 扁平化后的 DisplayItem 列表。 */
     private final List<DisplayItem> displayList = new ArrayList<>();
-    private final ActionListener actionListener;
+    private final Listeners.TaskActionListener actionListener;
     @Nullable
     private final TransferStatusHelper.PfdChecker pfdChecker;
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
 
-    public TaskAdapter(ActionListener actionListener, @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
+    public TaskAdapter(Listeners.TaskActionListener actionListener, @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
         this.actionListener = actionListener;
         this.pfdChecker = pfdChecker;
     }
@@ -74,6 +70,36 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         rebuildDisplayList();
         notifyDataSetChanged();
+    }
+
+    /** 增量更新单个条目的进度（避免全量 notifyDataSetChanged）。 */
+    public void onEntryProgressChanged(TransferRecord source) {
+        if (source == null || source.id == null) return;
+
+        // 找到并更新条目
+        int entryPos = -1;
+        for (int i = 0; i < displayList.size(); i++) {
+            DisplayItem di = displayList.get(i);
+            if (di.type == TYPE_ENTRY && di.entry.id != null && di.entry.id.equals(source.id)) {
+                di.entry.sentBytes = source.sentBytes;
+                di.entry.totalBytes = source.totalBytes;
+                di.entry.status = source.status;
+                di.entry.idleReason = source.idleReason;
+                entryPos = i;
+                break;
+            }
+        }
+        if (entryPos >= 0) notifyItemChanged(entryPos);
+
+        // 找到并更新分组标题（进度计数可能变化）
+        for (int i = 0; i < displayList.size(); i++) {
+            DisplayItem di = displayList.get(i);
+            if (di.type == TYPE_GROUP && di.group.jobId != null && di.group.jobId.equals(source.jobId)) {
+                di.group.recomputeProgress();
+                notifyItemChanged(i);
+                break;
+            }
+        }
     }
 
     // ── 扁平化重建 ──────────────────────────────────────
@@ -160,6 +186,21 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             g.expanded = !g.expanded;
             rebuildDisplayList();
             notifyDataSetChanged();
+        });
+        // 记录触摸位置，供长按菜单定位使用
+        final float[] touchX = new float[1];
+        vh.itemView.setOnTouchListener((v, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                touchX[0] = event.getX();
+            }
+            return false;
+        });
+        // 长按弹出操作菜单
+        vh.itemView.setOnLongClickListener(v -> {
+            if (actionListener != null) {
+                actionListener.onGroupMenuRequested(g, v, touchX[0]);
+            }
+            return true;
         });
     }
 
