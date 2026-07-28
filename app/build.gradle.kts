@@ -4,6 +4,9 @@ plugins {
 
 android {
     namespace = "github.linsmod.sharetopc"
+    buildFeatures {
+        buildConfig = true
+    }
     compileSdk {
         version = release(36) {
             minorApiLevel = 1

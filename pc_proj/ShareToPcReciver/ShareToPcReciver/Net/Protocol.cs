@@ -87,10 +87,10 @@ namespace ShareToPcReciver.Net
             await stream.FlushAsync(ct);
         }
 
-        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本与协议版本。</summary>
-        public static async Task WriteHelloAckAsync(Stream stream, CancellationToken ct)
+        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本、协议版本、设备 ID。</summary>
+        public static async Task WriteHelloAckAsync(Stream stream, string deviceId, CancellationToken ct)
         {
-            var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion };
+            var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion, deviceId }; 
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

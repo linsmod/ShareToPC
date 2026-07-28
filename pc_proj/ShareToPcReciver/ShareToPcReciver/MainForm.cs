@@ -52,6 +52,7 @@ namespace ShareToPcReciver
             _server.FileReceived += OnFileReceived;
             _server.FileProgressChanged += OnFileProgress;
 
+            lvHistory.ShowGroups = true;
             lvHistory.DrawColumnHeader += (s, ev) => ev.DrawDefault = true;
             lvHistory.DrawSubItem += LvHistory_DrawSubItem;
             lvHistory.KeyDown += LvHistory_KeyDown;
@@ -114,7 +115,7 @@ namespace ShareToPcReciver
             try
             {
                 _server.StartAsync(_config.Port).GetAwaiter().GetResult();
-                _advertiser.Start(_config.Port);
+                _advertiser.Start(_config.Port, _config.DeviceId);
                 UpdateStatus($"服务运行中 (端口 {_config.Port})", Color.DarkGreen);
                 lblPort.Text = $"端口 {_config.Port}";
             }
@@ -463,7 +464,8 @@ namespace ShareToPcReciver
                 Status = status,
                 TotalBytes = p.Total,
                 ReceivedBytes = p.Received,
-                TransferId = p.TransferId ?? ""
+                TransferId = p.TransferId ?? "",
+                JobId = p.JobId ?? ""
             };
         }
 
@@ -573,6 +575,7 @@ namespace ShareToPcReciver
             item.SubItems.Add(source);
             item.SubItems.Add(""); // 进度列（自绘，文本留空）
             item.Tag = tag;
+            item.Group = GetOrCreateGroup(tag, source);
             lvHistory.Items.Insert(0, item);
 
             while (lvHistory.Items.Count > 200)
@@ -583,6 +586,34 @@ namespace ShareToPcReciver
                 lvHistory.Items.RemoveAt(lvHistory.Items.Count - 1);
             }
             return item;
+        }
+
+        /// <summary>按 jobId 分组，若无 jobId 则按设备名分组。活跃分组排在最前。</summary>
+        private ListViewGroup GetOrCreateGroup(object tag, string deviceName)
+        {
+            string jobId = null;
+            if (tag is ReceivedText rt) jobId = rt.JobId;
+            else if (tag is ReceivedFile rf) jobId = rf.JobId;
+            else if (tag is FileProgressInfo pi) jobId = pi.JobId;
+
+            string key = !string.IsNullOrEmpty(jobId) ? "job:" + jobId : "dev:" + (deviceName ?? "(未知)");
+            string header = deviceName ?? "(未知)";
+
+            foreach (ListViewGroup g in lvHistory.Groups)
+            {
+                if (g.Name == key)
+                {
+                    if (lvHistory.Groups[0] != g)
+                    {
+                        lvHistory.Groups.Remove(g);
+                        lvHistory.Groups.Insert(0, g);
+                    }
+                    return g;
+                }
+            }
+            var group = new ListViewGroup(key, header);
+            lvHistory.Groups.Insert(0, group);
+            return group;
         }
 
         /// <summary>按 TransferId 在列表中查找已有行，用于恢复取消的传输时复用</summary>

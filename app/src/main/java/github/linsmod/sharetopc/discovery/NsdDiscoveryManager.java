@@ -217,7 +217,7 @@ public class NsdDiscoveryManager {
                     if (host != null) {
                         DiscoveredDevice device = new DiscoveredDevice(
                                 serviceInfo.getServiceName(), host, serviceInfo.getPort(), true);
-                        // 从 mDNS TXT 记录中解析 version 和 protoVersion
+                        // 从 mDNS TXT 记录中解析 version、protoVersion、deviceId
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                             Map<String, byte[]> attrs = serviceInfo.getAttributes();
                             if (attrs != null) {
@@ -229,10 +229,15 @@ public class NsdDiscoveryManager {
                                 if (protoBytes != null) {
                                     device.protoVersion = new String(protoBytes, java.nio.charset.StandardCharsets.UTF_8);
                                 }
+                                byte[] didBytes = attrs.get("device_id");
+                                if (didBytes != null) {
+                                    device.deviceId = new String(didBytes, java.nio.charset.StandardCharsets.UTF_8);
+                                }
                             }
                         }
+                        DiscoveredDevice toSave;
                         synchronized (NsdDiscoveryManager.this) {
-                            // 如果已存在同 key 的离线设备，替换为在线设备（保留 version）
+                            // 如果已存在同 key 的设备，更新在线状态和版本信息
                             DiscoveredDevice existing = devices.get(device.address());
                             if (existing != null) {
                                 existing.isOnline = true;
@@ -242,11 +247,16 @@ public class NsdDiscoveryManager {
                                 if (device.protoVersion != null) {
                                     existing.protoVersion = device.protoVersion;
                                 }
+                                if (device.deviceId != null) {
+                                    existing.deviceId = device.deviceId;
+                                }
+                                toSave = existing;
                             } else {
                                 devices.put(device.address(), device);
+                                toSave = device;
                             }
                         }
-                        deviceStore.saveDevice(device);
+                        deviceStore.saveDevice(toSave);
                         notifyChanged();
                     }
                     resolveNext();

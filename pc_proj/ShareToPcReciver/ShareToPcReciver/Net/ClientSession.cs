@@ -135,22 +135,25 @@ namespace ShareToPcReciver.Net
             string device = header.TryGetProperty("device", out JsonElement d) ? d.GetString() ?? "Unknown" : "Unknown";
             string clientVersion = header.TryGetProperty("version", out JsonElement v) ? v.GetString() ?? "unknown" : "unknown";
             int clientProto = header.TryGetProperty("protoVersion", out JsonElement pv) ? pv.GetInt32() : 0;
+            string clientDeviceId = header.TryGetProperty("deviceId", out JsonElement did) ? did.GetString() ?? "" : "";
             DeviceName = device;
-            Util.Log.Info($"HELLO from {device} (app: {clientVersion}, proto v{clientProto}, self: {Protocol.AppVersion} proto v{Protocol.ProtocolVersion})");
-            _server.OnClientConnected(new ClientInfo { Name = device, Address = ((IPEndPoint)_client.Client.RemoteEndPoint).Address.ToString() });
-            await Protocol.WriteHelloAckAsync(stream, _ct);
+            Util.Log.Info($"HELLO from {device} (app: {clientVersion}, proto v{clientProto}, id: {clientDeviceId}, self: {Protocol.AppVersion} proto v{Protocol.ProtocolVersion})");
+            _server.OnClientConnected(new ClientInfo { Name = device, Address = ((IPEndPoint)_client.Client.RemoteEndPoint).Address.ToString(), DeviceId = clientDeviceId });
+            await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _ct);
         }
 
         private async Task HandleText(Stream stream, JsonElement header)
         {
             string text = header.TryGetProperty("text", out JsonElement t) ? t.GetString() ?? "" : "";
             long time = header.TryGetProperty("time", out JsonElement ts) ? ts.GetInt64() : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            string jobId = header.TryGetProperty("jobId", out JsonElement jid) ? jid.GetString() ?? "" : "";
             Util.Log.Info($"TEXT from {DeviceName}: {text}");
             _server.OnTextReceived(new ReceivedText
             {
                 DeviceName = DeviceName,
                 Text = text,
-                Time = time
+                Time = time,
+                JobId = jobId
             });
             await Protocol.WriteAckAsync(stream, true, "", _ct);
         }
@@ -162,6 +165,7 @@ namespace ShareToPcReciver.Net
             string mime = header.TryGetProperty("mime", out JsonElement m) ? m.GetString() ?? "" : "";
             long time = header.TryGetProperty("time", out JsonElement ts) ? ts.GetInt64() : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             string transferId = header.TryGetProperty("id", out JsonElement idProp) ? idProp.GetString() ?? "" : "";
+            string jobId = header.TryGetProperty("jobId", out JsonElement jidProp) ? jidProp.GetString() ?? "" : "";
 
             // ---- 断点续传：通过 transferId 查找未完成的 .part 文件 ----
             string partPath;
@@ -201,7 +205,8 @@ namespace ShareToPcReciver.Net
                 Time = time,
                 Progress = 0,
                 TotalBytes = size,
-                ReceivedBytes = resumeOffset
+                ReceivedBytes = resumeOffset,
+                JobId = jobId
             };
 
             var progressWatch = System.Diagnostics.Stopwatch.StartNew();
@@ -249,6 +254,7 @@ namespace ShareToPcReciver.Net
                                 FileName = name,
                                 DeviceName = DeviceName,
                                 TransferId = transferId,
+                                JobId = jobId,
                                 Received = totalReceived,
                                 Total = size,
                                 Cancelled = true
@@ -294,6 +300,7 @@ namespace ShareToPcReciver.Net
                                 FileName = name,
                                 DeviceName = DeviceName,
                                 TransferId = transferId,
+                                JobId = jobId,
                                 Received = totalReceived,
                                 Total = size
                             });
@@ -328,6 +335,7 @@ namespace ShareToPcReciver.Net
                                     FileName = name,
                                     DeviceName = DeviceName,
                                     TransferId = transferId,
+                                    JobId = jobId,
                                     Received = totalReceived,
                                     Total = size
                                 });
@@ -365,6 +373,7 @@ namespace ShareToPcReciver.Net
                     FileName = name,
                     DeviceName = DeviceName,
                     TransferId = transferId,
+                    JobId = jobId,
                     Received = totalReceived,
                     Total = size,
                     Failed = true
@@ -380,6 +389,7 @@ namespace ShareToPcReciver.Net
                     FileName = name,
                     DeviceName = DeviceName,
                     TransferId = transferId,
+                    JobId = jobId,
                     Received = totalReceived,
                     Total = size,
                     Failed = true

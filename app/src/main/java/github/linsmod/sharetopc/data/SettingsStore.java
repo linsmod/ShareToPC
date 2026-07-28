@@ -16,6 +16,7 @@ import java.util.Map;
 /** 设置存储：默认 SharedPreferences（与 PreferenceFragmentCompat 共用）。 */
 public class SettingsStore {
 
+    public static final String KEY_DEVICE_ID = "device_id";
     public static final String KEY_ALIASES = "device_aliases";
     public static final String KEY_SCAN_TIMEOUT = "scan_timeout";
     public static final String KEY_LAST_HOST = "last_device_host";
@@ -89,5 +90,15 @@ public class SettingsStore {
         } catch (Exception e) {
             return new HashMap<>();
         }
+    }
+
+    /** 获取本机设备唯一 ID，首次启动时自动生成并持久化。 */
+    public String getDeviceId() {
+        String id = prefs.getString(KEY_DEVICE_ID, null);
+        if (TextUtils.isEmpty(id)) {
+            id = java.util.UUID.randomUUID().toString();
+            prefs.edit().putString(KEY_DEVICE_ID, id).apply();
+        }
+        return id;
     }
 }

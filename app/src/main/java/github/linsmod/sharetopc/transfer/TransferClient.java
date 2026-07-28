@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
+import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.util.FileUtils;
 
@@ -78,8 +79,9 @@ public class TransferClient implements Closeable {
         header.addProperty("device", Build.MODEL != null ? Build.MODEL : "Android");
         header.addProperty("version", TransferProtocol.APP_VERSION);
         header.addProperty("protoVersion", TransferProtocol.PROTOCOL_VERSION);
+        header.addProperty("deviceId", App.get().settingsStore.getDeviceId());
         TransferProtocol.writeFrame(out, header);
-        // 读 PC 的 HELLO ACK，其中携带 PC 程序版本与协议版本
+        // 读 PC 的 HELLO ACK，其中携带 PC 程序版本、协议版本、设备 ID
         JsonObject ack = TransferProtocol.readHeader(in);
         if (!TransferProtocol.isAckOk(ack)) {
             if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
@@ -91,16 +93,21 @@ public class TransferClient implements Closeable {
                 ? ack.get("version").getAsString() : "unknown";
         int pcProto = ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()
                 ? ack.get("protoVersion").getAsInt() : 0;
+        String pcDeviceId = ack.has("deviceId") && !ack.get("deviceId").isJsonNull()
+                ? ack.get("deviceId").getAsString() : "";
         android.util.Log.d("TransferClient",
-                "HELLO handshake OK: PC " + pcVersion + " proto v" + pcProto
+                "HELLO handshake OK: PC " + pcVersion + " proto v" + pcProto + " id=" + pcDeviceId
                 + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
     }
 
-    public void sendText(String text) throws IOException {
+    public void sendText(String text, String jobId) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "TEXT");
         header.addProperty("text", text);
         header.addProperty("time", System.currentTimeMillis());
+        if (jobId != null) {
+            header.addProperty("jobId", jobId);
+        }
         TransferProtocol.writeFrame(out, header);
         expectAck();
     }
@@ -108,7 +115,7 @@ public class TransferClient implements Closeable {
     /** 从 File 读文件发送（历史兼容：本地 inbox 仍有副本时使用）。 */
     public void sendFile(TransferManager.SendJob job, SendEntry entry, File file,
                          TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(entry.name, entry.mime, file.length(), entry.id);
+        sendFileHeader(entry.name, entry.mime, file.length(), entry.id, job.id);
         long resumeOffset = expectAckForFile();
         try (java.io.FileInputStream fin = new java.io.FileInputStream(file)) {
             skipExactly(fin, resumeOffset);
@@ -127,7 +134,7 @@ public class TransferClient implements Closeable {
     public void sendFileFromStream(TransferManager.SendJob job, SendEntry entry,
                                    InputStream contentStream,
                                    TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(entry.name, entry.mime, entry.size, entry.id);
+        sendFileHeader(entry.name, entry.mime, entry.size, entry.id, job.id);
         long resumeOffset = expectAckForFile();
         skipExactly(contentStream, resumeOffset);
         if (resumeOffset > 0) {
@@ -141,7 +148,7 @@ public class TransferClient implements Closeable {
     }
 
     /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */
-    private void sendFileHeader(String fileName, String mime, long size, String transferId) throws IOException {
+    private void sendFileHeader(String fileName, String mime, long size, String transferId, String jobId) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "FILE");
         header.addProperty("name", FileUtils.sanitizeFileName(fileName));
@@ -151,6 +158,9 @@ public class TransferClient implements Closeable {
         header.addProperty("time", System.currentTimeMillis());
         if (transferId != null) {
             header.addProperty("id", transferId);
+        }
+        if (jobId != null) {
+            header.addProperty("jobId", jobId);
         }
         TransferProtocol.writeFrame(out, header);
     }

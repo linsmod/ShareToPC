@@ -16,9 +16,9 @@
         android:id="@+id/tvDeviceVersion"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="6dp"
         android:textColor="?android:attr/textColorSecondary"
-        android:textSize="13sp"
+        android:textSize="14sp"
         android:visibility="gone" />
 
     <TextView
@@ -26,7 +26,18 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textColor="?android:attr/textColorSecondary"
-        android:textSize="13sp"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/tvDeviceId"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="14sp"
+        android:ellipsize="middle"
+        android:maxLines="1"
         android:visibility="gone" />
 
     <EditText

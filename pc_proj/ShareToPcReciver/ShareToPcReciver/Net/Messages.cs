@@ -16,6 +16,9 @@ namespace ShareToPcReciver.Net
 
         [JsonPropertyName("protoVersion")]
         public int ProtoVersion { get; set; }
+
+        [JsonPropertyName("deviceId")]
+        public string DeviceId { get; set; } = "";
     }
 
     public class TextMsg

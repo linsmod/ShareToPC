@@ -56,6 +56,8 @@ public class DiscoveredDevice {
     public String version;
     /** 设备协议版本号（由 mDNS TXT 或 HELLO 握手获取）。 */
     public String protoVersion;
+    /** 设备持久化唯一 ID（由 mDNS TXT 或 HELLO ACK 获取）。 */
+    public String deviceId;
     /** 是否在线（当前扫描中发现）。 */
     public boolean isOnline;
     /** 该设备最近一次发送的 jobId。 */

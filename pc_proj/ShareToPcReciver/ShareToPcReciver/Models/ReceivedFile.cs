@@ -14,6 +14,7 @@ namespace ShareToPcReciver.Models
         public long TotalBytes { get; set; }               // 文件总大小
         public long ReceivedBytes { get; set; }            // 已接收字节数（断点续传用）
         public string TransferId { get; set; } = "";       // 传输标识，用于定位 .part 文件
+        public string JobId { get; set; } = "";            // Android 端发送批次标识
         public DateTime ReceivedAt => DateTimeOffset.FromUnixTimeMilliseconds(Time).LocalDateTime;
     }
 
@@ -22,6 +23,7 @@ namespace ShareToPcReciver.Models
         public string FileName { get; set; } = "";
         public string DeviceName { get; set; } = "";
         public string TransferId { get; set; } = "";
+        public string JobId { get; set; } = "";
         public long Received { get; set; }
         public long Total { get; set; }
         public bool Failed { get; set; }

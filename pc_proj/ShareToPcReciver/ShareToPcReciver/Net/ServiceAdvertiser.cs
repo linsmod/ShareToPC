@@ -10,7 +10,7 @@ namespace ShareToPcReciver.Net
 
         public bool IsActive => _sd != null;
 
-        public void Start(int port)
+        public void Start(int port, string deviceId)
         {
             Stop();
             try
@@ -22,6 +22,7 @@ namespace ShareToPcReciver.Net
                     port: (ushort)port);
                 _profile.AddProperty("version", Protocol.AppVersion);
                 _profile.AddProperty("protoVersion", Protocol.ProtocolVersion.ToString());
+                _profile.AddProperty("device_id", deviceId ?? "");
                 _sd.Advertise(_profile);
                 Util.Log.Info($"mDNS advertised: {Protocol.ServiceType} on port {port}");
             }

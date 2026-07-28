@@ -227,6 +227,15 @@ public class MainActivity extends AppCompatActivity {
             tvProtoVersion.setVisibility(View.GONE);
         }
 
+        TextView tvDeviceId = layout.findViewById(R.id.tvDeviceId);
+        if (device.deviceId != null && !device.deviceId.isEmpty()) {
+            String shortId = device.deviceId.length() > 8 ? device.deviceId.substring(0, 8) : device.deviceId;
+            tvDeviceId.setText("设备ID: " + shortId);
+            tvDeviceId.setVisibility(View.VISIBLE);
+        } else {
+            tvDeviceId.setVisibility(View.GONE);
+        }
+
         layout.findViewById(R.id.btnPresetLaptop).setOnClickListener(v -> etAlias.setText(R.string.preset_laptop));
         layout.findViewById(R.id.btnPresetOffice).setOnClickListener(v -> etAlias.setText(R.string.preset_office));
         layout.findViewById(R.id.btnPresetDesktop).setOnClickListener(v -> etAlias.setText(R.string.preset_desktop));

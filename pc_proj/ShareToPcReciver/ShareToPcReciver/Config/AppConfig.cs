@@ -40,11 +40,17 @@ namespace ShareToPcReciver.Config
         public ArrivalAction FileAction { get; set; } = ArrivalAction.None;
         public bool ShowBalloon { get; set; } = true;
         public bool RunAtStartup { get; set; } = false;
+        /// <summary>本机设备唯一 ID，首次启动自动生成。</summary>
+        public string DeviceId { get; set; } = Guid.NewGuid().ToString();
 
         public static AppConfig Load()
         {
             if (!File.Exists(ConfigPath))
-                return new AppConfig();
+            {
+                var cfg = new AppConfig();
+                cfg.Save(); // 首次启动持久化设备配置（含 DeviceId）
+                return cfg;
+            }
 
             try
             {
@@ -53,6 +59,12 @@ namespace ShareToPcReciver.Config
                 if (cfg != null)
                 {
                     cfg.SaveDir = Environment.ExpandEnvironmentVariables(cfg.SaveDir);
+                    bool needSave = string.IsNullOrEmpty(cfg.DeviceId);
+                    if (needSave)
+                    {
+                        cfg.DeviceId = Guid.NewGuid().ToString();
+                        cfg.Save();
+                    }
                 }
                 return cfg ?? new AppConfig();
             }

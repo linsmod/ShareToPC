@@ -40,6 +40,7 @@ public class App extends Application {
         ioExecutor = Executors.newFixedThreadPool(4);
         mainHandler = new Handler(Looper.getMainLooper());
         settingsStore = new SettingsStore(this);
+        settingsStore.getDeviceId(); // 首次启动时生成持久化 deviceId
         deviceStore = new DeviceStore(this);
         jobStore = new JobStore(this);
         jobStore.markOutdateOnStartup();

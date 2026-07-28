@@ -361,7 +361,7 @@ public class TransferManager {
     private void sendItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
         client.connect();
         if (item.isText()) {
-            client.sendText(item.text);
+            client.sendText(item.text, job.id);
         } else {
             // 优先通过 PFD→FileChannel 读文件（内核文件句柄，skip/seek 可靠，支持断点续传）
             if (item.id != null) {
