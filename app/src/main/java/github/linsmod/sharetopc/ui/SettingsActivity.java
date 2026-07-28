@@ -12,10 +12,9 @@ import androidx.preference.PreferenceFragmentCompat;
 
 import com.google.android.material.appbar.MaterialToolbar;
 
-import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
 
-/** 设置页：清理策略、手动设备、清空历史。 */
+/** 设置页：清理策略、清空历史。 */
 public class SettingsActivity extends AppCompatActivity {
 
     @Override
@@ -37,16 +36,6 @@ public class SettingsActivity extends AppCompatActivity {
         @Override
         public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.preferences, rootKey);
-
-            Preference clearTasks = findPreference("clear_tasks");
-            if (clearTasks != null) {
-                clearTasks.setOnPreferenceClickListener(preference -> {
-                    App.get().jobStore.clear();
-                    Toast.makeText(requireContext(), R.string.task_cleared,
-                            Toast.LENGTH_SHORT).show();
-                    return true;
-                });
-            }
 
             Preference viewLogs = findPreference("view_logs");
             if (viewLogs != null) {

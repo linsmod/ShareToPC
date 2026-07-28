@@ -13,13 +13,9 @@ import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.Map;
 
-import github.linsmod.sharetopc.discovery.DiscoveredDevice;
-
 /** 设置存储：默认 SharedPreferences（与 PreferenceFragmentCompat 共用）。 */
 public class SettingsStore {
 
-    public static final String KEY_MANUAL_HOST = "manual_host";
-    public static final String KEY_MANUAL_PORT = "manual_port";
     public static final String KEY_ALIASES = "device_aliases";
     public static final String KEY_SCAN_TIMEOUT = "scan_timeout";
     public static final String KEY_LAST_HOST = "last_device_host";
@@ -32,27 +28,6 @@ public class SettingsStore {
 
     public SettingsStore(Context context) {
         this.prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    }
-
-    public String getManualHost() {
-        return prefs.getString(KEY_MANUAL_HOST, "");
-    }
-
-    public int getManualPort() {
-        String value = prefs.getString(KEY_MANUAL_PORT, String.valueOf(DEFAULT_PORT));
-        try {
-            return Integer.parseInt(value.trim());
-        } catch (NumberFormatException e) {
-            return DEFAULT_PORT;
-        }
-    }
-
-    /** 保存手动设备（主界面"手动添加"对话框）。 */
-    public void saveManualDevice(String host, String port) {
-        prefs.edit()
-                .putString(KEY_MANUAL_HOST, host)
-                .putString(KEY_MANUAL_PORT, port)
-                .apply();
     }
 
     /** 记录上次分享使用的目标设备。 */
@@ -70,28 +45,6 @@ public class SettingsStore {
         if (TextUtils.isEmpty(host)) return null;
         int port = prefs.getInt(KEY_LAST_PORT, DEFAULT_PORT);
         return host + ":" + port;
-    }
-
-    /** 删除手动设备。如果当前手动设备 host 与被删设备一致则清除。 */
-    public void deleteManualDevice(String host, int port) {
-        String manualHost = getManualHost();
-        if (host.equals(manualHost) && port == getManualPort()) {
-            prefs.edit()
-                    .remove(KEY_MANUAL_HOST)
-                    .remove(KEY_MANUAL_PORT)
-                    .apply();
-        }
-    }
-
-    /** 配置了手动设备时返回之，否则 null。 */
-    public DiscoveredDevice getManualDevice() {
-        String host = getManualHost();
-        if (TextUtils.isEmpty(host)) {
-            return null;
-        }
-        DiscoveredDevice device = new DiscoveredDevice("手动设备", host.trim(), getManualPort(), false);
-        device.alias = getDeviceAlias(device.host, device.port);
-        return device;
     }
 
     /** 扫描超时时长（秒），默认 30，限制在 5~120。 */

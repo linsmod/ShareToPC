@@ -180,20 +180,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
     private void refreshDevices() {
         devices.clear();
         devices.addAll(App.get().discoveryManager.getDevices());
-        DiscoveredDevice manual = App.get().settingsStore.getManualDevice();
-        if (manual != null) {
-            // 手动设备排最前，避免与自动发现重复
-            boolean exists = false;
-            for (DiscoveredDevice d : devices) {
-                if (d.address().equals(manual.address())) {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists) {
-                devices.add(0, manual);
-            }
-        }
         deviceAdapter.notifyDataSetChanged();
         boolean noDevice = devices.isEmpty();
         tvNoDeviceHint.setVisibility(noDevice ? View.VISIBLE : View.GONE);
@@ -309,10 +295,11 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
             if (item.isText()) {
                 dot.setBackgroundResource(R.drawable.dot_content_text);
-                String preview = item.text.length() > 40
-                        ? item.text.substring(0, 40) + "…" : item.text;
+                String displayText = item.text.trim();
+                String preview = displayText.length() > 40
+                        ? displayText.substring(0, 40) + "…" : displayText;
                 tvName.setText("文本：" + preview);
-                tvMeta.setText(item.text.length() + " 字符");
+                tvMeta.setText(displayText.length() + " 字符");
             } else {
                 dot.setBackgroundResource(R.drawable.dot_content_file);
                 tvName.setText(item.name);

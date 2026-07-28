@@ -23,6 +23,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.ui.DeviceQueueDialog;
 import github.linsmod.sharetopc.ui.DevicesFragment;
@@ -226,7 +227,7 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .setNeutralButton(R.string.delete_device, (d, which) -> {
-                    App.get().settingsStore.deleteManualDevice(device.host, device.port);
+                    App.get().deviceStore.deleteDevice(device.host, device.port);
                     viewModel.removeDevice(device);
                 })
                 .show();
@@ -287,7 +288,10 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            App.get().settingsStore.saveManualDevice(host, portStr);
+            int port = Integer.parseInt(portStr);
+
+            DiscoveredDevice device = new DiscoveredDevice("手动设备", host, port, false);
+            App.get().discoveryManager.addDevice(device);
             viewModel.refreshDevices();
             Toast.makeText(this, R.string.ok, Toast.LENGTH_SHORT).show();
             dialog.dismiss();

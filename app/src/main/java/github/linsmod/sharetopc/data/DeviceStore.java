@@ -75,6 +75,13 @@ public class DeviceStore {
         return id;
     }
 
+    /** 删除指定设备。 */
+    public synchronized void deleteDevice(String host, int port) {
+        db.delete(DBHelper.TABLE_DEVICE,
+                DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?",
+                new String[]{host, String.valueOf(port)});
+    }
+
     /** 删除最旧的记录，使总数不超过 maxCount。 */
     private void trimToMax(int maxCount) {
         // 先查询总数

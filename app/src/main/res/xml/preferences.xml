@@ -3,17 +3,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <EditTextPreference
-        android:defaultValue=""
-        android:key="manual_host"
-        android:title="@string/pref_manual_host_title" />
-
-    <EditTextPreference
-        android:defaultValue="51234"
-        android:inputType="number"
-        android:key="manual_port"
-        android:title="@string/pref_manual_port_title" />
-
-    <EditTextPreference
         android:defaultValue="30"
         android:inputType="number"
         android:key="scan_timeout"
@@ -25,10 +14,6 @@
         android:selectable="false"
         android:summary="@string/pref_port_info_summary"
         android:title="@string/pref_port_info_title" />
-
-    <Preference
-        android:key="clear_tasks"
-        android:title="@string/pref_clear_tasks_title" />
 
     <Preference
         android:key="view_logs"

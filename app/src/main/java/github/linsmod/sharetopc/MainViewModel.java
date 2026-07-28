@@ -103,7 +103,7 @@ public class MainViewModel extends AndroidViewModel {
         discoveryListener = new NsdDiscoveryManager.Listener() {
             @Override
             public void onDevicesChanged(List<DiscoveredDevice> list) {
-                devices.setValue(enrichDeviceProgress(mergeManualDevice(list)));
+                devices.setValue(enrichDeviceProgress(list));
                 updateConnState();
             }
 
@@ -412,19 +412,7 @@ public class MainViewModel extends AndroidViewModel {
 
     /** 刷新设备列表（备注名变更后调用）。也用于手动设备保存后刷新。 */
     public void refreshDevices() {
-        devices.setValue(enrichDeviceProgress(mergeManualDevice(app.discoveryManager.getDevices())));
-    }
-
-    /** 将手动添加的设备合并到列表中（去重）。 */
-    private List<DiscoveredDevice> mergeManualDevice(List<DiscoveredDevice> list) {
-        DiscoveredDevice manual = app.settingsStore.getManualDevice();
-        if (manual == null) return list;
-        for (DiscoveredDevice d : list) {
-            if (d.address().equals(manual.address())) return list;
-        }
-        List<DiscoveredDevice> merged = new ArrayList<>(list);
-        merged.add(manual);
-        return merged;
+        devices.setValue(enrichDeviceProgress(app.discoveryManager.getDevices()));
     }
 
     /** 从当前设备列表中移除指定设备（下次扫描可能重新发现）。 */

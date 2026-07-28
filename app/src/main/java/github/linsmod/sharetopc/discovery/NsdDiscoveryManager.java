@@ -68,6 +68,12 @@ public class NsdDiscoveryManager {
         devices.remove(host + ":" + port);
     }
 
+    /** 手动添加设备到缓存并持久化到数据库。 */
+    public synchronized void addDevice(DiscoveredDevice device) {
+        devices.put(device.address(), device);
+        deviceStore.saveDevice(device);
+    }
+
     public synchronized List<DiscoveredDevice> getDevices() {
         List<DiscoveredDevice> list = new ArrayList<>(devices.values());
         for (DiscoveredDevice d : list) {

@@ -11,11 +11,15 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
+
+import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.MainViewModel;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.TransferRecord;
@@ -71,6 +75,9 @@ public class TaskFragment extends Fragment {
 
         tvTaskTitle.setText(R.string.task_title);
 
+        FloatingActionButton fabClearTasks = view.findViewById(R.id.fabClearTasks);
+        fabClearTasks.setOnClickListener(v -> showClearTasksDialog());
+
         viewModel.addTasksChangeListener(tasksListener);
         viewModel.addEntryUpdateListener(entryUpdateListener);
 
@@ -88,6 +95,19 @@ public class TaskFragment extends Fragment {
     public void onResume() {
         super.onResume();
         viewModel.refreshTasks();
+    }
+
+    private void showClearTasksDialog() {
+        new AlertDialog.Builder(requireContext())
+                .setTitle("清空任务记录")
+                .setMessage("确定要清空所有传输任务记录吗？")
+                .setPositiveButton(R.string.ok, (d, which) -> {
+                    App.get().jobStore.clear();
+                    viewModel.refreshHistory();
+                    Toast.makeText(requireContext(), R.string.task_cleared, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton(R.string.cancel, null)
+                .show();
     }
 
     private void showGroupMenu(TaskGroup group, View anchor, float touchX) {
