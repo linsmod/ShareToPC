@@ -37,6 +37,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     private static final int TYPE_TRANSFER = 1;
     private static final int TYPE_ADD = 2;
 
+    public void submitList(List<DiscoveredDevice> discoveredDevices) {
+    }
+
     public interface OnDeviceClickListener {
         void onClick(DiscoveredDevice device);
         void onLongClick(DiscoveredDevice device);
