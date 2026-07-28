@@ -2,6 +2,11 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <Preference
+        android:icon="@drawable/ic_bug"
+        android:key="view_logs"
+        android:title="@string/pref_view_logs_title" />
+
     <EditTextPreference
         android:defaultValue="30"
         android:inputType="number"
@@ -10,19 +15,19 @@
         app:useSimpleSummaryProvider="true" />
 
     <Preference
-        android:key="port_info"
-        android:selectable="false"
-        android:summary="@string/pref_port_info_summary"
-        android:title="@string/pref_port_info_title" />
-
-    <Preference
-        android:key="view_logs"
-        android:title="@string/pref_view_logs_title" />
-
-    <Preference
         android:key="qq_group"
         android:summary="@string/pref_qq_group_summary"
         android:title="@string/pref_qq_group_title" />
+
+    <Preference
+        android:key="contact_dev"
+        android:summary="@string/pref_contact_dev_summary"
+        android:title="@string/pref_contact_dev_title" />
+
+    <Preference
+        android:key="pc_client"
+        android:summary="@string/pref_pc_client_summary"
+        android:title="@string/pref_pc_client_title" />
 
     <Preference
         android:key="version"
