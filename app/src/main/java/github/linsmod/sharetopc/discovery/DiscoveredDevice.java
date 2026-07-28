@@ -12,8 +12,7 @@ public class DiscoveredDevice {
     public String alias;
     /** 是否在线（当前扫描中发现）。 */
     public boolean isOnline;
-    /** 最近一次传输记录 ID，用于启动时恢复 TransferItemView。 */
-    public String lastTransferId;
+    public String lastJobId;
 
     public DiscoveredDevice(String name, String host, int port) {
         this(name, host, port, true);
@@ -26,7 +25,7 @@ public class DiscoveredDevice {
         this.isOnline = isOnline;
     }
 
-    public String key() {
+    public String address() {
         return host + ":" + port;
     }
 

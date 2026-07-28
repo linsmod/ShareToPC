@@ -78,11 +78,11 @@ public class HeartbeatManager {
 
         List<DiscoveredDevice> devices = discoveryManager.getDevices();
         Set<String> currentKeys = new HashSet<>();
-        for (DiscoveredDevice d : devices) currentKeys.add(d.key());
+        for (DiscoveredDevice d : devices) currentKeys.add(d.address());
 
         // 新设备 → 启连接
         for (DiscoveredDevice d : devices) {
-            connections.computeIfAbsent(d.key(), k ->
+            connections.computeIfAbsent(d.address(), k ->
                     connectionPool.submit(() -> connectionLoop(d)));
         }
 
@@ -104,7 +104,7 @@ public class HeartbeatManager {
             try {
                 maintainConnection(device);
             } catch (Exception e) {
-                LogX.d("Hb-" + device.key() + ": " + e.getMessage());
+                LogX.d("Hb-" + device.address() + ": " + e.getMessage());
             }
             // maintainConnection 退出 = 断线，确保标记离线
             discoveryManager.markOffline(device.host, device.port);
@@ -124,7 +124,7 @@ public class HeartbeatManager {
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
             DataInputStream in = new DataInputStream(socket.getInputStream());
 
-            LogX.d("Hb-" + device.key() + ": connected");
+            LogX.d("Hb-" + device.address() + ": connected");
             discoveryManager.markOnline(device.host, device.port);
 
             while (running) {
@@ -138,12 +138,12 @@ public class HeartbeatManager {
                 String type = TransferProtocol.optString(resp, "type");
 
                 if ("OFFLINE".equals(type)) {
-                    LogX.d("Hb-" + device.key() + ": OFFLINE → server shutting down");
+                    LogX.d("Hb-" + device.address() + ": OFFLINE → server shutting down");
                     discoveryManager.markOffline(device.host, device.port);
                     return;
                 }
                 if (!"PONG".equals(type)) {
-                    LogX.d("Hb-" + device.key() + ": unexpected type=" + type);
+                    LogX.d("Hb-" + device.address() + ": unexpected type=" + type);
                     discoveryManager.markOffline(device.host, device.port);
                     return;
                 }
@@ -160,20 +160,20 @@ public class HeartbeatManager {
                     resp = TransferProtocol.readHeader(in);
                     type = TransferProtocol.optString(resp, "type");
                     if ("OFFLINE".equals(type)) {
-                        LogX.d("Hb-" + device.key() + ": OFFLINE (idle read)");
+                        LogX.d("Hb-" + device.address() + ": OFFLINE (idle read)");
                         discoveryManager.markOffline(device.host, device.port);
                         return;
                     }
-                    LogX.d("Hb-" + device.key() + ": unsolicited type=" + type);
+                    LogX.d("Hb-" + device.address() + ": unsolicited type=" + type);
                 } catch (SocketTimeoutException e) {
                     // 超时 = 空闲了 PING_INTERVAL_MS，该发下个 PING 了
                 }
             }
         } catch (SocketTimeoutException e) {
             // PING 后没等到 PONG
-            LogX.d("Hb-" + device.key() + ": PING timeout");
+            LogX.d("Hb-" + device.address() + ": PING timeout");
         } catch (IOException e) {
-            LogX.d("Hb-" + device.key() + ": connection lost (" + e.getMessage() + ")");
+            LogX.d("Hb-" + device.address() + ": connection lost (" + e.getMessage() + ")");
         } finally {
             try { socket.close(); } catch (IOException ignored) {}
         }

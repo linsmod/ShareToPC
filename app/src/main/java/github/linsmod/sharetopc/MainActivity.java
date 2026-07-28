@@ -1,8 +1,6 @@
 package github.linsmod.sharetopc;
 
-import android.Manifest;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
@@ -19,13 +17,10 @@ import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -33,7 +28,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import github.linsmod.sharetopc.data.SettingsStore;
+import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.ui.DeviceAdapter;
 import github.linsmod.sharetopc.ui.DeviceQueueDialog;
@@ -63,15 +58,6 @@ public class MainActivity extends AppCompatActivity {
     private boolean sheetExpanded = false;
     private boolean sheetDragging = false;
     private float lastTouchY;
-
-    private final ActivityResultLauncher<String> locationPermissionLauncher =
-            registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
-                if (granted) {
-                    viewModel.startDiscovery();
-                } else {
-                    viewModel.setPermissionDeniedState();
-                }
-            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -179,13 +165,8 @@ public class MainActivity extends AppCompatActivity {
         rvHistory.setLayoutManager(new LinearLayoutManager(this));
         historyAdapter = new HistoryAdapter(new HistoryAdapter.ActionListener() {
             @Override
-            public void onRetry(github.linsmod.sharetopc.data.TransferRecord record) {
+            public void onRetryRequested(github.linsmod.sharetopc.data.TransferRecord record) {
                 viewModel.retry(record);
-            }
-
-            @Override
-            public void onSendPending(github.linsmod.sharetopc.data.TransferRecord record) {
-                showDevicePickerForPending(java.util.Collections.singletonList(record));
             }
 
             @Override
@@ -194,16 +175,8 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onItemClick(github.linsmod.sharetopc.data.TransferRecord record) {
-                if (record.contentType == github.linsmod.sharetopc.data.PendingContent.TYPE_TEXT
-                        && record.textContent != null) {
-                    showTextPreview(record);
-                }
-            }
-
-            @Override
-            public void onPauseTransfer() {
-                viewModel.pauseCurrentTransfer();
+            public void onPauseRequested(TransferRecord record) {
+                viewModel.pauseTransfer(record);
             }
         }, transferId -> viewModel.hasPfd(transferId));
         rvHistory.setAdapter(historyAdapter);
@@ -213,13 +186,6 @@ public class MainActivity extends AppCompatActivity {
 
         View btnRefreshDevices = findViewById(R.id.btnRefreshDevices);
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
-        // 设备传输子项操作
-        deviceAdapter.setOnCancelTransferListener(() -> viewModel.cancelCurrentTransfer());
-        deviceAdapter.setOnPauseTransferListener(() -> viewModel.pauseCurrentTransfer());
-        deviceAdapter.setOnResumeTransferListener(recordId -> viewModel.resumeTransfer(recordId));
-        viewModel.getScanning().observe(this, isScanning -> {
-            // 刷新按钮始终显示，connState 自身带倒计时，不再单独控制可见性
-        });
         findViewById(R.id.btnSelectAll).setOnClickListener(v -> historyAdapter.toggleSelectAll());
         findViewById(R.id.btnDeleteSelected).setOnClickListener(v -> confirmDeleteSelected());
         findViewById(R.id.btnCancelSelection).setOnClickListener(v -> historyAdapter.exitSelectionMode());
@@ -238,15 +204,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        viewModel.getDevices().observe(this, deviceAdapter::submitList);
         viewModel.getConnState().observe(this, tvConnState::setText);
-        viewModel.getDeviceTransfer().observe(this, info -> {
-            deviceAdapter.setCurrentTransfer(info);
-            if (deviceQueueDialog != null && deviceQueueDialog.isShowing() && info != null) {
-                deviceQueueDialog.updateProgress(info.percent);
-            }
-        });
-        viewModel.getHistory().observe(this, historyAdapter::submitList);
     }
 
     @Override
@@ -258,17 +216,9 @@ public class MainActivity extends AppCompatActivity {
             startForegroundService(serviceIntent);
         } else {
             startService(serviceIntent);
-        }
+         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                == PackageManager.PERMISSION_GRANTED) {
-            // 已有扫描在进行中（切回前台或 resume），不重启避免重新读秒
-            if (!App.get().discoveryManager.isDiscovering()) {
-                viewModel.startDiscovery();
-            }
-        } else {
-            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION);
-        }
+        viewModel.startDiscovery();
     }
 
     @Override
@@ -295,17 +245,12 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onPauseTransfer() {
-                viewModel.pauseCurrentTransfer();
+            public void onPauseRequested(TransferRecord record) {
+                viewModel.pauseTransfer(record);
             }
 
             @Override
-            public void onCancelTransfer() {
-                viewModel.cancelCurrentTransfer();
-            }
-
-            @Override
-            public void onResumeOrRetry(github.linsmod.sharetopc.data.TransferRecord record) {
+            public void onResumeRequested(github.linsmod.sharetopc.data.TransferRecord record) {
                 viewModel.retry(record);
             }
         }, this, viewModel.getHistory(), transferId -> viewModel.hasPfd(transferId));
@@ -381,73 +326,6 @@ public class MainActivity extends AppCompatActivity {
                 .setDuration(250)
                 .setInterpolator(new DecelerateInterpolator())
                 .start();
-    }
-
-    /** 为暂存记录选择目标设备后补发（支持批量），弹窗中显示在线/离线圆点。 */
-    private void showDevicePickerForPending(
-            java.util.List<github.linsmod.sharetopc.data.TransferRecord> records) {
-        java.util.List<github.linsmod.sharetopc.discovery.DiscoveredDevice> targets =
-                new java.util.ArrayList<>(App.get().discoveryManager.getDevices());
-        github.linsmod.sharetopc.discovery.DiscoveredDevice manual =
-                App.get().settingsStore.getManualDevice();
-        if (manual != null) {
-            boolean exists = false;
-            for (github.linsmod.sharetopc.discovery.DiscoveredDevice d : targets) {
-                if (d.key().equals(manual.key())) {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists) {
-                targets.add(0, manual);
-            }
-        }
-        if (targets.isEmpty()) {
-            Toast.makeText(this, R.string.no_device_for_send, Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        android.widget.ArrayAdapter<github.linsmod.sharetopc.discovery.DiscoveredDevice> adapter =
-                new android.widget.ArrayAdapter<github.linsmod.sharetopc.discovery.DiscoveredDevice>(
-                        this, R.layout.item_pick_device, targets) {
-            @NonNull
-            @Override
-            public android.view.View getView(int position, @Nullable android.view.View convertView,
-                                              @NonNull android.view.ViewGroup parent) {
-                if (convertView == null) {
-                    convertView = LayoutInflater.from(getContext())
-                            .inflate(R.layout.item_pick_device, parent, false);
-                }
-                github.linsmod.sharetopc.discovery.DiscoveredDevice device = getItem(position);
-                android.view.View dot = convertView.findViewById(R.id.vDot);
-                android.widget.TextView tvName = convertView.findViewById(R.id.tvName);
-                android.widget.TextView tvAddr = convertView.findViewById(R.id.tvAddr);
-                if (device != null) {
-                    dot.setBackgroundResource(
-                            device.isOnline ? R.drawable.dot_online : R.drawable.dot_offline);
-                    tvName.setText(device.displayName());
-                    tvAddr.setText(device.host + ":" + device.port);
-                }
-                return convertView;
-            }
-        };
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.choose_device)
-                .setAdapter(adapter, (d, which) -> {
-                    github.linsmod.sharetopc.discovery.DiscoveredDevice chosen = targets.get(which);
-                    for (github.linsmod.sharetopc.data.TransferRecord r : records) {
-                        viewModel.sendPending(r, chosen);
-                    }
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .create();
-        dialog.show();
-        android.view.Window window = dialog.getWindow();
-        if (window != null) {
-            window.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.85),
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-        }
     }
 
     /** 设备备注名对话框：支持自由输入与常用预设，可删除设备。 */

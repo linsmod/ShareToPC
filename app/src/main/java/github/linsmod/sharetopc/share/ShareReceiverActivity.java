@@ -1,7 +1,5 @@
 package github.linsmod.sharetopc.share;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -17,14 +15,14 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.data.PendingContent;
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
 
@@ -38,12 +36,12 @@ public class ShareReceiverActivity extends AppCompatActivity {
     private TextView tvNoDeviceHint;
     private Spinner spinnerDevices;
     private Button btnSend;
-    private Button btnStash;
     private Button btnCancel;
 
     private final List<DiscoveredDevice> devices = new ArrayList<>();
     private ArrayAdapter<DiscoveredDevice> deviceAdapter;
-    private List<PendingContent> pendingItems;
+    private List<SendEntry> pendingItems;
+    private String jobId;
     private boolean startedDiscoveryHere = false;
 
     private final NsdDiscoveryManager.Listener discoveryListener = list -> refreshDevices();
@@ -67,7 +65,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
         tvNoDeviceHint = findViewById(R.id.tvNoDeviceHint);
         spinnerDevices = findViewById(R.id.spinnerDevices);
         btnSend = findViewById(R.id.btnSend);
-        btnStash = findViewById(R.id.btnStash);
         btnCancel = findViewById(R.id.btnCancel);
 
         deviceAdapter = new ArrayAdapter<DiscoveredDevice>(this,
@@ -108,17 +105,23 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
         btnCancel.setOnClickListener(v -> finish());
         btnSend.setOnClickListener(v -> doSend());
-        btnStash.setOnClickListener(v -> doStash());
 
-        startDiscoveryIfPermitted();
+        startDiscovery();
         parseShareIntent();
     }
 
     private void parseShareIntent() {
         tvPreviewFallback.setVisibility(View.VISIBLE);
         tvPreviewFallback.setText(R.string.parsing_share);
+
         App.get().ioExecutor.execute(() -> {
-            List<PendingContent> items = ShareParser.parse(getApplicationContext(), getIntent());
+            this.jobId = UUID.randomUUID().toString();
+            List<SendEntry> items = ShareParser.parse(getApplicationContext(), getIntent());
+            items.forEach(x->{
+                x.jobId = jobId;
+                App.get().jobStore.addJobEntry(x);
+            });
+
             runOnUiThread(() -> {
                 tvPreviewFallback.setVisibility(View.GONE);
                 if (items.isEmpty()) {
@@ -137,11 +140,11 @@ public class ShareReceiverActivity extends AppCompatActivity {
         });
     }
 
-    private String buildCountSummary(List<PendingContent> items) {
+    private String buildCountSummary(List<SendEntry> items) {
         int fileCount = 0;
         int textCount = 0;
         long totalSize = 0;
-        for (PendingContent item : items) {
+        for (SendEntry item : items) {
             if (item.isText()) {
                 textCount++;
             } else {
@@ -163,29 +166,12 @@ public class ShareReceiverActivity extends AppCompatActivity {
         return sb.toString();
     }
 
-    private void startDiscoveryIfPermitted() {
-        boolean granted = ContextCompat.checkSelfPermission(this,
-                Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
-        if (granted) {
-            App.get().discoveryManager.addListener(discoveryListener);
-            startedDiscoveryHere = !App.get().discoveryManager.isDiscovering();
-            App.get().discoveryManager.startDiscovery(
-                    App.get().settingsStore.getScanTimeoutSec() * 1000L);
-        }
+    private void startDiscovery() {
+        App.get().discoveryManager.addListener(discoveryListener);
+        startedDiscoveryHere = !App.get().discoveryManager.isDiscovering();
+        App.get().discoveryManager.startDiscovery(
+                App.get().settingsStore.getScanTimeoutSec() * 1000L);
         refreshDevices();
-    }
-
-    /** 暂存：不发送，写入 PENDING 历史记录，文件通过 content:// URI 保留访问。 */
-    private void doStash() {
-        if (pendingItems == null || pendingItems.isEmpty()) {
-            return;
-        }
-        for (PendingContent item : pendingItems) {
-            App.get().historyStore.add(
-                    github.linsmod.sharetopc.data.TransferRecord.pending(item, ""));
-        }
-        Toast.makeText(this, R.string.stashed, Toast.LENGTH_LONG).show();
-        finish();
     }
 
     private void refreshDevices() {
@@ -196,7 +182,7 @@ public class ShareReceiverActivity extends AppCompatActivity {
             // 手动设备排最前，避免与自动发现重复
             boolean exists = false;
             for (DiscoveredDevice d : devices) {
-                if (d.key().equals(manual.key())) {
+                if (d.address().equals(manual.address())) {
                     exists = true;
                     break;
                 }
@@ -220,8 +206,8 @@ public class ShareReceiverActivity extends AppCompatActivity {
                 DiscoveredDevice d = devices.get(i);
                 if (d.isOnline) {
                     if (firstOnline < 0) firstOnline = i;
-                    if (lastKey != null && d.key().equals(lastKey)) { sel = i; break; } // 上次+在线 → 直接选
-                } else if (lastKey != null && d.key().equals(lastKey)) {
+                    if (lastKey != null && d.address().equals(lastKey)) { sel = i; break; } // 上次+在线 → 直接选
+                } else if (lastKey != null && d.address().equals(lastKey)) {
                     lastOffline = i;
                 }
             }
@@ -237,9 +223,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
         boolean hasContent = pendingItems != null && !pendingItems.isEmpty();
         boolean hasDevice = !devices.isEmpty();
         btnSend.setEnabled(hasContent && hasDevice);
-        // 有目标设备时不显示暂存，直接发送即可
-        btnStash.setEnabled(hasContent);
-        btnStash.setVisibility(hasDevice ? View.GONE : View.VISIBLE);
     }
 
     private void doSend() {
@@ -249,11 +232,16 @@ public class ShareReceiverActivity extends AppCompatActivity {
         }
         App.get().settingsStore.saveLastDevice(target.host, target.port);
         // 为每个文件预打开 PFD，获取内核文件句柄以支持可靠 skip/seek 断点续传
-        for (PendingContent item : pendingItems) {
-            ShareParser.attachPfd(getApplicationContext(), item);
+        for (SendEntry item : pendingItems) {
+            var pfd = ShareParser.createPfd(getApplicationContext(), item);
+            if(pfd!=null)
+                App.get().transferManager.registerPfdIfNeeded(item.name,item.id,pfd);
         }
-        App.get().transferManager.enqueue(pendingItems,
+        if(jobId==null)
+            throw new RuntimeException("Null of jobId");
+        App.get().transferManager.enqueue(jobId, pendingItems,
                 target.host, target.port, target.displayName());
+        jobId = null;
         // 立即关闭窗口，传输在后台继续
         finish();
     }
@@ -271,9 +259,9 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
     private class ContentAdapter extends BaseAdapter {
 
-        private final List<PendingContent> items = new ArrayList<>();
+        private final List<SendEntry> items = new ArrayList<>();
 
-        void setItems(List<PendingContent> newItems) {
+        void setItems(List<SendEntry> newItems) {
             items.clear();
             items.addAll(newItems);
             notifyDataSetChanged();
@@ -285,7 +273,7 @@ public class ShareReceiverActivity extends AppCompatActivity {
         }
 
         @Override
-        public PendingContent getItem(int pos) {
+        public SendEntry getItem(int pos) {
             return items.get(pos);
         }
 
@@ -300,7 +288,7 @@ public class ShareReceiverActivity extends AppCompatActivity {
                 convertView = LayoutInflater.from(ShareReceiverActivity.this)
                         .inflate(R.layout.item_share_content, parent, false);
             }
-            PendingContent item = getItem(pos);
+            SendEntry item = getItem(pos);
             View dot = convertView.findViewById(R.id.vContentTypeDot);
             TextView tvName = convertView.findViewById(R.id.tvContentName);
             TextView tvMeta = convertView.findViewById(R.id.tvContentMeta);

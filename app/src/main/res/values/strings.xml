@@ -6,7 +6,7 @@
     <string name="status_found">已发现 %1$d 台设备</string>
     <string name="status_not_found">未发现设备</string>
     <string name="refresh">刷新</string>
-    <string name="status_no_permission">自动发现不可用：请授予定位权限，或手动添加设备</string>
+    <string name="status_no_permission">自动发现不可用，请手动添加设备</string>
     <string name="devices_title">设备列表</string>
     <string name="add_manual_device">手动添加设备</string>
     <string name="add_manual_device_title">手动添加设备</string>
@@ -17,12 +17,12 @@
     <string name="retry">重试</string>
     <string name="send">发送</string>
     <string name="cancel">取消</string>
-    <string name="share_send_to">发送文件到</string>
+    <string name="share_send_to">发送到</string>
     <string name="share_target_device">目标设备</string>
     <string name="send_success">发送成功</string>
     <string name="send_failed">发送失败：%1$s</string>
     <string name="parsing_share">正在处理分享内容…</string>
-    <string name="no_devices_hint">未曾连接任何目标设备，你可以暂存并稍后发送</string>
+    <string name="no_devices_hint">未曾连接任何目标设备，请添加手动设备或等待自动发现</string>
     <string name="manual_device_dialog_title">手动添加设备</string>
     <string name="manual_host_hint">IP 地址，如 192.168.1.5</string>
     <string name="manual_port_hint">端口，默认 51234</string>
@@ -48,9 +48,6 @@
     <string name="action_resume">继续</string>
     <string name="action_pause">暂停</string>
     <string name="state_paused">已暂停</string>
-    <string name="stash">暂存</string>
-    <string name="stashed">已暂存，可在主界面历史中选择设备发送</string>
-    <string name="result_pending">需要选择目标设备</string>
     <string name="action_send">发送</string>
     <string name="choose_device">选择目标设备</string>
     <string name="no_device_for_send">暂无可用设备，请先添加手动设备或等待自动发现</string>

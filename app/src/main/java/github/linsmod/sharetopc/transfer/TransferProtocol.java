@@ -31,8 +31,11 @@ public final class TransferProtocol {
     }
 
     /** 供 writeFileFrame 在 chunk 间检查是否取消。 */
-    public interface CancelChecker {
-        boolean isCancelled();
+    public interface Cancellable {
+        boolean isCancelRequested();
+        void onCancelled();
+
+        void cancel();
     }
 
     private TransferProtocol() {
@@ -47,7 +50,7 @@ public final class TransferProtocol {
     /** 写带文件 payload 的帧（FILE），每个 chunk 都带帧头，chunk 之间允许插入 CANCEL 等控制帧。 */
     public static void writeFileFrame(DataOutputStream out, JsonObject header,
                                       File file, Progress progress,
-                                      CancelChecker cancelChecker) throws IOException {
+                                      Cancellable cancellable) throws IOException {
         writeHeader(out, header);
         long total = file.length();
         long sent = 0;
@@ -56,7 +59,7 @@ public final class TransferProtocol {
             int n;
             while ((n = in.read(buf)) != -1) {
                 // chunk 间检查取消：连续发 3 次 CANCEL 帧确保 PC 收到
-                if (cancelChecker != null && cancelChecker.isCancelled()) {
+                if (cancellable != null && cancellable.isCancelRequested()) {
                     JsonObject cancel = createCancelHeader();
                     writeFrame(out, cancel);
                     writeFrame(out, cancel);
@@ -84,13 +87,13 @@ public final class TransferProtocol {
     public static void writeFileFrame(DataOutputStream out, JsonObject header,
                                       InputStream contentStream, long total,
                                       Progress progress,
-                                      CancelChecker cancelChecker) throws IOException {
+                                      Cancellable cancellable) throws IOException {
         writeHeader(out, header);
         long sent = 0;
         byte[] buf = new byte[FileUtils.BUFFER_SIZE];
         int n;
         while ((n = contentStream.read(buf)) != -1) {
-            if (cancelChecker != null && cancelChecker.isCancelled()) {
+            if (cancellable != null && cancellable.isCancelRequested()) {
                 JsonObject cancel = createCancelHeader();
                 writeFrame(out, cancel);
                 writeFrame(out, cancel);
@@ -133,35 +136,36 @@ public final class TransferProtocol {
     /** 仅写数据块（CHUNK + payload），不写 FILE 头。headless 模式，FILE 头已在之前单独发送。 */
     public static void writeFileContent(DataOutputStream out, InputStream contentStream,
                                         long total, Progress progress,
-                                        CancelChecker cancelChecker) throws IOException {
-        writeContentLoop(out, contentStream, total, 0, progress, cancelChecker);
+                                        Cancellable cancellable) throws IOException {
+        writeContentLoop(out, contentStream, total, 0, progress, cancellable);
     }
 
     /** 断点续传数据写入：首包 RESUME_CHUNK，后续 CHUNK。不写 FILE 头。 */
     public static void writeFileContentWithResume(DataOutputStream out, InputStream contentStream,
                                                   long total, long startOffset,
                                                   Progress progress,
-                                                  CancelChecker cancelChecker) throws IOException {
-        writeContentLoop(out, contentStream, total, startOffset, progress, cancelChecker);
+                                                  Cancellable cancellable) throws IOException {
+        writeContentLoop(out, contentStream, total, startOffset, progress, cancellable);
     }
 
     /** 通用数据块循环：startOffset == 0 时全部用 CHUNK；> 0 时首包用 RESUME_CHUNK。 */
     private static void writeContentLoop(DataOutputStream out, InputStream contentStream,
                                          long total, long startOffset,
                                          Progress progress,
-                                         CancelChecker cancelChecker) throws IOException {
+                                         Cancellable cancellable) throws IOException {
         long sent = 0;
         byte[] buf = new byte[FileUtils.BUFFER_SIZE];
         int n;
         boolean isResume = startOffset > 0;
         boolean firstChunk = true;
         while ((n = contentStream.read(buf)) != -1) {
-            if (cancelChecker != null && cancelChecker.isCancelled()) {
+            if (cancellable != null && cancellable.isCancelRequested()) {
                 JsonObject cancel = createCancelHeader();
                 writeFrame(out, cancel);
                 writeFrame(out, cancel);
                 writeFrame(out, cancel);
                 out.flush();
+                cancellable.onCancelled();
                 throw new IOException("Transfer cancelled by user");
             }
             if (isResume && firstChunk) {

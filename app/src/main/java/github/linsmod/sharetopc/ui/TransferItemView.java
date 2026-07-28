@@ -5,61 +5,70 @@ import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.CheckBox;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+
 import github.linsmod.sharetopc.R;
+import github.linsmod.sharetopc.data.SendEntry;
+import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.util.FileUtils;
 import github.linsmod.sharetopc.util.TransferStatusHelper;
-
-/**
- * 统一传输项控件，封装 item_transfer_unified 的视图绑定 + 状态映射 + 按钮逻辑。
- * 三处复用：设备传输子项 / 传输历史 / 设备任务弹窗。
- *
- * <pre>
- * 用法：
- *   TransferItemView item = new TransferItemView(context);
- *   BindData data = new BindData();
- *   data.name = "file.txt";
- *   data.status = "SENDING";
- *   data.meta = "传输中 · 192.168.1.1:80 · 1.2MB · 14:30";
- *   data.actionMode = ActionMode.ACTIVE;
- *   item.bind(data);
- *   item.setOnActionListener(listener);
- * </pre>
- */
 public class TransferItemView extends LinearLayout {
+    static final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+    public static BindData createBindData(Context ctx,TransferRecord record) {
+        var data  = new BindData();
+        data.id = record.id;
 
-    /** 按钮区显示模式。 */
-    public enum ActionMode {
-        /** 全部隐藏（如 SUCCESS）。 */
-        NONE,
-        /** 暂停 + 取消（传输中）。 */
-        ACTIVE,
-        /** 显示操作按钮（重试/继续/发送）。 */
-        RETRY
-    }
+        // 文件名（带 [文本] 前缀）
+        String prefix = record.contentType == SendEntry.TYPE_TEXT
+                ? "[" + ctx.getString(R.string.type_text) + "] " : "";
+        data.name = prefix + (record.name != null ? record.name : "");
 
-    /** 操作回调。 */
-    public interface OnActionListener {
-        void onPause();
-        void onCancel();
-        void onResume();
+        // 状态圆点
+        data.statusColor = TransferStatusHelper.dotColor(ctx, record);
+
+        // 元信息：状态 · 大小 · 时间
+        StringBuilder meta = new StringBuilder(record.statusLabel());
+        if (record.size > 0) {
+            meta.append(" · ").append(FileUtils.formatSize(record.size));
+        }
+        if (record.timeMillis > 0) {
+            meta.append(" · ").append(timeFormat.format(new Date(record.timeMillis)));
+        }
+        data.meta = meta.toString();
+
+        // 百分比 + 进度条
+        boolean hasProgress = record.totalBytes > 0
+                && (TransferRecord.STATUS_SENDING==(record.getStatus())
+                || record.isPaused()
+        );
+        if (hasProgress) {
+            int pct = (int) (record.sentBytes * 100 / record.totalBytes);
+            data.showProgressBar = true;
+            data.progress = pct;
+            data.percent = pct;
+        }
+        return data;
     }
 
     /** 统一绑定数据，三处 Adapter 共用同一份字段。 */
     public static class BindData {
+        /** 记录 id（切换回调时传递）。 */
+        @Nullable public String id;
         /** 文件名（可含前缀如 "[文本] "）。 */
         public String name = "";
         /** 文件名透明度（1.0 正常，0.4 文件已删除灰化）。 */
         public float nameAlpha = 1.0f;
-        /** 传输状态字符串："SENDING" / "SUCCESS" / "FAILED" / "CANCELLED"（映射圆点颜色）。 */
-        public String status = "";
+        public int statusColor;
         /** meta 行完整文案（Adapter 自行拼接后传入）。 */
         public String meta = "";
         /** 百分比数值，-1 表示隐藏。 */
@@ -70,10 +79,6 @@ public class TransferItemView extends LinearLayout {
         /** 多选框。 */
         public boolean showCheckbox = false;
         public boolean checkboxChecked = false;
-        /** 按钮区。 */
-        public ActionMode actionMode = ActionMode.NONE;
-        @Nullable public String actionLabel;
-        public boolean actionEnabled = false;
     }
 
     private final View vStatus;
@@ -82,12 +87,6 @@ public class TransferItemView extends LinearLayout {
     private final TextView tvPercent;
     private final ProgressBar progressBar;
     private final TextView tvMeta;
-    private final ImageButton btnPause;
-    private final ImageButton btnCancel;
-    private final Button btnResume;
-
-    @Nullable
-    private OnActionListener actionListener;
 
     public TransferItemView(Context context) {
         this(context, null);
@@ -100,10 +99,10 @@ public class TransferItemView extends LinearLayout {
     public TransferItemView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         setOrientation(HORIZONTAL);
-        // 代码创建时默认撑满宽度，避免在某些容器中只能显示 wrap_content 宽度
         setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT));
+        setClickable(true);
 
         LayoutInflater.from(context).inflate(R.layout.item_transfer_unified, this, true);
 
@@ -113,12 +112,9 @@ public class TransferItemView extends LinearLayout {
         tvPercent = findViewById(R.id.tvTransferPercent);
         progressBar = findViewById(R.id.progressTransfer);
         tvMeta = findViewById(R.id.tvTransferMeta);
-        btnPause = findViewById(R.id.btnTransferPause);
-        btnCancel = findViewById(R.id.btnTransferCancel);
-        btnResume = findViewById(R.id.btnTransferResume);
     }
 
-    // ── 数据设置 ──────────────────────────────────────────
+    // ── 数据设置 ──────────────────────────────────
 
     public void setName(String name) {
         tvName.setText(name);
@@ -127,17 +123,6 @@ public class TransferItemView extends LinearLayout {
     /** 设置名称透明度（如文件已删除则灰化）。 */
     public void setNameAlpha(float alpha) {
         tvName.setAlpha(alpha);
-    }
-
-    /** 设置传输状态（自动映射圆点颜色 + 状态文案）。 */
-    public void setTransferStatus(String status) {
-        Context ctx = getContext();
-        vStatus.setBackgroundColor(TransferStatusHelper.dotColor(ctx, status));
-    }
-
-    /** 设置状态文案中使用的状态文字（用于 meta 行拼接）。 */
-    public static String statusLabel(Context ctx, String status) {
-        return TransferStatusHelper.statusText(ctx, status);
     }
 
     public void setMeta(String meta) {
@@ -162,7 +147,7 @@ public class TransferItemView extends LinearLayout {
         vStatus.setBackgroundColor(color);
     }
 
-    // ── 元素可见性 ────────────────────────────────────────
+    // ── 元素可见性 ────────────────────────────────
 
     public void setStatusDotVisible(boolean visible) {
         vStatus.setVisibility(visible ? VISIBLE : GONE);
@@ -189,10 +174,11 @@ public class TransferItemView extends LinearLayout {
         return cbSelect.isChecked();
     }
 
-    // ── 统一绑定入口 ──────────────────────────────────────
+    // ── 统一绑定入口 ──────────────────────────────
 
-    /** 一次调用完成所有字段绑定（除 setOnActionListener / setOnClickListener 等回调）。 */
-    public void bind(@Nullable BindData data) {
+    /** 一次调用完成所有字段绑定。 */
+    public void bind(@NonNull TransferRecord record) {
+        TransferItemView.BindData data =  TransferItemView.createBindData(getContext(),record);
         if (data == null) return;
 
         // 名称
@@ -200,9 +186,9 @@ public class TransferItemView extends LinearLayout {
         tvName.setAlpha(data.nameAlpha);
 
         // 状态圆点
-        if (data.status != null && !data.status.isEmpty()) {
+        if (data.statusColor>0) {
             vStatus.setVisibility(VISIBLE);
-            vStatus.setBackgroundColor(TransferStatusHelper.dotColor(getContext(), data.status));
+            vStatus.setBackgroundColor(data.statusColor);
         } else {
             vStatus.setVisibility(GONE);
         }
@@ -229,61 +215,5 @@ public class TransferItemView extends LinearLayout {
         // 多选框
         cbSelect.setVisibility(data.showCheckbox ? VISIBLE : GONE);
         if (data.showCheckbox) cbSelect.setChecked(data.checkboxChecked);
-
-        // 按钮区
-        setActionMode(data.actionMode, data.actionLabel, data.actionEnabled);
-    }
-
-    // ── 按钮区 ────────────────────────────────────────────
-
-    /** 设置操作回调。 */
-    public void setOnActionListener(@Nullable OnActionListener listener) {
-        this.actionListener = listener;
-    }
-
-    /**
-     * 设置按钮显示模式。
-     *
-     * @param mode      NONE / ACTIVE / RETRY
-     * @param label     RETRY 模式下按钮文案（如"重试"/"继续"/"发送"）
-     * @param enabled   RETRY 模式下按钮是否可点击
-     */
-    public void setActionMode(ActionMode mode, @Nullable String label, boolean enabled) {
-        switch (mode) {
-            case NONE:
-                btnPause.setVisibility(GONE);
-                btnPause.setOnClickListener(null);
-                btnCancel.setVisibility(GONE);
-                btnCancel.setOnClickListener(null);
-                btnResume.setVisibility(GONE);
-                btnResume.setOnClickListener(null);
-                break;
-
-            case ACTIVE:
-                btnResume.setVisibility(GONE);
-                btnResume.setOnClickListener(null);
-                btnPause.setVisibility(VISIBLE);
-                btnPause.setOnClickListener(v -> {
-                    if (actionListener != null) actionListener.onPause();
-                });
-                btnCancel.setVisibility(VISIBLE);
-                btnCancel.setOnClickListener(v -> {
-                    if (actionListener != null) actionListener.onCancel();
-                });
-                break;
-
-            case RETRY:
-                btnPause.setVisibility(GONE);
-                btnPause.setOnClickListener(null);
-                btnCancel.setVisibility(GONE);
-                btnCancel.setOnClickListener(null);
-                btnResume.setVisibility(VISIBLE);
-                btnResume.setText(label != null ? label : getContext().getString(R.string.retry));
-                btnResume.setEnabled(enabled);
-                btnResume.setOnClickListener(v -> {
-                    if (actionListener != null) actionListener.onResume();
-                });
-                break;
-        }
     }
 }

@@ -3,6 +3,7 @@ package github.linsmod.sharetopc.discovery;
 import android.content.Context;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -85,8 +86,8 @@ public class NsdDiscoveryManager {
     /** 加载已知设备到内存（离线状态），启动时调用。 */
     private synchronized void loadKnownDevices() {
         for (DiscoveredDevice d : deviceStore.loadAll()) {
-            if (!devices.containsKey(d.key())) {
-                devices.put(d.key(), d);
+            if (!devices.containsKey(d.address())) {
+                devices.put(d.address(), d);
             }
         }
     }
@@ -210,11 +211,11 @@ public class NsdDiscoveryManager {
                                 serviceInfo.getServiceName(), host, serviceInfo.getPort(), true);
                         synchronized (NsdDiscoveryManager.this) {
                             // 如果已存在同 key 的离线设备，替换为在线设备（保留 alias）
-                            DiscoveredDevice existing = devices.get(device.key());
+                            DiscoveredDevice existing = devices.get(device.address());
                             if (existing != null) {
                                 existing.isOnline = true;
                             } else {
-                                devices.put(device.key(), device);
+                                devices.put(device.address(), device);
                             }
                         }
                         deviceStore.saveDevice(device);

@@ -5,12 +5,20 @@ import android.content.Context;
 import androidx.annotation.Nullable;
 
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.data.PendingContent;
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.data.TransferRecord;
 
 /**
  * 传输状态公共映射工具：三处传输 Item（设备传输子项 / 传输历史 / 设备任务弹窗）
- * 共用同一套 状态→颜色、状态→文案、重试禁用判断 的映射逻辑。
+ * 共用同一套状态→颜色、状态→文案、重试禁用判断的映射逻辑。
+ * <p>
+ * 内部 6 种状态映射为 4 种用户可见状态，降低心智负担：
+ * <ul>
+ *   <li>传输中：SENDING / CONNECTING / PENDING</li>
+ *   <li>已暂停：PAUSED / CANCELLED</li>
+ *   <li>已完成：SUCCESS</li>
+ *   <li>失败：FAILED</li>
+ * </ul>
  */
 public class TransferStatusHelper {
 
@@ -26,74 +34,32 @@ public class TransferStatusHelper {
      */
     public static boolean canResumeOrRetry(TransferRecord record, @Nullable PfdChecker pfdChecker) {
         if (record == null || !record.canDeliver()) return false;
-        if (record.contentType == PendingContent.TYPE_TEXT) return true;
-        return pfdChecker == null || pfdChecker.hasPfd(record.transferId);
+        if (record.contentType == SendEntry.TYPE_TEXT) return true;
+        return pfdChecker == null || pfdChecker.hasPfd(record.id);
     }
 
-    /** 通用状态常量（兼容 TransferRecord 与 DeviceTaskAdapter 的 int 状态）。 */
-    public static final String STATUS_SUCCESS = "SUCCESS";
-    public static final String STATUS_FAILED = "FAILED";
-    public static final String STATUS_CANCELLED = "CANCELLED";
-    public static final String STATUS_SENDING = "SENDING";
-    public static final String STATUS_PENDING = "PENDING";
-    public static final String STATUS_PAUSED = "PAUSED";
-
-    /** 状态圆点颜色。 */
-    public static int dotColor(Context ctx, String status) {
-        if (status == null) return ctx.getColor(android.R.color.darker_gray);
-        switch (status) {
-            case STATUS_SUCCESS:
-                return ctx.getColor(android.R.color.holo_green_dark);
-            case STATUS_SENDING:
-            case "CONNECTING":
+    /** 状态圆点颜色（使用简化后的用户可见状态）。 */
+    public static int dotColor(Context ctx, TransferRecord r) {
+        if (r == null) return 0;
+        switch (r.status) {
+            case TransferRecord.STATUS_IDLE:
+                if(r.idleReason==TransferRecord.IDLE_REASON_SUCCESS)
+                    return ctx.getColor(android.R.color.holo_green_dark);
+                else if(r.idleReason==TransferRecord.IDLE_REASON_CREATED){
+                    return ctx.getColor(android.R.color.darker_gray);
+                }
+                else if(r.idleReason==TransferRecord.IDLE_REASON_IO_ERROR||
+                r.idleReason==TransferRecord.IDLE_REASON_NET_ERROR){
+                    return ctx.getColor(android.R.color.holo_red_dark);
+                }
+                else if(r.idleReason==TransferRecord.IDLE_REASON_PAUSED){
+                    return ctx.getColor(android.R.color.holo_blue_light);
+                }
+            case TransferRecord.STATUS_SENDING:
                 return ctx.getColor(android.R.color.holo_blue_light);
-            case STATUS_PENDING:
-                return ctx.getColor(android.R.color.holo_orange_light);
-            case STATUS_CANCELLED:
-            case STATUS_PAUSED:
-                return ctx.getColor(android.R.color.darker_gray);
-            case STATUS_FAILED:
             default:
                 return ctx.getColor(android.R.color.holo_red_dark);
         }
-    }
-
-    /** 状态文案。 */
-    public static String statusText(Context ctx, String status) {
-        if (status == null) return "";
-        switch (status) {
-            case STATUS_SUCCESS:
-                return ctx.getString(R.string.result_ok);
-            case STATUS_SENDING:
-            case "CONNECTING":
-                return ctx.getString(R.string.result_sending);
-            case STATUS_PENDING:
-                return ctx.getString(R.string.result_pending);
-            case STATUS_CANCELLED:
-                return ctx.getString(R.string.result_cancelled);
-            case STATUS_PAUSED:
-                return ctx.getString(R.string.state_paused);
-            case STATUS_FAILED:
-            default:
-                return ctx.getString(R.string.result_failed);
-        }
-    }
-
-    /** 将 DeviceTaskAdapter 的 int 状态转为通用字符串状态。 */
-    public static String fromTaskStatus(int taskStatus) {
-        switch (taskStatus) {
-            case 1: return STATUS_SENDING;   // STATUS_TRANSFERRING
-            case 2: return STATUS_SUCCESS;
-            case 3: return STATUS_FAILED;
-            case 4: return STATUS_CANCELLED;
-            default: return STATUS_FAILED;
-        }
-    }
-
-    /** 将 TransferRecord 的状态转为通用字符串状态。 */
-    public static String fromRecord(TransferRecord record) {
-        if (record == null) return STATUS_FAILED;
-        return record.statusOrLegacy();
     }
 
     /** 进度百分比文字颜色：100% 绿色，其余蓝色。 */

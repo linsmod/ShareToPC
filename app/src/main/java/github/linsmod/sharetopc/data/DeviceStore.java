@@ -1,116 +1,109 @@
 package github.linsmod.sharetopc.data;
 
+import android.content.ContentValues;
 import android.content.Context;
-import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 
-import androidx.preference.PreferenceManager;
-
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
-import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 
-/** 已知设备持久化存储（SharedPreferences + Gson），用于离线设备仍可显示。 */
+/** 已知设备持久化存储（SQLite），用于离线设备仍可显示。 */
 public class DeviceStore {
 
-    private static final String KEY_DEVICES = "known_devices";
-
-    private final SharedPreferences prefs;
-    private final Gson gson = new Gson();
+    private final SQLiteDatabase db;
 
     public DeviceStore(Context context) {
-        this.prefs = PreferenceManager.getDefaultSharedPreferences(context);
+        DBHelper helper = new DBHelper(context);
+        this.db = helper.getWritableDatabase();
     }
 
-    /** 加载所有已知设备（isOnline = false）。 */
-    public List<DiscoveredDevice> loadAll() {
-        String json = prefs.getString(KEY_DEVICES, null);
-        if (json == null) {
-            return new ArrayList<>();
-        }
-        try {
-            Type type = new TypeToken<List<KnownDevice>>() {}.getType();
-            List<KnownDevice> list = gson.fromJson(json, type);
-            List<DiscoveredDevice> result = new ArrayList<>();
-            if (list != null) {
-                for (KnownDevice kd : list) {
-                    DiscoveredDevice d = new DiscoveredDevice(kd.name, kd.host, kd.port, false);
-                    d.lastTransferId = kd.lastTransferId;
-                    result.add(d);
-                }
+    /** 加载所有已知设备（isOnline = false），按最后出现时间降序（最新的在前）。 */
+    public synchronized List<DiscoveredDevice> loadAll() {
+        List<DiscoveredDevice> result = new ArrayList<>();
+        Cursor c = db.query(DBHelper.TABLE_DEVICE,
+                null,
+                null, null, null, null,
+                DBHelper.COL_DEV_LAST_SEEN + " DESC");
+        if (c != null) {
+            while (c.moveToNext()) {
+                String host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_HOST));
+                int port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PORT));
+                String name = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_NAME));
+                String lastJobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_LAST_SEND_ID));
+                DiscoveredDevice d = new DiscoveredDevice(name, host, port, false);
+                d.lastJobId = lastJobId;
+                result.add(d);
             }
-            return result;
-        } catch (Exception e) {
-            return new ArrayList<>();
+            c.close();
         }
+        return result;
     }
 
-    /** 记录一个设备（在线发现时调用），按 key 去重保存。 */
-    public void saveDevice(DiscoveredDevice device) {
-        List<KnownDevice> list = loadRawList();
-        KnownDevice item = new KnownDevice(device.name, device.host, device.port);
-        // 按 host:port 去重
-        list.removeIf(kd -> kd.key().equals(item.key()));
-        list.add(0, item);
-        // 最多保留 50 条
-        while (list.size() > 50) {
-            list.remove(list.size() - 1);
-        }
-        prefs.edit().putString(KEY_DEVICES, gson.toJson(list)).apply();
+    /** 记录一个设备（在线发现时调用），按 (host, port) 去重，并更新最后出现时间。 */
+    public synchronized void saveDevice(DiscoveredDevice device) {
+        ContentValues values = new ContentValues();
+        values.put(DBHelper.COL_DEV_HOST, device.host);
+        values.put(DBHelper.COL_DEV_PORT, device.port);
+        values.put(DBHelper.COL_DEV_NAME, device.name);
+        values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());
+
+        // 保留已有的 lastJobId（如果存在）
+        String existingId = getLastJobId(device.host, device.port);
+        values.put(DBHelper.COL_DEV_LAST_SEND_ID, existingId);
+
+        // 插入或替换（主键冲突时更新）
+        db.insertWithOnConflict(DBHelper.TABLE_DEVICE, null, values,
+                SQLiteDatabase.CONFLICT_REPLACE);
     }
 
-    private List<KnownDevice> loadRawList() {
-        String json = prefs.getString(KEY_DEVICES, null);
-        if (json == null) {
-            return new ArrayList<>();
+    /** 获取某个设备的 lastJobId（如果不存在返回 null）。 */
+    private String getLastJobId(String host, int port) {
+        Cursor c = db.query(DBHelper.TABLE_DEVICE,
+                new String[]{DBHelper.COL_DEV_LAST_SEND_ID},
+                DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?",
+                new String[]{host, String.valueOf(port)},
+                null, null, null);
+        String id = null;
+        if (c.moveToFirst()) {
+            id = c.getString(0);
+            c.close();
         }
-        try {
-            Type type = new TypeToken<List<KnownDevice>>() {}.getType();
-            List<KnownDevice> list = gson.fromJson(json, type);
-            return list != null ? list : new ArrayList<>();
-        } catch (Exception e) {
-            return new ArrayList<>();
-        }
+        return id;
     }
 
-    /** 序列化用内部类。 */
-    @SuppressWarnings("unused")
-    private static class KnownDevice {
-        String name;
-        String host;
-        int port;
-        String lastTransferId;
-
-        KnownDevice(String name, String host, int port) {
-            this(name, host, port, null);
+    /** 删除最旧的记录，使总数不超过 maxCount。 */
+    private void trimToMax(int maxCount) {
+        // 先查询总数
+        Cursor countCursor = db.query(DBHelper.TABLE_DEVICE,
+                new String[]{"COUNT(*)"}, null, null, null, null, null);
+        long count = 0;
+        if (countCursor.moveToFirst()) {
+            count = countCursor.getLong(0);
         }
+        countCursor.close();
+        if (count <= maxCount) return;
 
-        KnownDevice(String name, String host, int port, String lastTransferId) {
-            this.name = name;
-            this.host = host;
-            this.port = port;
-            this.lastTransferId = lastTransferId;
-        }
-
-        String key() {
-            return host + ":" + port;
-        }
+        // 删除最旧的 (count - maxCount) 条（按 lastSeen ASC）
+        String deleteSql = "DELETE FROM " + DBHelper.TABLE_DEVICE +
+                " WHERE (" + DBHelper.COL_DEV_HOST + ", " + DBHelper.COL_DEV_PORT + ") IN (" +
+                "  SELECT " + DBHelper.COL_DEV_HOST + ", " + DBHelper.COL_DEV_PORT +
+                "  FROM " + DBHelper.TABLE_DEVICE +
+                "  ORDER BY " + DBHelper.COL_DEV_LAST_SEEN + " ASC" +
+                "  LIMIT " + (count - maxCount) +
+                ")";
+        db.execSQL(deleteSql);
     }
 
-    /** 更新设备的 lastTransferId 并持久化。 */
-    public void setLastTransferId(String host, int port, String transferId) {
-        List<KnownDevice> list = loadRawList();
-        String key = host + ":" + port;
-        for (KnownDevice kd : list) {
-            if (kd.key().equals(key)) {
-                kd.lastTransferId = transferId;
-                prefs.edit().putString(KEY_DEVICES, gson.toJson(list)).apply();
-                return;
-            }
-        }
+    /** 更新设备的 lastJobId 并更新最后出现时间。 */
+    public synchronized void setLastJobId(String host, int port, String sendId) {
+        ContentValues values = new ContentValues();
+        values.put(DBHelper.COL_DEV_LAST_SEND_ID, sendId);
+        values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());
+        db.update(DBHelper.TABLE_DEVICE, values,
+                DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?",
+                new String[]{host, String.valueOf(port)});
     }
 }

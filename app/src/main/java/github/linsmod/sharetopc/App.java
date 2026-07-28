@@ -8,7 +8,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import github.linsmod.sharetopc.data.DeviceStore;
-import github.linsmod.sharetopc.data.HistoryStore;
+import github.linsmod.sharetopc.data.JobStore;
 import github.linsmod.sharetopc.data.SettingsStore;
 import github.linsmod.sharetopc.discovery.HeartbeatManager;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
@@ -24,7 +24,7 @@ public class App extends Application {
     public Handler mainHandler;
     public SettingsStore settingsStore;
     public DeviceStore deviceStore;
-    public HistoryStore historyStore;
+    public JobStore jobStore;
     public NsdDiscoveryManager discoveryManager;
     public HeartbeatManager heartbeatManager;
     public TransferManager transferManager;
@@ -41,11 +41,11 @@ public class App extends Application {
         mainHandler = new Handler(Looper.getMainLooper());
         settingsStore = new SettingsStore(this);
         deviceStore = new DeviceStore(this);
-        historyStore = new HistoryStore(this);
+        jobStore = new JobStore(this);
         discoveryManager = new NsdDiscoveryManager(this, deviceStore);
         heartbeatManager = new HeartbeatManager(discoveryManager);
         heartbeatManager.start();
-        transferManager = new TransferManager(this, historyStore);
+        transferManager = new TransferManager(this, jobStore, deviceStore);
         // 创建前台服务通知渠道
         ShareForegroundService.createNotificationChannel(this);
     }

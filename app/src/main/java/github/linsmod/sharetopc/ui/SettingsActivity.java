@@ -41,7 +41,7 @@ public class SettingsActivity extends AppCompatActivity {
             Preference clearHistory = findPreference("clear_history");
             if (clearHistory != null) {
                 clearHistory.setOnPreferenceClickListener(preference -> {
-                    App.get().historyStore.clear();
+                    App.get().jobStore.clear();
                     Toast.makeText(requireContext(), R.string.history_cleared,
                             Toast.LENGTH_SHORT).show();
                     return true;

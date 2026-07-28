@@ -13,12 +13,12 @@ import android.text.TextUtils;
 import java.util.ArrayList;
 import java.util.List;
 
-import github.linsmod.sharetopc.data.PendingContent;
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.util.FileUtils;
 import github.linsmod.sharetopc.util.LogX;
 
 /**
- * Intent → List&lt;PendingContent&gt;。
+ * Intent → List&lt;SendEntry&gt;。
  * 不复制文件到 inbox，直接记录 content:// URI，发送时实时读流。
  * 请在后台线程执行 {@link #parse}。
  */
@@ -27,8 +27,8 @@ public final class ShareParser {
     private ShareParser() {
     }
 
-    public static List<PendingContent> parse(Context context, Intent intent) {
-        List<PendingContent> result = new ArrayList<>();
+    public static List<SendEntry> parse(Context context, Intent intent) {
+        List<SendEntry> result = new ArrayList<>();
         if (intent == null || intent.getAction() == null) {
             return result;
         }
@@ -37,44 +37,30 @@ public final class ShareParser {
             String text = intent.getStringExtra(Intent.EXTRA_TEXT);
             Uri stream = getParcelable(intent, Intent.EXTRA_STREAM);
             if (stream != null) {
-                PendingContent file = resolveUriContent(context, stream,
+                SendEntry file = resolveUriContent(context, stream,
                         intent.getType());
-                if (file != null) {
-                    result.add(file);
-                }
+                result.add(file);
             } else if (!TextUtils.isEmpty(text)) {
-                result.add(PendingContent.ofText(text));
+                result.add(SendEntry.ofText(text));
             }
         } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
             List<Uri> uris = getParcelableList(intent, Intent.EXTRA_STREAM);
             if (uris != null) {
                 for (Uri uri : uris) {
-                    PendingContent file = resolveUriContent(context, uri,
+                    SendEntry file = resolveUriContent(context, uri,
                             intent.getType());
-                    if (file != null) {
-                        result.add(file);
-                    }
+                    result.add(file);
                 }
             }
         }
         return result;
     }
 
-    /** 查询 content:// URI 的元数据，申请持久读权限，返回 PendingContent（不复制文件）。 */
-    private static PendingContent resolveUriContent(Context context, Uri uri, String intentType) {
+    /** 查询 content:// URI 的元数据，申请持久读权限，返回 SendEntry（不复制文件）。 */
+    private static SendEntry resolveUriContent(Context context, Uri uri, String intentType) {
         ContentResolver resolver = context.getContentResolver();
         String displayName = null;
         long size = -1;
-
-        // 申请持久读权限，确保后台发送时仍可读取
-        try {
-            final int takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                resolver.takePersistableUriPermission(uri, takeFlags);
-            }
-        } catch (Exception e) {
-            LogX.d("takePersistableUriPermission failed: " + uri);
-        }
 
         try (Cursor cursor = resolver.query(uri, null, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {
@@ -99,18 +85,19 @@ public final class ShareParser {
             mime = intentType != null ? intentType : FileUtils.guessMimeType(displayName);
         }
 
-        return PendingContent.ofFileFromUri(uri.toString(),
+        return SendEntry.ofFileFromUri(uri.toString(),
                 FileUtils.sanitizeFileName(displayName), size, mime);
     }
 
-    /** 为已创建的 PendingContent 打开 PFD（内核文件句柄），支持可靠的 skip/seek 断点续传。 */
-    public static void attachPfd(Context context, PendingContent item) {
-        if (item.type != PendingContent.TYPE_FILE || item.contentUri == null) return;
+    /** 为已创建的 SendEntry 打开 PFD（内核文件句柄），支持可靠的 skip/seek 断点续传。 */
+    public static ParcelFileDescriptor createPfd(Context context, SendEntry item) {
+        if (item.type != SendEntry.TYPE_FILE || item.contentUri == null) return null;
         try {
             Uri uri = Uri.parse(item.contentUri);
-            item.pfd = context.getContentResolver().openFileDescriptor(uri, "r");
+            return context.getContentResolver().openFileDescriptor(uri, "r");
         } catch (Exception e) {
             LogX.e("Failed to open PFD for " + item.name, e);
+            return null;
         }
     }
 

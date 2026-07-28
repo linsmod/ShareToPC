@@ -13,6 +13,7 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.util.FileUtils;
 
 /** 单次 TCP 会话：HELLO → 连续发送 TEXT/FILE，每条阻塞等 ACK。 */
@@ -24,8 +25,17 @@ public class TransferClient implements Closeable {
     private Socket socket;
     private DataOutputStream out;
     private DataInputStream in;
-    private volatile boolean cancelled;
+    private int state;
 
+    public static class State {
+        public static final int IDLE = 0;
+        public static final int CONNECTING = 1;
+        public static final int SENDING = 1;
+    }
+
+    public int getState(){
+        return this.state;
+    }
     public void connect(String host, int port) throws IOException {
         if (host == null || host.isEmpty()) {
             throw new IOException("主机地址为空");
@@ -34,6 +44,7 @@ public class TransferClient implements Closeable {
             throw new IOException("无效端口: " + port);
         }
         socket = new Socket();
+        state = State.CONNECTING;
         try {
             socket.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MS);
             socket.setSoTimeout(ACK_TIMEOUT_MS);
@@ -45,6 +56,7 @@ public class TransferClient implements Closeable {
             out = new DataOutputStream(socket.getOutputStream());
             in = new DataInputStream(socket.getInputStream());
         } catch (IOException e) {
+            state = State.IDLE;
             // 连接失败时主动关闭 socket，避免资源泄漏
             close();
             throw e;
@@ -58,6 +70,7 @@ public class TransferClient implements Closeable {
         header.addProperty("version", TransferProtocol.PROTOCOL_VERSION);
         TransferProtocol.writeFrame(out, header);
         expectAck();
+        this.state = State.SENDING;
     }
 
     public void sendText(String text) throws IOException {
@@ -70,36 +83,36 @@ public class TransferClient implements Closeable {
     }
 
     /** 从 File 读文件发送（历史兼容：本地 inbox 仍有副本时使用）。 */
-    public void sendFile(String fileName, String mime, File file, String transferId,
+    public void sendFile(SendEntry entry,File file,
                          TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(fileName, mime, file.length(), transferId);
+        sendFileHeader(entry.name, entry.mime, file.length(), entry.id);
         long resumeOffset = expectAckForFile();
         try (java.io.FileInputStream fin = new java.io.FileInputStream(file)) {
             skipExactly(fin, resumeOffset);
             if (resumeOffset > 0) {
                 TransferProtocol.writeFileContentWithResume(out, fin, file.length(),
-                        resumeOffset, progress, () -> cancelled);
+                        resumeOffset, progress, entry);
             } else {
                 TransferProtocol.writeFileContent(out, fin, file.length(), progress,
-                        () -> cancelled);
+                        entry);
             }
         }
         expectAck();
     }
 
     /** 从 InputStream 读文件发送（新路径：直接从 content:// URI 读流，无需本地文件）。 */
-    public void sendFileFromStream(String fileName, String mime, long totalSize,
-                                   InputStream contentStream, String transferId,
+    public void sendFileFromStream(SendEntry entry,
+                                   InputStream contentStream,
                                    TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(fileName, mime, totalSize, transferId);
+        sendFileHeader(entry.name, entry.mime, entry.size, entry.id);
         long resumeOffset = expectAckForFile();
         skipExactly(contentStream, resumeOffset);
         if (resumeOffset > 0) {
-            TransferProtocol.writeFileContentWithResume(out, contentStream, totalSize,
-                    resumeOffset, progress, () -> cancelled);
+            TransferProtocol.writeFileContentWithResume(out, contentStream, entry.size,
+                    resumeOffset, progress,entry);
         } else {
-            TransferProtocol.writeFileContent(out, contentStream, totalSize, progress,
-                    () -> cancelled);
+            TransferProtocol.writeFileContent(out, contentStream, entry.size, progress,
+                    entry);
         }
         expectAck();
     }
@@ -161,11 +174,6 @@ public class TransferClient implements Closeable {
             throw new IOException("peer error: " + TransferProtocol.ackError(ack));
         }
         throw new IOException("unexpected frame: " + ack);
-    }
-
-    /** 标记为已取消，writeFileFrame 的 chunk 循环会在下一轮检查并发送 CANCEL 帧后停止。 */
-    public void cancel() {
-        this.cancelled = true;
     }
 
     @Override

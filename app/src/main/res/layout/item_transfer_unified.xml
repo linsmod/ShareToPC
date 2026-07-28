@@ -78,44 +78,4 @@
             android:textSize="12sp"
             android:visibility="gone" />
     </LinearLayout>
-
-    <!-- 操作按钮区 -->
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <!-- 暂停按钮（图标） -->
-        <ImageButton
-            android:id="@+id/btnTransferPause"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/action_pause"
-            android:src="@android:drawable/ic_media_pause"
-            android:tint="?attr/colorPrimary"
-            android:visibility="gone" />
-
-        <!-- 取消按钮（图标） -->
-        <ImageButton
-            android:id="@+id/btnTransferCancel"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/cancel_transfer"
-            android:src="@android:drawable/ic_menu_close_clear_cancel"
-            android:tint="?attr/colorError"
-            android:visibility="gone" />
-
-        <!-- 操作按钮（文本按钮：重试/发送/继续） -->
-        <Button
-            android:id="@+id/btnTransferResume"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/retry"
-            android:visibility="gone" />
-    </LinearLayout>
 </LinearLayout>

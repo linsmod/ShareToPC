@@ -95,16 +95,6 @@
             android:text="@string/cancel" />
 
         <Button
-            android:id="@+id/btnStash"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1"
-            android:enabled="false"
-            android:text="@string/stash" />
-
-        <Button
             android:id="@+id/btnSend"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
