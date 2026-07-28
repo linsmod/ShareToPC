@@ -44,8 +44,12 @@ public class ShareReceiverActivity extends AppCompatActivity {
     private List<SendEntry> pendingItems;
     private String jobId;
     private boolean startedDiscoveryHere = false;
+    private volatile boolean destroyed = false;
 
-    private final NsdDiscoveryManager.Listener discoveryListener = list -> refreshDevices();
+    private final NsdDiscoveryManager.Listener discoveryListener = list -> {
+        if (destroyed) return;
+        refreshDevices();
+    };
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -118,12 +122,10 @@ public class ShareReceiverActivity extends AppCompatActivity {
         App.get().ioExecutor.execute(() -> {
             this.jobId = UUID.randomUUID().toString();
             List<SendEntry> items = ShareParser.parse(getApplicationContext(), getIntent());
-            items.forEach(x->{
-                x.jobId = jobId;
-                App.get().jobStore.addJobEntry(x);
-            });
+            items.forEach(x-> x.jobId = jobId );
 
             runOnUiThread(() -> {
+                if (destroyed) return;
                 tvPreviewFallback.setVisibility(View.GONE);
                 if (items.isEmpty()) {
                     Toast.makeText(this, "没有可发送的内容", Toast.LENGTH_SHORT).show();
@@ -232,9 +234,9 @@ public class ShareReceiverActivity extends AppCompatActivity {
             return;
         }
         App.get().settingsStore.saveLastDevice(target.host, target.port);
-        // 为每个文件预打开 PFD，获取内核文件句柄以支持可靠 skip/seek 断点续传
-        // 同时绑定设备信息到 entry 对象并同步写入 DB
+        // 用户确认发送后才产生记录
         for (SendEntry item : pendingItems) {
+            App.get().jobStore.addJobEntry(item);
             item.host = target.host;
             item.port = target.port;
             item.targetName = target.displayName();
@@ -258,10 +260,12 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        destroyed = true;
         App.get().discoveryManager.removeListener(discoveryListener);
         if (startedDiscoveryHere) {
             App.get().discoveryManager.stopDiscovery();
         }
+        pendingItems = null;
         super.onDestroy();
     }
 

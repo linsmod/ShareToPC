@@ -6,7 +6,7 @@
     android:layout_margin="16dp"
     android:background="@drawable/bg_dialog"
     android:orientation="vertical"
-    android:paddingTop="8dp">
+    android:padding="16dp">
 
     <!-- 标题栏 -->
     <LinearLayout
@@ -14,8 +14,8 @@
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="4dp">
+        android:paddingHorizontal="0dp"
+        android:paddingVertical="0dp">
 
         <TextView
             android:id="@+id/tvDialogTitle"

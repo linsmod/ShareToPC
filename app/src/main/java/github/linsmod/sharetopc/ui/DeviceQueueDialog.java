@@ -16,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import java.util.Collections;
 
+import github.linsmod.sharetopc.MainViewModel;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
@@ -25,6 +26,7 @@ import github.linsmod.sharetopc.util.TransferStatusHelper;
 public class DeviceQueueDialog extends Dialog {
 
     private final DiscoveredDevice device;
+    private final MainViewModel viewModel;
     private final Listeners.TaskActionListener listener;
     @Nullable
     private final TaskGroup group;
@@ -32,14 +34,17 @@ public class DeviceQueueDialog extends Dialog {
     private final TransferStatusHelper.PfdChecker pfdChecker;
 
     private TaskAdapter adapter;
+    private MainViewModel.EntryUpdateListener entryUpdateListener;
 
     public DeviceQueueDialog(@NonNull Context context,
                              @NonNull DiscoveredDevice device,
                              @Nullable TaskGroup group,
                              Listeners.TaskActionListener listener,
-                             @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
+                             @Nullable TransferStatusHelper.PfdChecker pfdChecker,
+                             @NonNull MainViewModel viewModel) {
         super(context);
         this.device = device;
+        this.viewModel = viewModel;
         this.group = group;
         this.listener = listener;
         this.pfdChecker = pfdChecker;
@@ -87,6 +92,13 @@ public class DeviceQueueDialog extends Dialog {
         }, pfdChecker);
         rvTaskList.setAdapter(adapter);
 
+        entryUpdateListener = entry -> {
+            if (adapter != null) {
+                adapter.onEntryProgressChanged(entry);
+            }
+        };
+        viewModel.addEntryUpdateListener(entryUpdateListener);
+
         View tvEmpty = findViewById(R.id.tvEmpty);
 
         if (group != null && !group.entries.isEmpty()) {
@@ -100,6 +112,15 @@ public class DeviceQueueDialog extends Dialog {
             rvTaskList.setVisibility(View.GONE);
             tvEmpty.setVisibility(View.VISIBLE);
         }
+    }
+
+    @Override
+    public void dismiss() {
+        if (entryUpdateListener != null) {
+            viewModel.removeEntryUpdateListener(entryUpdateListener);
+            entryUpdateListener = null;
+        }
+        super.dismiss();
     }
 
     private void showGroupMenu(TaskGroup group, View anchor, float touchX) {

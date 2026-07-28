@@ -3,12 +3,10 @@ package github.linsmod.sharetopc;
 import android.content.Intent;
 import android.os.Build;
 import android.os.Bundle;
-import android.text.InputType;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.EditText;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -169,7 +167,7 @@ public class MainActivity extends AppCompatActivity {
                         Toast.LENGTH_SHORT).show();
                 if (deviceQueueDialog != null) deviceQueueDialog.dismiss();
             }
-        }, transferId -> viewModel.hasPfd(transferId));
+        }, transferId -> viewModel.hasPfd(transferId), viewModel);
         deviceQueueDialog.show();
     }
 
@@ -204,39 +202,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void showAliasDialog(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (16 * getResources().getDisplayMetrics().density);
-        layout.setPadding(pad, pad / 2, pad, pad / 2);
+        View layout = getLayoutInflater().inflate(R.layout.dialog_alias, null);
 
-        EditText etAlias = new EditText(this);
+        EditText etAlias = layout.findViewById(R.id.etAlias);
         etAlias.setHint(device.name);
-        etAlias.setInputType(InputType.TYPE_CLASS_TEXT);
         if (device.alias != null) {
             etAlias.setText(device.alias);
         }
-        layout.addView(etAlias);
 
-        LinearLayout presets = new LinearLayout(this);
-        presets.setOrientation(LinearLayout.HORIZONTAL);
-        String[] presetNames = {
-                getString(R.string.preset_laptop),
-                getString(R.string.preset_office),
-                getString(R.string.preset_desktop)
-        };
-        for (String preset : presetNames) {
-            android.widget.Button btn = new android.widget.Button(this, null,
-                    android.R.attr.borderlessButtonStyle);
-            btn.setText(preset);
-            btn.setTextSize(12f);
-            btn.setPadding(0, 0, 0, 0);
-            btn.setOnClickListener(v -> etAlias.setText(preset));
-            presets.addView(btn);
-        }
-        layout.addView(presets);
+        TextView tvTitle = layout.findViewById(R.id.tvAliasTitle);
+        tvTitle.setText(device.name);
+
+        layout.findViewById(R.id.btnPresetLaptop).setOnClickListener(v -> etAlias.setText(R.string.preset_laptop));
+        layout.findViewById(R.id.btnPresetOffice).setOnClickListener(v -> etAlias.setText(R.string.preset_office));
+        layout.findViewById(R.id.btnPresetDesktop).setOnClickListener(v -> etAlias.setText(R.string.preset_desktop));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.device_alias_title)
                 .setView(layout)
                 .setPositiveButton(R.string.save, (d, which) -> {
                     App.get().settingsStore.setDeviceAlias(device.host, device.port,
@@ -249,6 +230,12 @@ public class MainActivity extends AppCompatActivity {
                     viewModel.removeDevice(device);
                 })
                 .show();
+
+        // 去掉 AlertDialog 内部容器多余 padding
+        View customPanel = dialog.findViewById(android.R.id.custom);
+        if (customPanel instanceof ViewGroup) {
+            ((ViewGroup) customPanel).setPadding(0, 0, 0, 0);
+        }
         Window w = dialog.getWindow();
         if (w != null) {
             w.setBackgroundDrawableResource(R.drawable.bg_dialog);
@@ -258,40 +245,88 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void showManualDeviceDialog() {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int) (16 * getResources().getDisplayMetrics().density);
-        layout.setPadding(pad, pad / 2, pad, pad / 2);
+        View layout = getLayoutInflater().inflate(R.layout.dialog_manual_device, null);
 
-        EditText etHost = new EditText(this);
-        etHost.setHint(R.string.manual_host_hint);
-        etHost.setInputType(InputType.TYPE_CLASS_TEXT);
-        etHost.setText(App.get().settingsStore.getManualHost());
-        layout.addView(etHost);
+        EditText etHost = layout.findViewById(R.id.etHost);
 
-        EditText etPort = new EditText(this);
-        etPort.setHint(R.string.manual_port_hint);
-        etPort.setInputType(InputType.TYPE_CLASS_NUMBER);
-        etPort.setText(String.valueOf(App.get().settingsStore.getManualPort()));
-        layout.addView(etPort);
+        EditText etPort = layout.findViewById(R.id.etPort);
+
+        layout.findViewById(R.id.btnIpPreset1).setOnClickListener(v -> {
+            String ip = getString(R.string.preset_ip_192_168_1).replace("?", "");
+            etHost.setText(ip);
+            etHost.setSelection(ip.length());
+        });
+        layout.findViewById(R.id.btnIpPreset2).setOnClickListener(v -> {
+            String ip = getString(R.string.preset_ip_192_168_0).replace("?", "");
+            etHost.setText(ip);
+            etHost.setSelection(ip.length());
+        });
+        layout.findViewById(R.id.btnIpPreset3).setOnClickListener(v -> {
+            String ip = getString(R.string.preset_ip_10_0_0).replace("?", "");
+            etHost.setText(ip);
+            etHost.setSelection(ip.length());
+        });
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(R.string.manual_device_dialog_title)
                 .setView(layout)
-                .setPositiveButton(R.string.ok, (d, which) -> {
-                    String host = etHost.getText().toString().trim();
-                    String port = etPort.getText().toString().trim();
-                    App.get().settingsStore.saveManualDevice(host, port);
-                    viewModel.refreshDevices();
-                    Toast.makeText(this, R.string.ok, Toast.LENGTH_SHORT).show();
-                })
+                .setPositiveButton(R.string.ok, null)
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+
+        // 点击确定时校验 IP 和端口格式
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String host = etHost.getText().toString().trim();
+            String portStr = etPort.getText().toString().trim();
+
+            if (!isValidIp(host)) {
+                Toast.makeText(this, "IP 地址格式不正确", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (!isValidPort(portStr)) {
+                Toast.makeText(this, "端口范围为 1~65535", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            App.get().settingsStore.saveManualDevice(host, portStr);
+            viewModel.refreshDevices();
+            Toast.makeText(this, R.string.ok, Toast.LENGTH_SHORT).show();
+            dialog.dismiss();
+        });
+
+        View customPanel = dialog.findViewById(android.R.id.custom);
+        if (customPanel instanceof ViewGroup) {
+            ((ViewGroup) customPanel).setPadding(0, 0, 0, 0);
+        }
         Window w = dialog.getWindow();
         if (w != null) {
             w.setBackgroundDrawableResource(R.drawable.bg_dialog);
             w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
                     ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    private static boolean isValidIp(String ip) {
+        if (ip == null || ip.isEmpty()) return false;
+        String[] parts = ip.split("\\.");
+        if (parts.length != 4) return false;
+        for (String part : parts) {
+            try {
+                int n = Integer.parseInt(part);
+                if (n < 0 || n > 255) return false;
+            } catch (NumberFormatException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isValidPort(String port) {
+        if (port == null || port.isEmpty()) return false;
+        try {
+            int p = Integer.parseInt(port);
+            return p >= 1 && p <= 65535;
+        } catch (NumberFormatException e) {
+            return false;
         }
     }
 

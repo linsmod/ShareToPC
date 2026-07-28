@@ -161,9 +161,6 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             vh.tvDevice.setText("");
         }
 
-        // 展开/折叠箭头
-        vh.tvArrow.setText(g.expanded ? "▼" : "▶");
-
         // 子项计数
         vh.tvCount.setText(g.completedEntries + "/" + g.totalEntries);
 
@@ -207,16 +204,7 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     // ── 条目绑定 ────────────────────────────────────────
 
     private void bindEntry(EntryVH vh, DisplayItem di) {
-        TransferRecord record = di.entry;
-        vh.item.bind(record);
-
-        // 左侧缩进标识它是子项
-        vh.item.setPadding(dp(28), vh.item.getPaddingTop(),
-                vh.item.getPaddingRight(), vh.item.getPaddingBottom());
-    }
-
-    private int dp(int px) {
-        return (int) (px * 3.5f + 0.5f);
+        vh.item.bind(di.entry);
     }
 
     /** 将毫秒时间戳转为对人友好文案，如"今天 14:30""昨天 09:15""7月25日 16:00"。 */
@@ -250,10 +238,9 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     // ── ViewHolders ─────────────────────────────────────
 
     static class GroupVH extends RecyclerView.ViewHolder {
-        final TextView tvArrow, tvDevice, tvCount, tvTime;
+        final TextView tvDevice, tvCount, tvTime;
         GroupVH(@NonNull View v) {
             super(v);
-            tvArrow = v.findViewById(R.id.tvExpandArrow);
             tvDevice = v.findViewById(R.id.tvGroupDevice);
             tvCount = v.findViewById(R.id.tvGroupCount);
             tvTime = v.findViewById(R.id.tvGroupTime);

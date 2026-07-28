@@ -115,13 +115,14 @@ public class JobStore {
 
     // ---------- 公开 API ----------
 
-    /** App 重启时，将所有 STATUS_SENDING 的记录标记为 OUTDATE，并同步更新对应 job。 */
+    /** App 重启时，将所有 STATUS_SENDING 和 IDLE_REASON_CREATED 的记录标记为 OUTDATE，并同步更新对应 job。 */
     public synchronized void markOutdateOnStartup() {
-        // 先查出将被标记为 OUTDATE 的 jobId（在更新前查）
+        // 查出所有将受影响的 jobId（在更新前查）
         Cursor c = db.query(true, DBHelper.TABLE_JOB_ENTRY,
                 new String[]{DBHelper.COL_JOB_ID},
-                DBHelper.COL_STATUS + "=?",
-                new String[]{String.valueOf(TransferRecord.STATUS_SENDING)},
+                DBHelper.COL_STATUS + "=? OR (" + DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "=?)",
+                new String[]{String.valueOf(TransferRecord.STATUS_SENDING),
+                        String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_CREATED)},
                 null, null, null, null);
         List<String> affectedJobIds = new ArrayList<>();
         if (c != null) {
@@ -140,6 +141,11 @@ public class JobStore {
         values.put(DBHelper.COL_IDLE_REASON, TransferRecord.IDLE_REASON_OUTDATE);
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_STATUS + "=?", new String[]{String.valueOf(TransferRecord.STATUS_SENDING)});
+
+        // 标记所有未发送的 CREATED → OUTDATE（PFD 已丢失，不可恢复）
+        db.update(DBHelper.TABLE_JOB_ENTRY, values,
+                DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "=?",
+                new String[]{String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_CREATED)});
 
         // 同步受影响的 job 聚合信息
         for (String jid : affectedJobIds) {

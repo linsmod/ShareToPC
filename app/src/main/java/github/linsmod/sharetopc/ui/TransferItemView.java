@@ -62,6 +62,19 @@ public class TransferItemView extends LinearLayout {
             data.showProgressBar = true;
             data.progress = pct;
         }
+
+        // 发送完成绿色勾
+        data.showCheckMark = record.isSuccess();
+        // 过期显示灰色点
+        data.showOutdateDot = record.status == TransferRecord.STATUS_IDLE
+                && record.idleReason == TransferRecord.IDLE_REASON_OUTDATE;
+        // 其他出错显示红色点
+        data.showErrorDot = record.status == TransferRecord.STATUS_IDLE
+                && record.idleReason != TransferRecord.IDLE_REASON_SUCCESS
+                && record.idleReason != TransferRecord.IDLE_REASON_PAUSED
+                && record.idleReason != TransferRecord.IDLE_REASON_CREATED
+                && record.idleReason != TransferRecord.IDLE_REASON_OUTDATE;
+
         return data;
     }
 
@@ -81,13 +94,23 @@ public class TransferItemView extends LinearLayout {
         /** 进度条进度 0–100。 */
         public boolean showProgressBar = false;
         public int progress = 0;
+        /** 发送完成后显示绿色勾。 */
+        public boolean showCheckMark = false;
+        /** 传输出错显示红色圆点。 */
+        public boolean showErrorDot = false;
+        /** 过期显示灰色圆点。 */
+        public boolean showOutdateDot = false;
     }
 
     private final View vStatus;
     private final TextView tvName;
     private final TextView tvSize;
     private final ProgressBar progressBar;
+    private final View layoutMetaRow;
     private final TextView tvMeta;
+    private final TextView tvCheckMark;
+    private final View vErrorDot;
+    private final View vOutdateDot;
 
     public TransferItemView(Context context) {
         this(context, null);
@@ -111,7 +134,11 @@ public class TransferItemView extends LinearLayout {
         tvName = findViewById(R.id.tvTransferName);
         tvSize = findViewById(R.id.tvTransferSize);
         progressBar = findViewById(R.id.progressTransfer);
+        layoutMetaRow = findViewById(R.id.layoutMetaRow);
         tvMeta = findViewById(R.id.tvTransferMeta);
+        tvCheckMark = findViewById(R.id.tvCheckMark);
+        vErrorDot = findViewById(R.id.vErrorDot);
+        vOutdateDot = findViewById(R.id.vOutdateDot);
     }
 
     // ── 数据设置 ──────────────────────────────────
@@ -185,7 +212,13 @@ public class TransferItemView extends LinearLayout {
         }
 
         // meta 行
-        tvMeta.setVisibility(data.meta != null && !data.meta.isEmpty() ? VISIBLE : GONE);
-        tvMeta.setText(data.meta != null ? data.meta : "");
+        boolean hasMeta = data.meta != null && !data.meta.isEmpty();
+        layoutMetaRow.setVisibility(hasMeta ? VISIBLE : GONE);
+        if (hasMeta) {
+            tvMeta.setText(data.meta);
+        }
+        tvCheckMark.setVisibility(data.showCheckMark ? VISIBLE : GONE);
+        vErrorDot.setVisibility(data.showErrorDot ? VISIBLE : GONE);
+        vOutdateDot.setVisibility(data.showOutdateDot ? VISIBLE : GONE);
     }
 }
