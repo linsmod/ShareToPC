@@ -39,6 +39,7 @@ public class DevicesFragment extends Fragment {
 
         tvDevicesTitle.setText(R.string.devices_title);
         rvDevices.setLayoutManager(new LinearLayoutManager(requireContext()));
+        rvDevices.setItemAnimator(null); // 禁用动画，避免进度更新时 item 交叉淡入淡出闪烁
         deviceAdapter = new DeviceAdapter(new DeviceAdapter.OnDeviceClickListener() {
             @Override
             public void onClick(DiscoveredDevice device) {

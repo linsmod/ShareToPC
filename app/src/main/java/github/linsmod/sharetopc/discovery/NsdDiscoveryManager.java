@@ -110,11 +110,12 @@ public class NsdDiscoveryManager {
             return;
         }
         discovering = true;
-        // 扫描前将所有设备标记为离线
+        // 扫描前将所有设备标记为离线（内部重置，不通知 UI）
+        // 在线/离线由 mDNS 解析 + 心跳管理，扫描开始时的全量重置不应触发 UI 刷新
+        // 否则会覆盖心跳 markOnline 的结果，导致绿点不更新
         for (DiscoveredDevice d : devices.values()) {
             d.isOnline = false;
         }
-        notifyChanged();
         discoveryListener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {

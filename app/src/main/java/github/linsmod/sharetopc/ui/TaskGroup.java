@@ -27,6 +27,9 @@ public class TaskGroup {
     public int totalEntries;
     public int completedEntries;
 
+    /** 分组标题栏是否显示设备信息（从设备跳转时不需要，因为弹窗标题已有）。 */
+    public boolean showDeviceInfo = true;
+
     public TaskGroup(String jobId, String deviceName, String host, int port, long timeMillis,
                      @NonNull List<TransferRecord> entries) {
         this.jobId = jobId;

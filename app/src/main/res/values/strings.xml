@@ -51,11 +51,6 @@
     <string name="action_send">发送</string>
     <string name="choose_device">选择目标设备</string>
     <string name="no_device_for_send">暂无可用设备，请先添加手动设备或等待自动发现</string>
-    <string name="select_all">全选</string>
-    <string name="delete">删除</string>
-    <string name="selected_count">已选 %1$d 项</string>
-    <string name="delete_selected_confirm">确定删除选中的 %1$d 条记录？此操作不可恢复。</string>
-    <string name="records_deleted">已删除 %1$d 条记录</string>
     <string name="history_fullscreen">全屏</string>
     <string name="history_restore">还原</string>
     <string name="text_preview_title">文本内容</string>

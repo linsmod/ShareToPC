@@ -117,7 +117,7 @@ public class TransferRecord implements TransferProtocol.Cancellable{
         return this.isCancelled;
     }
     public boolean isSuccess(){
-        return this.errorMsg == null && this.isCancelled;
+        return this.status == STATUS_IDLE && this.idleReason == IDLE_REASON_SUCCESS;
     }
     public void setError(String error){
         this.errorMsg = error;

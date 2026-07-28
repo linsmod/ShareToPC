@@ -237,12 +237,23 @@ public class TransferManager {
                             continue;
                         }
                         item.status = TransferRecord.STATUS_SENDING;
+                        jobStore.updateStatus(item.id, item.status, item.idleReason);
                         jobStore.updateProgress(item.id, 0, item.size);
                         // 每个 item 重置节流计时器，确保首个进度回调不被上一个文件抑制
                         lastProgressNotifyMs = 0;
-                        sendItem(client, job, item);
-                        updateJob(job, item);
-                        if(item.isSuccess()){
+                        try {
+                            sendItem(client, job, item);
+                            item.status = TransferRecord.STATUS_IDLE;
+                            item.idleReason = TransferRecord.IDLE_REASON_SUCCESS;
+                        } catch (Exception e) {
+                            item.status = TransferRecord.STATUS_IDLE;
+                            item.idleReason = TransferRecord.IDLE_REASON_NET_ERROR;
+                            item.errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                            throw e;
+                        } finally {
+                            updateJob(job, item);
+                        }
+                        if (item.isSuccess()) {
                             releasePfd(item.id);
                         }
                     }
@@ -275,6 +286,7 @@ public class TransferManager {
             error = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
         } finally {
             SendJob finished = currentJob;
+            currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
             mainHandler.post(() -> {
                 for (JobProgressListener l : progressListeners) l.onJobFinished(finished);
             });
@@ -291,32 +303,44 @@ public class TransferManager {
                 if (handle != null) {
                     try {
                         InputStream in = handle.newInputStream();
-                        client.sendFileFromStream(item, in,
-                                (sent, total) -> onProgress(item));
-                        return;
-                    } catch (Exception e) {
-                        LogX.e("PFD send failed for " + item.name + ", fallback to URI", e);
-                    }
-                }
-            }
-            // 次选：从 content:// URI 直接读流发送
-            if (item.contentUri != null) {
-                Uri uri = Uri.parse(item.contentUri);
-                try (InputStream in = appContext.getContentResolver().openInputStream(uri)) {
-                    if (in == null) {
-                        throw new Exception("无法读取内容：" + item.name);
-                    }
                     client.sendFileFromStream(item, in,
-                            (sent, total) -> onProgress(item));
+                            (sent, total) -> {
+                                item.sentBytes = sent;
+                                item.totalBytes = total;
+                                onProgress(item);
+                            });
                     return;
+                } catch (Exception e) {
+                    LogX.e("PFD send failed for " + item.name + ", fallback to URI", e);
                 }
             }
-            // 历史兼容：从本地 inbox 文件发送
-            if (item.localPath != null) {
-                File file = new File(item.localPath);
-                if (file.exists()) {
-                    client.sendFile(item, file,
-                            (sent, total) -> onProgress(item));
+        }
+        // 次选：从 content:// URI 直接读流发送
+        if (item.contentUri != null) {
+            Uri uri = Uri.parse(item.contentUri);
+            try (InputStream in = appContext.getContentResolver().openInputStream(uri)) {
+                if (in == null) {
+                    throw new Exception("无法读取内容：" + item.name);
+                }
+                client.sendFileFromStream(item, in,
+                        (sent, total) -> {
+                            item.sentBytes = sent;
+                            item.totalBytes = total;
+                            onProgress(item);
+                        });
+                return;
+            }
+        }
+        // 历史兼容：从本地 inbox 文件发送
+        if (item.localPath != null) {
+            File file = new File(item.localPath);
+            if (file.exists()) {
+                client.sendFile(item, file,
+                        (sent, total) -> {
+                            item.sentBytes = sent;
+                            item.totalBytes = total;
+                            onProgress(item);
+                        });
                     return;
                 }
             }

@@ -78,11 +78,6 @@ public class DeviceQueueDialog extends Dialog {
             }
 
             @Override
-            public void onSelectionChanged(int count) {
-                // 弹窗不需要多选
-            }
-
-            @Override
             public void onPauseRequested(TransferRecord record) {
                 if (listener != null) listener.onPauseRequested(record);
             }
@@ -94,6 +89,7 @@ public class DeviceQueueDialog extends Dialog {
         if (group != null && !group.entries.isEmpty()) {
             group.recomputeProgress();
             group.expanded = true;
+            group.showDeviceInfo = false; // 弹窗标题已显示设备名，分组内不再重复
             adapter.submitList(Collections.singletonList(group));
             rvTaskList.setVisibility(View.VISIBLE);
             tvEmpty.setVisibility(View.GONE);

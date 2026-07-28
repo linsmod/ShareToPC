@@ -5,7 +5,6 @@ import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -36,10 +35,17 @@ public class TransferItemView extends LinearLayout {
         // 状态圆点
         data.statusColor = TransferStatusHelper.dotColor(ctx, record);
 
-        // 元信息：状态 · 大小 · 时间
-        StringBuilder meta = new StringBuilder(record.statusLabel());
+        // 文件大小 —— 第一行尾部
         if (record.size > 0) {
-            meta.append(" · ").append(FileUtils.formatSize(record.size));
+            data.sizeText = FileUtils.formatSize(record.size);
+        }
+
+        // 第二行 meta: "状态 · percent% · 时间"
+        StringBuilder meta = new StringBuilder(record.statusLabel());
+        if (record.totalBytes > 0
+                && (TransferRecord.STATUS_SENDING == record.getStatus()
+                || record.isPaused())) {
+            meta.append(" · ").append(record.percent()).append("%");
         }
         if (record.timeMillis > 0) {
             meta.append(" · ").append(timeFormat.format(new Date(record.timeMillis)));
@@ -55,7 +61,6 @@ public class TransferItemView extends LinearLayout {
             int pct = (int) (record.sentBytes * 100 / record.totalBytes);
             data.showProgressBar = true;
             data.progress = pct;
-            data.percent = pct;
         }
         return data;
     }
@@ -71,20 +76,16 @@ public class TransferItemView extends LinearLayout {
         public int statusColor;
         /** meta 行完整文案（Adapter 自行拼接后传入）。 */
         public String meta = "";
-        /** 百分比数值，-1 表示隐藏。 */
-        public int percent = -1;
+        /** 文件尺寸文案，显示在第一行尾部，如 "1.2 MB"。null 表示隐藏。 */
+        @Nullable public String sizeText;
         /** 进度条进度 0–100。 */
         public boolean showProgressBar = false;
         public int progress = 0;
-        /** 多选框。 */
-        public boolean showCheckbox = false;
-        public boolean checkboxChecked = false;
     }
 
     private final View vStatus;
-    private final CheckBox cbSelect;
     private final TextView tvName;
-    private final TextView tvPercent;
+    private final TextView tvSize;
     private final ProgressBar progressBar;
     private final TextView tvMeta;
 
@@ -107,9 +108,8 @@ public class TransferItemView extends LinearLayout {
         LayoutInflater.from(context).inflate(R.layout.item_transfer_unified, this, true);
 
         vStatus = findViewById(R.id.vTransferStatus);
-        cbSelect = findViewById(R.id.cbTransferSelect);
         tvName = findViewById(R.id.tvTransferName);
-        tvPercent = findViewById(R.id.tvTransferPercent);
+        tvSize = findViewById(R.id.tvTransferSize);
         progressBar = findViewById(R.id.progressTransfer);
         tvMeta = findViewById(R.id.tvTransferMeta);
     }
@@ -127,16 +127,6 @@ public class TransferItemView extends LinearLayout {
 
     public void setMeta(String meta) {
         tvMeta.setText(meta);
-    }
-
-    public void setPercent(int percent) {
-        if (percent < 0) {
-            tvPercent.setVisibility(GONE);
-            return;
-        }
-        tvPercent.setVisibility(VISIBLE);
-        tvPercent.setText(percent + "%");
-        tvPercent.setTextColor(TransferStatusHelper.percentColor(getContext(), percent));
     }
 
     public void setProgress(int percent) {
@@ -157,21 +147,8 @@ public class TransferItemView extends LinearLayout {
         tvMeta.setVisibility(visible ? VISIBLE : GONE);
     }
 
-    public void setPercentVisible(boolean visible) {
-        if (!visible) tvPercent.setVisibility(GONE);
-    }
-
     public void setProgressBarVisible(boolean visible) {
         progressBar.setVisibility(visible ? VISIBLE : GONE);
-    }
-
-    public void setCheckboxVisible(boolean visible, boolean checked) {
-        cbSelect.setVisibility(visible ? VISIBLE : GONE);
-        if (visible) cbSelect.setChecked(checked);
-    }
-
-    public boolean isCheckboxChecked() {
-        return cbSelect.isChecked();
     }
 
     // ── 统一绑定入口 ──────────────────────────────
@@ -193,13 +170,12 @@ public class TransferItemView extends LinearLayout {
             vStatus.setVisibility(GONE);
         }
 
-        // 百分比
-        if (data.percent >= 0) {
-            tvPercent.setVisibility(VISIBLE);
-            tvPercent.setText(data.percent + "%");
-            tvPercent.setTextColor(TransferStatusHelper.percentColor(getContext(), data.percent));
+        // 文件尺寸 —— 第一行尾部
+        if (data.sizeText != null) {
+            tvSize.setVisibility(VISIBLE);
+            tvSize.setText(data.sizeText);
         } else {
-            tvPercent.setVisibility(GONE);
+            tvSize.setVisibility(GONE);
         }
 
         // 进度条
@@ -211,9 +187,5 @@ public class TransferItemView extends LinearLayout {
         // meta 行
         tvMeta.setVisibility(data.meta != null && !data.meta.isEmpty() ? VISIBLE : GONE);
         tvMeta.setText(data.meta != null ? data.meta : "");
-
-        // 多选框
-        cbSelect.setVisibility(data.showCheckbox ? VISIBLE : GONE);
-        if (data.showCheckbox) cbSelect.setChecked(data.checkboxChecked);
     }
 }

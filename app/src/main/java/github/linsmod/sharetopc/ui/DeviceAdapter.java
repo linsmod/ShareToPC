@@ -10,8 +10,11 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
@@ -95,16 +98,40 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             vh.layoutProgress.setVisibility(View.VISIBLE);
             vh.pbProgress.setProgress(progress.percent());
             vh.tvProgress.setText(progress.summary());
-            // 当前 entry 名称
-            if (progress.currentEntryName != null && !progress.currentEntryName.isEmpty()) {
-                vh.tvEntryName.setVisibility(View.VISIBLE);
+            // 已完成 → 显示 "传输完成 · {时间}"
+            if (progress.state == DiscoveredDevice.DeviceProgress.STATE_COMPLETED
+                    && progress.completedAt > 0) {
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText("传输完成 · " + friendlyTime(progress.completedAt));
+                vh.tvEntrySize.setVisibility(View.GONE);
+            } else if (progress.currentEntryName != null && !progress.currentEntryName.isEmpty()) {
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
                 vh.tvEntryName.setText(progress.currentEntryName);
+                if (progress.totalBytes > 0) {
+                    vh.tvEntrySize.setVisibility(View.VISIBLE);
+                    vh.tvEntrySize.setText(formatSize(progress.totalBytes));
+                } else {
+                    vh.tvEntrySize.setVisibility(View.GONE);
+                }
             } else {
-                vh.tvEntryName.setVisibility(View.GONE);
+                vh.layoutEntryInfo.setVisibility(View.GONE);
             }
         } else {
             vh.layoutProgress.setVisibility(View.GONE);
-            vh.tvEntryName.setVisibility(View.GONE);
+            // 进度归 IDLE 但仍保留完成时间时，显示一条简短完成提示
+            if (progress != null && progress.completedAt > 0) {
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText("传输完成 · " + friendlyTime(progress.completedAt));
+                vh.tvEntrySize.setVisibility(View.GONE);
+            } else {
+                vh.layoutEntryInfo.setVisibility(View.GONE);
+            }
+        }
+        // 过期 · 部分完成提示优先于"传输完成"
+        if (progress != null && progress.expiredAt > 0) {
+            vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+            vh.tvEntryName.setText("过期 · 部分完成 · " + friendlyTime(progress.expiredAt));
+            vh.tvEntrySize.setVisibility(View.GONE);
         }
 
         vh.vOnlineDot.setBackgroundResource(
@@ -121,12 +148,50 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     @Override
     public int getItemCount() { return displayItems.size() + 1; }
 
+    /** 将毫秒时间戳转为对人友好文案，如"今天 14:30""昨天 09:15""7月25日 16:00"。 */
+    @NonNull
+    private static String friendlyTime(long timeMillis) {
+        java.util.Calendar now = java.util.Calendar.getInstance();
+        java.util.Calendar cal = java.util.Calendar.getInstance();
+        cal.setTimeInMillis(timeMillis);
+
+        SimpleDateFormat hm = new SimpleDateFormat("HH:mm", Locale.getDefault());
+        String hourMin = hm.format(new Date(timeMillis));
+
+        if (now.get(java.util.Calendar.YEAR) == cal.get(java.util.Calendar.YEAR)
+                && now.get(java.util.Calendar.DAY_OF_YEAR) == cal.get(java.util.Calendar.DAY_OF_YEAR)) {
+            return "今天 " + hourMin;
+        }
+
+        java.util.Calendar yesterday = (java.util.Calendar) now.clone();
+        yesterday.add(java.util.Calendar.DAY_OF_YEAR, -1);
+        if (yesterday.get(java.util.Calendar.YEAR) == cal.get(java.util.Calendar.YEAR)
+                && yesterday.get(java.util.Calendar.DAY_OF_YEAR) == cal.get(java.util.Calendar.DAY_OF_YEAR)) {
+            return "昨天 " + hourMin;
+        }
+
+        SimpleDateFormat md = new SimpleDateFormat("M月d日 HH:mm", Locale.getDefault());
+        return md.format(new Date(timeMillis));
+    }
+
+    /** 将字节数转为友好文案，如 "1.2 MB""340 KB"。 */
+    @NonNull
+    private static String formatSize(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        float kb = bytes / 1024f;
+        if (kb < 1024) return String.format(Locale.getDefault(), "%.1f KB", kb);
+        float mb = kb / 1024f;
+        if (mb < 1024) return String.format(Locale.getDefault(), "%.1f MB", mb);
+        float gb = mb / 1024f;
+        return String.format(Locale.getDefault(), "%.2f GB", gb);
+    }
+
     // ── ViewHolders ──────────────────────────────────────
 
     static class DeviceVH extends RecyclerView.ViewHolder {
         final View vOnlineDot;
-        final TextView tvName, tvAddr, tvProgress, tvEntryName;
-        final LinearLayout layoutProgress;
+        final TextView tvName, tvAddr, tvProgress, tvEntryName, tvEntrySize;
+        final LinearLayout layoutProgress, layoutEntryInfo;
         final ProgressBar pbProgress;
         DeviceVH(@NonNull View v) {
             super(v);
@@ -136,7 +201,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             layoutProgress = v.findViewById(R.id.layoutProgress);
             pbProgress = v.findViewById(R.id.pbDeviceJob);
             tvProgress = v.findViewById(R.id.tvDeviceProgress);
+            layoutEntryInfo = v.findViewById(R.id.layoutEntryInfo);
             tvEntryName = v.findViewById(R.id.tvEntryName);
+            tvEntrySize = v.findViewById(R.id.tvEntrySize);
         }
     }
 }

@@ -1,7 +1,6 @@
 package github.linsmod.sharetopc.ui;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,10 +13,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.TransferRecord;
@@ -34,19 +31,16 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     public interface ActionListener {
         void onRetryRequested(TransferRecord record);
-        void onSelectionChanged(int count);
         void onPauseRequested(TransferRecord record);
     }
 
     private final List<TaskGroup> groups = new ArrayList<>();
     /** 扁平化后的 DisplayItem 列表。 */
     private final List<DisplayItem> displayList = new ArrayList<>();
-    private final Set<String> selectedIds = new HashSet<>();
     private final ActionListener actionListener;
     @Nullable
     private final TransferStatusHelper.PfdChecker pfdChecker;
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
-    private boolean selectionMode = false;
 
     public TaskAdapter(ActionListener actionListener, @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
         this.actionListener = actionListener;
@@ -78,61 +72,8 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         groups.clear();
         if (list != null) groups.addAll(list);
 
-        if (selectionMode) {
-            Set<String> alive = new HashSet<>();
-            for (TaskGroup g : groups) {
-                for (TransferRecord r : g.entries) alive.add(r.id);
-            }
-            if (selectedIds.retainAll(alive)) notifySelectionChanged();
-        }
         rebuildDisplayList();
         notifyDataSetChanged();
-    }
-
-    public boolean isSelectionMode() { return selectionMode; }
-
-    public List<String> getSelectedIds() { return new ArrayList<>(selectedIds); }
-
-    public void enterSelectionMode(String firstId) {
-        if (selectionMode) return;
-        selectionMode = true;
-        selectedIds.clear();
-        if (firstId != null) selectedIds.add(firstId);
-        notifyDataSetChanged();
-        notifySelectionChanged();
-    }
-
-    public void exitSelectionMode() {
-        if (!selectionMode) return;
-        selectionMode = false;
-        selectedIds.clear();
-        notifyDataSetChanged();
-        notifySelectionChanged();
-    }
-
-    public void toggleSelectAll() {
-        if (!selectionMode) return;
-        Set<String> all = new HashSet<>();
-        for (TaskGroup g : groups) {
-            for (TransferRecord r : g.entries) all.add(r.id);
-        }
-        if (selectedIds.size() == all.size()) {
-            selectedIds.clear();
-        } else {
-            selectedIds.clear();
-            selectedIds.addAll(all);
-        }
-        notifyDataSetChanged();
-        notifySelectionChanged();
-    }
-
-    private void toggleEntrySelection(TransferRecord record) {
-        if (!selectedIds.remove(record.id)) selectedIds.add(record.id);
-        notifySelectionChanged();
-    }
-
-    private void notifySelectionChanged() {
-        if (actionListener != null) actionListener.onSelectionChanged(selectedIds.size());
     }
 
     // ── 扁平化重建 ──────────────────────────────────────
@@ -200,23 +141,18 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         // 子项计数
         vh.tvCount.setText(g.completedEntries + "/" + g.totalEntries);
 
-        // 副标题 = 设备名
-        String label = g.deviceName != null && !g.deviceName.isEmpty()
-                ? g.deviceName : g.deviceAddress();
-        if (label != null && !label.isEmpty()) {
-            vh.tvTime.setText(label);
-            vh.tvTime.setVisibility(View.VISIBLE);
+        // 副标题 = 设备名（从设备跳转时不需要，弹窗标题已有）
+        if (g.showDeviceInfo) {
+            String label = g.deviceName != null && !g.deviceName.isEmpty()
+                    ? g.deviceName : g.deviceAddress();
+            if (label != null && !label.isEmpty()) {
+                vh.tvTime.setText(label);
+                vh.tvTime.setVisibility(View.VISIBLE);
+            } else {
+                vh.tvTime.setVisibility(View.GONE);
+            }
         } else {
             vh.tvTime.setVisibility(View.GONE);
-        }
-
-        // 状态颜色
-        if (g.hasActive()) {
-            vh.vStatus.setBackgroundColor(ctx.getColor(android.R.color.holo_blue_light));
-        } else if (g.isAllDone()) {
-            vh.vStatus.setBackgroundColor(ctx.getColor(android.R.color.holo_green_dark));
-        } else {
-            vh.vStatus.setBackgroundColor(Color.TRANSPARENT);
         }
 
         // 点击切换展开
@@ -224,10 +160,6 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             g.expanded = !g.expanded;
             rebuildDisplayList();
             notifyDataSetChanged();
-        });
-        vh.itemView.setOnLongClickListener(v -> {
-            // 分组标题不参与长按多选
-            return true;
         });
     }
 
@@ -240,29 +172,6 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         // 左侧缩进标识它是子项
         vh.item.setPadding(dp(28), vh.item.getPaddingTop(),
                 vh.item.getPaddingRight(), vh.item.getPaddingBottom());
-
-        vh.item.setOnClickListener(v -> {
-            if (selectionMode) {
-                toggleEntrySelection(record);
-                notifyItemChanged(vh.getAdapterPosition());
-            }
-        });
-        vh.item.setOnLongClickListener(v -> {
-            if (!selectionMode) {
-                selectionMode = true;
-                selectedIds.clear();
-                selectedIds.add(record.id);
-                notifyDataSetChanged();
-                notifySelectionChanged();
-            } else {
-                toggleEntrySelection(record);
-                notifyItemChanged(vh.getAdapterPosition());
-            }
-            return true;
-        });
-
-        // 多选勾选框
-        vh.item.setCheckboxVisible(selectionMode, selectedIds.contains(record.id));
     }
 
     private int dp(int px) {
@@ -301,11 +210,9 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     static class GroupVH extends RecyclerView.ViewHolder {
         final TextView tvArrow, tvDevice, tvCount, tvTime;
-        final View vStatus;
         GroupVH(@NonNull View v) {
             super(v);
             tvArrow = v.findViewById(R.id.tvExpandArrow);
-            vStatus = v.findViewById(R.id.vGroupStatus);
             tvDevice = v.findViewById(R.id.tvGroupDevice);
             tvCount = v.findViewById(R.id.tvGroupCount);
             tvTime = v.findViewById(R.id.tvGroupTime);

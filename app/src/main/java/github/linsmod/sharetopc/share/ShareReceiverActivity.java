@@ -233,7 +233,13 @@ public class ShareReceiverActivity extends AppCompatActivity {
         }
         App.get().settingsStore.saveLastDevice(target.host, target.port);
         // 为每个文件预打开 PFD，获取内核文件句柄以支持可靠 skip/seek 断点续传
+        // 同时绑定设备信息到 entry 对象并同步写入 DB
         for (SendEntry item : pendingItems) {
+            item.host = target.host;
+            item.port = target.port;
+            item.targetName = target.displayName();
+            App.get().jobStore.updateJobEntry(item.id, target.host, target.port,
+                    target.displayName(), item.status, item.idleReason, item.errorMsg);
             var pfd = ShareParser.createPfd(getApplicationContext(), item);
             if(pfd!=null)
                 App.get().transferManager.registerPfdIfNeeded(item.name,item.id,pfd);

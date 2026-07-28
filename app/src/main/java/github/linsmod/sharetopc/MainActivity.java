@@ -120,6 +120,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 if (!latestEntries.isEmpty()) {
+                    java.util.Collections.reverse(latestEntries); // DB 查询为 DESC，反转为提交顺序
                     TransferRecord first = latestEntries.get(0);
                     group = new github.linsmod.sharetopc.ui.TaskGroup(latestJobId,
                             first.targetName != null ? first.targetName

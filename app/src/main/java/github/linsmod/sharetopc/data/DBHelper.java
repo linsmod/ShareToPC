@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     // ---------- job entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -40,6 +40,16 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_DEV_NAME = "name";
     public static final String COL_DEV_LAST_SEND_ID = "latestJobId";
     public static final String COL_DEV_LAST_SEEN = "lastSeen";
+
+    // ---------- Job 表 ----------
+    public static final String TABLE_JOB = "job";
+    public static final String COL_JOB_ID_PK = "jobId";
+    public static final String COL_JOB_DEVICE_HOST = "deviceHost";
+    public static final String COL_JOB_DEVICE_PORT = "devicePort";
+    public static final String COL_JOB_DEVICE_NAME = "deviceName";
+    public static final String COL_JOB_TIME_MILLIS = "timeMillis";
+    public static final String COL_JOB_TOTAL_ENTRIES = "totalEntries";
+    public static final String COL_JOB_COMPLETED_ENTRIES = "completedEntries";
 
     private static final String CREATE_JOB_ENTRY_TABLE =
             "CREATE TABLE " + TABLE_JOB_ENTRY + " (" +
@@ -76,6 +86,17 @@ public class DBHelper extends SQLiteOpenHelper {
                     "PRIMARY KEY (" + COL_DEV_HOST + ", " + COL_DEV_PORT + ")" +
                     ")";
 
+    private static final String CREATE_JOB_TABLE =
+            "CREATE TABLE " + TABLE_JOB + " (" +
+                    COL_JOB_ID_PK + " TEXT PRIMARY KEY, " +
+                    COL_JOB_DEVICE_HOST + " TEXT, " +
+                    COL_JOB_DEVICE_PORT + " INTEGER, " +
+                    COL_JOB_DEVICE_NAME + " TEXT, " +
+                    COL_JOB_TIME_MILLIS + " INTEGER, " +
+                    COL_JOB_TOTAL_ENTRIES + " INTEGER, " +
+                    COL_JOB_COMPLETED_ENTRIES + " INTEGER" +
+                    ")";
+
     public DBHelper(Context context) {
         super(context, DB_NAME, null, DB_VERSION);
     }
@@ -84,9 +105,13 @@ public class DBHelper extends SQLiteOpenHelper {
     public void onCreate(SQLiteDatabase db) {
         db.execSQL(CREATE_JOB_ENTRY_TABLE);
         db.execSQL(CREATE_DEVICE_TABLE);
+        db.execSQL(CREATE_JOB_TABLE);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion < 2) {
+            db.execSQL(CREATE_JOB_TABLE);
+        }
     }
 }

@@ -26,6 +26,10 @@ public class DiscoveredDevice {
         public long sentBytes;
         /** 当前正在传输的 entry 名称（文件名或文本预览）。 */
         public String currentEntryName;
+        /** 最后一次传输完成的时间戳（job 全部完成时设置）。 */
+        public long completedAt;
+        /** job 中存在已过期的 entry（IDLE_REASON_OUTDATE），且部分完成时记录最后更新时间。0 表示无过期。 */
+        public long expiredAt;
 
         public boolean isActive() {
             return state == STATE_SENDING || state == STATE_QUEUED
@@ -37,16 +41,7 @@ public class DiscoveredDevice {
         }
 
         public String summary() {
-            if (state == STATE_SENDING) {
-                return "传输中 " + completedEntries + "/" + totalEntries + " · " + percent() + "%";
-            } else if (state == STATE_QUEUED) {
-                return "排队中 " + totalEntries + " 项";
-            } else if (state == STATE_PAUSED) {
-                return "已暂停 " + completedEntries + "/" + totalEntries + " · " + percent() + "%";
-            } else if (state == STATE_COMPLETED) {
-                return "传输完成 " + completedEntries + "/" + totalEntries + " 项";
-            }
-            return "";
+            return completedEntries + "/" + totalEntries + " · " + percent() + "%";
         }
     }
 
