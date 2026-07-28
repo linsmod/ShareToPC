@@ -9,7 +9,7 @@ import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.data.TransferRecord;
 
 /**
- * 传输状态公共映射工具：三处传输 Item（设备传输子项 / 传输历史 / 设备任务弹窗）
+ * 传输状态公共映射工具：三处传输 Item（设备传输子项 / 传输任务 / 设备任务弹窗）
  * 共用同一套状态→颜色、状态→文案、重试禁用判断的映射逻辑。
  * <p>
  * 内部 6 种状态映射为 4 种用户可见状态，降低心智负担：

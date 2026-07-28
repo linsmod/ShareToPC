@@ -95,7 +95,7 @@ public class TransferManager {
     private final Context appContext;
 
     /** 队列状态 LiveData：入队/出队/取消时更新，供 UI 响应式观察。 */
-    private final MutableLiveData<List<SendJob>> queueJobsLiveData = new MutableLiveData<>();
+    public final MutableLiveData<List<SendJob>> queueJobsLiveData = new MutableLiveData<>();
 
     /** PFD 注册表：transferId → FileChannel，供重试/继续时复用内核文件句柄。 */
     private final Map<String, PfdHandle> pfdHandles = new ConcurrentHashMap<>();
@@ -187,6 +187,8 @@ public class TransferManager {
                         if (item.isSuccess()) {
                             continue;
                         }
+                        item.status = TransferRecord.STATUS_SENDING;
+                        jobStore.updateProgress(item.id, 0, item.size);
                         // 每个 item 重置节流计时器，确保首个进度回调不被上一个文件抑制
                         lastProgressNotifyMs = 0;
                         sendItem(client, job, item);

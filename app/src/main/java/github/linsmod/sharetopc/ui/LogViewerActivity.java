@@ -97,7 +97,7 @@ public class LogViewerActivity extends AppCompatActivity {
             handler.post(() -> {
                 tvLogs.setText(R.string.log_empty);
                 progressLog.setVisibility(View.GONE);
-                Toast.makeText(this, R.string.history_cleared, Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, R.string.task_cleared, Toast.LENGTH_SHORT).show();
             });
         });
     }

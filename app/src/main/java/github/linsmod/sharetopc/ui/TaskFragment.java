@@ -18,26 +18,26 @@ import github.linsmod.sharetopc.MainViewModel;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.TransferRecord;
 
-public class HistoryFragment extends Fragment {
+public class TaskFragment extends Fragment {
 
     private MainViewModel viewModel;
-    private HistoryAdapter historyAdapter;
+    private TaskAdapter taskAdapter;
 
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.fragment_history, container, false);
+        View view = inflater.inflate(R.layout.fragment_task, container, false);
         viewModel = new ViewModelProvider(requireActivity()).get(MainViewModel.class);
 
-        TextView tvHistoryTitle = view.findViewById(R.id.tvHistoryTitle);
+        TextView tvTaskTitle = view.findViewById(R.id.tvTaskTitle);
         Button btnSelectAll = view.findViewById(R.id.btnSelectAll);
         Button btnDeleteSelected = view.findViewById(R.id.btnDeleteSelected);
         Button btnCancelSelection = view.findViewById(R.id.btnCancelSelection);
-        RecyclerView rvHistory = view.findViewById(R.id.rvHistory);
+        RecyclerView rvTask = view.findViewById(R.id.rvTask);
 
-        rvHistory.setLayoutManager(new LinearLayoutManager(requireContext()));
-        historyAdapter = new HistoryAdapter(new HistoryAdapter.ActionListener() {
+        rvTask.setLayoutManager(new LinearLayoutManager(requireContext()));
+        taskAdapter = new TaskAdapter(new TaskAdapter.ActionListener() {
             @Override
             public void onRetryRequested(TransferRecord record) {
                 viewModel.retry(record);
@@ -53,15 +53,21 @@ public class HistoryFragment extends Fragment {
                 viewModel.pauseTransfer(record);
             }
         }, transferId -> viewModel.hasPfd(transferId));
-        rvHistory.setAdapter(historyAdapter);
+        rvTask.setAdapter(taskAdapter);
 
-        tvHistoryTitle.setText(R.string.history_title);
+        tvTaskTitle.setText(R.string.task_title);
 
-        btnSelectAll.setOnClickListener(v -> historyAdapter.toggleSelectAll());
+        btnSelectAll.setOnClickListener(v -> taskAdapter.toggleSelectAll());
         btnDeleteSelected.setOnClickListener(v -> confirmDeleteSelected());
-        btnCancelSelection.setOnClickListener(v -> historyAdapter.exitSelectionMode());
+        btnCancelSelection.setOnClickListener(v -> taskAdapter.exitSelectionMode());
 
-        viewModel.getHistory().observe(getViewLifecycleOwner(), historyAdapter::submitList);
+        viewModel.getTasks().observe(getViewLifecycleOwner(), taskAdapter::submitList);
+
+        btnSelectAll.setOnClickListener(v -> taskAdapter.toggleSelectAll());
+        btnDeleteSelected.setOnClickListener(v -> confirmDeleteSelected());
+        btnCancelSelection.setOnClickListener(v -> taskAdapter.exitSelectionMode());
+
+        viewModel.getTasks().observe(getViewLifecycleOwner(), taskAdapter::submitList);
 
         return view;
     }
@@ -69,28 +75,28 @@ public class HistoryFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        viewModel.refreshHistory();
+        viewModel.refreshTasks();
     }
 
     private void updateSelectionBar(int count) {
-        if (historyAdapter.isSelectionMode()) {
-            TextView tvHistoryTitle = getView().findViewById(R.id.tvHistoryTitle);
-            if (tvHistoryTitle != null) {
-                tvHistoryTitle.setText(getString(R.string.history_title) + " ("
+        if (taskAdapter.isSelectionMode()) {
+            TextView tvTaskTitle = getView().findViewById(R.id.tvTaskTitle);
+            if (tvTaskTitle != null) {
+                tvTaskTitle.setText(getString(R.string.task_title) + " ("
                         + getString(R.string.selected_count, count) + ")");
             }
             getView().findViewById(R.id.selectionBar).setVisibility(View.VISIBLE);
         } else {
-            TextView tvHistoryTitle = getView().findViewById(R.id.tvHistoryTitle);
-            if (tvHistoryTitle != null) {
-                tvHistoryTitle.setText(R.string.history_title);
+            TextView tvTaskTitle = getView().findViewById(R.id.tvTaskTitle);
+            if (tvTaskTitle != null) {
+                tvTaskTitle.setText(R.string.task_title);
             }
             getView().findViewById(R.id.selectionBar).setVisibility(View.GONE);
         }
     }
 
     private void confirmDeleteSelected() {
-        final java.util.List<String> ids = historyAdapter.getSelectedIds();
+        final java.util.List<String> ids = taskAdapter.getSelectedIds();
         if (ids.isEmpty()) {
             return;
         }
@@ -98,7 +104,7 @@ public class HistoryFragment extends Fragment {
                 .setMessage(getString(R.string.delete_selected_confirm, ids.size()))
                 .setPositiveButton(R.string.delete, (dialog, which) -> {
                     viewModel.deleteRecords(ids);
-                    historyAdapter.exitSelectionMode();
+                    taskAdapter.exitSelectionMode();
                     android.widget.Toast.makeText(requireContext(),
                             getString(R.string.records_deleted, ids.size()),
                             android.widget.Toast.LENGTH_SHORT).show();

@@ -12,8 +12,8 @@
     <string name="add_manual_device_title">手动添加设备</string>
     <string name="add_manual_device_desc">输入 IP 地址和端口来添加设备</string>
     <string name="current_transfer_idle">当前无传输任务</string>
-    <string name="history_title">传输历史</string>
-    <string name="history_empty">暂无记录</string>
+    <string name="task_title">传输任务</string>
+    <string name="task_empty">暂无任务</string>
     <string name="retry">重试</string>
     <string name="send">发送</string>
     <string name="cancel">取消</string>
@@ -27,13 +27,13 @@
     <string name="manual_host_hint">IP 地址，如 192.168.1.5</string>
     <string name="manual_port_hint">端口，默认 51234</string>
     <string name="ok">确定</string>
-    <string name="history_cleared">历史已清空</string>
+    <string name="task_cleared">任务已清空</string>
     <string name="pref_manual_host_title">手动设备 IP</string>
     <string name="pref_manual_port_title">手动设备端口</string>
     <string name="pref_scan_timeout_title">扫描超时时长（秒）</string>
     <string name="pref_port_info_title">接收端口约定</string>
     <string name="pref_port_info_summary">电脑端默认监听 51234（两端需一致）</string>
-    <string name="pref_clear_history_title">清空历史记录</string>
+    <string name="pref_clear_tasks_title">清空任务记录</string>
     <string name="state_connecting">连接中…</string>
     <string name="state_sending">发送中…</string>
     <string name="state_done">发送完成</string>

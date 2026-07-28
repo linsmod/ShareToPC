@@ -38,11 +38,11 @@ public class SettingsActivity extends AppCompatActivity {
         public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.preferences, rootKey);
 
-            Preference clearHistory = findPreference("clear_history");
-            if (clearHistory != null) {
-                clearHistory.setOnPreferenceClickListener(preference -> {
+            Preference clearTasks = findPreference("clear_tasks");
+            if (clearTasks != null) {
+                clearTasks.setOnPreferenceClickListener(preference -> {
                     App.get().jobStore.clear();
-                    Toast.makeText(requireContext(), R.string.history_cleared,
+                    Toast.makeText(requireContext(), R.string.task_cleared,
                             Toast.LENGTH_SHORT).show();
                     return true;
                 });

@@ -10,7 +10,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * 历史记录：SQLite 持久化。最多保留 200 条。
+ * 传输任务：SQLite 持久化。最多保留 200 条。
  * 注意：已修复原代码中 updateStatus 缺少参数的 Bug。
  */
 public class JobStore {

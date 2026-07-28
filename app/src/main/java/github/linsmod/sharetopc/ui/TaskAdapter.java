@@ -19,8 +19,8 @@ import java.util.Set;
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.util.TransferStatusHelper;
 
-/** 传输历史适配器。 */
-public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
+/** 传输任务适配器。 */
+public class TaskAdapter extends RecyclerView.Adapter<TaskAdapter.VH> {
 
     public interface ActionListener {
         void onRetryRequested(TransferRecord record);
@@ -53,7 +53,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<HistoryAdapter.VH> {
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
     private boolean selectionMode = false;
 
-    public HistoryAdapter(ActionListener actionListener, @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
+    public TaskAdapter(ActionListener actionListener, @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
         this.actionListener = actionListener;
         this.pfdChecker = pfdChecker;
     }

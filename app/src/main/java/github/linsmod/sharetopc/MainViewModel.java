@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
@@ -22,6 +23,7 @@ public class MainViewModel extends AndroidViewModel {
     private final MutableLiveData<String> searchHint = new MutableLiveData<>();
     private final MutableLiveData<Boolean> scanning = new MutableLiveData<>(false);
     private final MutableLiveData<List<TransferRecord>> history = new MutableLiveData<>();
+    private final MutableLiveData<List<TransferRecord>> tasks = new MutableLiveData<>();
 
     private final App app;
 
@@ -69,6 +71,8 @@ public class MainViewModel extends AndroidViewModel {
         initListeners();
         app.discoveryManager.addListener(discoveryListener);
         refreshHistory();
+        refreshTasks();
+        app.transferManager.queueJobsLiveData.observeForever(jobs -> refreshTasks());
         // 立即显示已知设备（离线状态），包含手动设备
         refreshDevices();
         updateConnState();
@@ -104,6 +108,10 @@ public class MainViewModel extends AndroidViewModel {
         }
     }
 
+    public LiveData<List<TransferRecord>> getTasks() {
+        return tasks;
+    }
+
     public LiveData<List<TransferRecord>> getHistory() {
         return history;
     }
@@ -112,6 +120,20 @@ public class MainViewModel extends AndroidViewModel {
         app.discoveryManager.stopDiscovery();
         refreshDevices();
         app.discoveryManager.startDiscovery(app.settingsStore.getScanTimeoutSec() * 1000L);
+    }
+
+    /** 刷新任务列表（合并历史记录与正在进行的传输队列）。 */
+    public void refreshTasks() {
+        List<TransferRecord> all = new ArrayList<>(app.jobStore.all());
+        List<TransferManager.SendJob> queue = app.transferManager.queueJobsLiveData.getValue();
+        if (queue != null) {
+            for (TransferManager.SendJob job : queue) {
+                for (SendEntry entry : job.items) {
+                    all.add(0, entry);
+                }
+            }
+        }
+        tasks.setValue(all);
     }
 
     /** 刷新设备列表（备注名变更后调用）。也用于手动设备保存后刷新。 */
@@ -143,6 +165,7 @@ public class MainViewModel extends AndroidViewModel {
 
     public void refreshHistory() {
         history.setValue(app.jobStore.all());
+        refreshTasks();
     }
 
     public void retry(TransferRecord record) {

@@ -5,12 +5,12 @@
     android:orientation="vertical">
 
     <TextView
-        android:id="@+id/tvHistoryTitle"
+        android:id="@+id/tvTaskTitle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingHorizontal="16dp"
         android:paddingVertical="8dp"
-        android:text="@string/history_title"
+        android:text="@string/task_title"
         android:textStyle="bold" />
 
     <LinearLayout
@@ -45,7 +45,7 @@
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvHistory"
+        android:id="@+id/rvTask"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"

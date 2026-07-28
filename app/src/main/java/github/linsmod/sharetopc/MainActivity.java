@@ -28,7 +28,7 @@ import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.ui.DeviceQueueDialog;
 import github.linsmod.sharetopc.ui.DevicesFragment;
-import github.linsmod.sharetopc.ui.HistoryFragment;
+import github.linsmod.sharetopc.ui.TaskFragment;
 import github.linsmod.sharetopc.ui.SettingsActivity;
 
 import androidx.fragment.app.Fragment;
@@ -57,8 +57,8 @@ public class MainActivity extends AppCompatActivity {
             if (id == R.id.nav_devices) {
                 switchFragment(new DevicesFragment());
                 return true;
-            } else if (id == R.id.nav_history) {
-                switchFragment(new HistoryFragment());
+            } else if (id == R.id.nav_tasks) {
+                switchFragment(new TaskFragment());
                 return true;
             }
             return false;
@@ -105,7 +105,7 @@ public class MainActivity extends AppCompatActivity {
             public void onResumeRequested(github.linsmod.sharetopc.data.TransferRecord record) {
                 viewModel.retry(record);
             }
-        }, this, viewModel.getHistory(), transferId -> viewModel.hasPfd(transferId));
+        }, this, viewModel.getTasks(), transferId -> viewModel.hasPfd(transferId));
         deviceQueueDialog.show();
     }
 

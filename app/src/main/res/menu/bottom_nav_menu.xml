@@ -5,8 +5,8 @@
         android:icon="@drawable/ic_devices"
         android:title="@string/devices_title" />
     <item
-        android:id="@+id/nav_history"
+        android:id="@+id/nav_tasks"
         android:icon="@drawable/ic_history"
-        android:title="@string/history_title" />
+        android:title="@string/task_title" />
 </menu>
 
