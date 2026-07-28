@@ -22,7 +22,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.MainViewModel;
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.data.SendEntry;
 
 public class TaskFragment extends Fragment {
 
@@ -112,9 +112,9 @@ public class TaskFragment extends Fragment {
         // 根据分组状态启用/禁用菜单项
         boolean hasActive = group.hasActive();
         boolean hasResumable = false;
-        for (TransferRecord r : group.entries) {
-            if (r.status == TransferRecord.STATUS_IDLE
-                    && r.idleReason != TransferRecord.IDLE_REASON_SUCCESS
+        for (SendEntry r : group.entries) {
+            if (r.status == SendEntry.STATUS_IDLE
+                    && r.idleReason != SendEntry.IDLE_REASON_SUCCESS
                     && r.pendingAction == 0
                     && github.linsmod.sharetopc.util.TransferStatusHelper.canResumeOrRetry(r,
                             transferId -> viewModel.hasPfd(transferId))) {

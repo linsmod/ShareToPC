@@ -17,7 +17,6 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import github.linsmod.sharetopc.data.SendEntry;
-import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
 import github.linsmod.sharetopc.transfer.TransferManager;
@@ -28,7 +27,7 @@ public class MainViewModel extends AndroidViewModel {
     private final MutableLiveData<List<DiscoveredDevice>> devices = new MutableLiveData<>();
     private final MutableLiveData<String> connState = new MutableLiveData<>();
     private boolean scanning = false;
-    private List<TransferRecord> history = null;
+    private List<SendEntry> history = null;
     private Map<String, TransferManager.SendJob> deviceJobs;
 
     /** 任务列表变更回调（替代 LiveData，避免 lifecycle 延迟丢失初始值）。 */
@@ -41,7 +40,7 @@ public class MainViewModel extends AndroidViewModel {
 
     /** 条目进度增量更新回调（替代传输中全量 refreshTasks）。 */
     public interface EntryUpdateListener {
-        void onEntryUpdated(@NonNull TransferRecord entry);
+        void onEntryUpdated(@NonNull SendEntry entry);
     }
 
     private final List<EntryUpdateListener> entryUpdateListeners = new CopyOnWriteArrayList<>();
@@ -181,7 +180,7 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     @Nullable
-    public List<TransferRecord> getHistory() {
+    public List<SendEntry> getHistory() {
         return history;
     }
 
@@ -233,6 +232,7 @@ public class MainViewModel extends AndroidViewModel {
         Map<String, TransferManager.SendJob> progressMap = computeDeviceLatestJob();
         for (DiscoveredDevice d : list) {
             d.latestJob = progressMap.get(d.deviceId);
+            if (d.latestJob != null) d.latestJobId = d.latestJob.id;
         }
         return list;
     }
@@ -245,6 +245,7 @@ public class MainViewModel extends AndroidViewModel {
         for (DiscoveredDevice d : list) {
             TransferManager.SendJob p = progressMap.get(d.address());
             d.latestJob = p;
+            if (p != null) d.latestJobId = p.id;
         }
         for (String addr : progressMap.keySet()) {
             deviceProgressListener.onDeviceProgressChanged(addr);
@@ -254,9 +255,9 @@ public class MainViewModel extends AndroidViewModel {
     /** 刷新任务列表（按 jobId 分组，树状展示）。 */
     public void refreshTasks() {
         // 从 DB 取所有历史记录
-        List<TransferRecord> all = new ArrayList<>(app.jobStore.all());
+        List<SendEntry> all = new ArrayList<>(app.jobStore.all());
         java.util.Set<String> seenIds = new java.util.HashSet<>();
-        for (TransferRecord r : all) {
+        for (SendEntry r : all) {
             if (r.id != null) seenIds.add(r.id);
         }
         // 合并队列中未入库的 entry（按 id 去重，DB 已有则跳过）
@@ -272,15 +273,15 @@ public class MainViewModel extends AndroidViewModel {
         }
 
         // 第一步：按 jobId 收集条目，同时记录最大 timeMillis 和设备信息
-        Map<String, List<TransferRecord>> entryMap = new LinkedHashMap<>();
+        Map<String, List<SendEntry>> entryMap = new LinkedHashMap<>();
         Map<String, Long> maxTimeMap = new HashMap<>();
         Map<String, String> nameMap = new HashMap<>();
         Map<String, String> hostMap = new HashMap<>();
         Map<String, Integer> portMap = new HashMap<>();
 
-        for (TransferRecord r : all) {
+        for (SendEntry r : all) {
             String jid = r.jobId != null ? r.jobId : "__no_job__";
-            List<TransferRecord> list = entryMap.get(jid);
+            List<SendEntry> list = entryMap.get(jid);
             if (list == null) {
                 list = new ArrayList<>();
                 entryMap.put(jid, list);
@@ -304,15 +305,15 @@ public class MainViewModel extends AndroidViewModel {
         }
 
         // 第二步：反转各组内 entry 顺序，使最早提交的排最前（DB 查询是 DESC）
-        for (List<TransferRecord> entries : entryMap.values()) {
+        for (List<SendEntry> entries : entryMap.values()) {
             java.util.Collections.reverse(entries);
         }
 
         // 第三步：用收集到的最大 timeMillis 创建 TaskGroup
         List<TaskGroup> result = new ArrayList<>();
-        for (Map.Entry<String, List<TransferRecord>> e : entryMap.entrySet()) {
+        for (Map.Entry<String, List<SendEntry>> e : entryMap.entrySet()) {
             String jid = e.getKey();
-            List<TransferRecord> entries = e.getValue();
+            List<SendEntry> entries = e.getValue();
             long maxTime = maxTimeMap.get(jid) != null ? maxTimeMap.get(jid) : 0;
             TaskGroup g = new TaskGroup(jid, nameMap.get(jid),
                     hostMap.get(jid), portMap.get(jid) != null ? portMap.get(jid) : 0,
@@ -363,7 +364,7 @@ public class MainViewModel extends AndroidViewModel {
         app.transferManager.cancelJob(group.jobId);
         // 2. 从数据库删除
         java.util.List<String> ids = new java.util.ArrayList<>();
-        for (TransferRecord r : group.entries) {
+        for (SendEntry r : group.entries) {
             if (r.id != null) ids.add(r.id);
         }
         app.jobStore.removeByIds(ids);
@@ -372,7 +373,7 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     /** 暂停当前传输：设置 pending action + cancel，等 CANCEL 帧发出后 process() 转为 PAUSED。 */
-    public void pauseTransfer(TransferRecord record) {
+    public void pauseTransfer(SendEntry record) {
         TransferManager.SendJob job = app.transferManager.getCurrentJob();
         if (job != null) {
             for (SendEntry entry : job.items) {
@@ -393,7 +394,7 @@ public class MainViewModel extends AndroidViewModel {
     /** 继续/恢复分组中所有可恢复的条目。 */
     public void resumeGroup(TaskGroup group) {
         boolean resumed = false;
-        for (TransferRecord r : group.entries) {
+        for (SendEntry r : group.entries) {
             if(r.canResume()){
                 resumed = app.transferManager.resumeJob(group.jobId);
                 break;

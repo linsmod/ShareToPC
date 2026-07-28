@@ -91,7 +91,7 @@ public final class ShareParser {
 
     /** 为已创建的 SendEntry 打开 PFD（内核文件句柄），支持可靠的 skip/seek 断点续传。 */
     public static ParcelFileDescriptor createPfd(Context context, SendEntry item) {
-        if (item.type != SendEntry.TYPE_FILE || item.contentUri == null) return null;
+        if (item.contentType != SendEntry.TYPE_FILE || item.contentUri == null) return null;
         try {
             Uri uri = Uri.parse(item.contentUri);
             return context.getContentResolver().openFileDescriptor(uri, "r");

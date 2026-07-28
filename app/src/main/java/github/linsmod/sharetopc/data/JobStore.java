@@ -4,7 +4,6 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
-import android.text.TextUtils;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,7 +32,7 @@ public class JobStore {
 
     // ---------- 辅助方法：Record ⇄ ContentValues ----------
 
-    private ContentValues toValues(TransferRecord r) {
+    private ContentValues toValues(SendEntry r) {
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_ID, r.id);
         values.put(DBHelper.COL_JOB_ID, r.jobId);
@@ -60,8 +59,8 @@ public class JobStore {
         return values;
     }
 
-    private TransferRecord fromCursor(Cursor c) {
-        TransferRecord r = new TransferRecord();
+    private SendEntry fromCursor(Cursor c) {
+        SendEntry r = new SendEntry();
         r.id = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_ID));
         r.jobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_JOB_ID));
         r.timeMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_TIME_MILLIS));
@@ -131,8 +130,8 @@ public class JobStore {
         Cursor c = db.query(true, DBHelper.TABLE_JOB_ENTRY,
                 new String[]{DBHelper.COL_JOB_ID},
                 DBHelper.COL_STATUS + "=? OR (" + DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "!=?)",
-                new String[]{String.valueOf(TransferRecord.STATUS_SENDING),
-                        String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_SUCCESS)},
+                new String[]{String.valueOf(SendEntry.STATUS_SENDING),
+                        String.valueOf(SendEntry.STATUS_IDLE), String.valueOf(SendEntry.IDLE_REASON_SUCCESS)},
                 null, null, null, null);
         List<String> affectedJobIds = new ArrayList<>();
         if (c != null) {
@@ -147,15 +146,15 @@ public class JobStore {
 
         // 标记所有 STATUS_SENDING → OUTDATE
         ContentValues values = new ContentValues();
-        values.put(DBHelper.COL_STATUS, TransferRecord.STATUS_IDLE);
-        values.put(DBHelper.COL_IDLE_REASON, TransferRecord.IDLE_REASON_OUTDATE);
+        values.put(DBHelper.COL_STATUS, SendEntry.STATUS_IDLE);
+        values.put(DBHelper.COL_IDLE_REASON, SendEntry.IDLE_REASON_OUTDATE);
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
-                DBHelper.COL_STATUS + "=?", new String[]{String.valueOf(TransferRecord.STATUS_SENDING)});
+                DBHelper.COL_STATUS + "=?", new String[]{String.valueOf(SendEntry.STATUS_SENDING)});
 
         // 标记所有 STATUS_IDLE 且非 SUCCESS 的记录 → OUTDATE（重启后 PFD 已丢失，不可恢复）
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "!=?",
-                new String[]{String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_SUCCESS)});
+                new String[]{String.valueOf(SendEntry.STATUS_IDLE), String.valueOf(SendEntry.IDLE_REASON_SUCCESS)});
 
         // 同步受影响的 job 聚合信息
         for (String jid : affectedJobIds) {
@@ -189,7 +188,7 @@ public class JobStore {
             }
             int st = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_STATUS));
             int ir = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_IDLE_REASON));
-            if (st == TransferRecord.STATUS_IDLE && ir == TransferRecord.IDLE_REASON_SUCCESS) {
+            if (st == SendEntry.STATUS_IDLE && ir == SendEntry.IDLE_REASON_SUCCESS) {
                 completedEntries++;
             }
         }
@@ -212,7 +211,7 @@ public class JobStore {
     }
 
     /** 插入记录，若任务数超过上限则删除最旧的任务（同 jobId 的条目整体删除）。 */
-    public synchronized void addJobEntry(TransferRecord record) {
+    public synchronized void addJobEntry(SendEntry record) {
         db.insertWithOnConflict(DBHelper.TABLE_JOB_ENTRY, null,
                 toValues(record), SQLiteDatabase.CONFLICT_REPLACE);
         trimJobsIfNeeded();
@@ -253,7 +252,7 @@ public class JobStore {
     /** 按 id 删除记录。 */
     public synchronized void removeById(String id) {
         if (id == null) return;
-        TransferRecord r = getSendEntry(id);
+        SendEntry r = getSendEntry(id);
         String jobId = r != null ? r.jobId : null;
         db.delete(DBHelper.TABLE_JOB_ENTRY,
                 DBHelper.COL_ID + "=?", new String[]{id});
@@ -267,7 +266,7 @@ public class JobStore {
         if (ids == null || ids.isEmpty()) return;
         Set<String> affectedJobIds = new HashSet<>();
         for (String id : ids) {
-            TransferRecord r = getSendEntry(id);
+            SendEntry r = getSendEntry(id);
             if (r != null && r.jobId != null) {
                 affectedJobIds.add(r.jobId);
             }
@@ -291,8 +290,8 @@ public class JobStore {
     }
 
     /** 返回所有记录，按时间倒序（新->旧），每条记录为独立副本。 */
-    public synchronized List<TransferRecord> all() {
-        List<TransferRecord> result = new ArrayList<>();
+    public synchronized List<SendEntry> all() {
+        List<SendEntry> result = new ArrayList<>();
         Cursor c = db.query(DBHelper.TABLE_JOB_ENTRY, null,
                 null, null, null, null,
                 DBHelper.COL_TIME_MILLIS + " DESC");
@@ -304,7 +303,7 @@ public class JobStore {
         }
         return result;
     }
-    public synchronized Map<String, List<TransferRecord>> allMap() {
+    public synchronized Map<String, List<SendEntry>> allMap() {
         // 直接使用 Stream 流按 jobId 分组
         return all().stream().collect(Collectors.groupingBy(item -> item.jobId));
     }
@@ -358,7 +357,7 @@ public class JobStore {
         );
         try {
             while (cursor.moveToNext()) {
-                TransferRecord record = fromCursor(cursor); // 如果 fromCursor 是 public
+                SendEntry record = fromCursor(cursor); // 如果 fromCursor 是 public
                 if (record instanceof SendEntry) {
                     entries.add((SendEntry) record);
                 }
@@ -370,8 +369,8 @@ public class JobStore {
     }
 
     /** 拷贝方法，与原实现保持一致。 */
-    private static TransferRecord copy(TransferRecord src) {
-        TransferRecord r = new TransferRecord();
+    private static SendEntry copy(SendEntry src) {
+        SendEntry r = new SendEntry();
         r.id = src.id;
         r.jobId = src.jobId;
         r.timeMillis = src.timeMillis;
@@ -412,12 +411,12 @@ public class JobStore {
                 DBHelper.COL_TRANSFER_ID + "=?", new String[]{transferId});
     }
 
-    public synchronized TransferRecord getSendEntry(String id) {
+    public synchronized SendEntry getSendEntry(String id) {
         if (id == null) return null;
         Cursor c = db.query(DBHelper.TABLE_JOB_ENTRY, null,
                 DBHelper.COL_ID + "=?", new String[]{id},
                 null, null, null);
-        TransferRecord record = null;
+        SendEntry record = null;
         if (c.moveToFirst()) {
             record = fromCursor(c);
         }

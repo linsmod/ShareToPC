@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Locale;
 
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.transfer.TransferManager;
 
@@ -111,11 +111,11 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         // 传输进度
         TransferManager.SendJob latestJob = device.latestJob;
         if (latestJob != null) {
-            var current = latestJob.sendingEntry;
+            var current = latestJob.sendingItem;
+            vh.layoutProgress.setVisibility(View.VISIBLE);
+            vh.tvProgress.setText(latestJob.summary());
             if(current!=null && current.isSending()){
-                vh.layoutProgress.setVisibility(View.VISIBLE);
                 vh.pbProgress.setProgress(current.percent());
-                vh.tvProgress.setText(latestJob.summary());
             }
             if(current!=null){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
@@ -128,9 +128,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 }
             }
             Context context = vh.itemView.getContext();
-            if(latestJob.countIdle(TransferRecord.IDLE_REASON_OUTDATE)>0){
+            if(latestJob.countIdle(SendEntry.IDLE_REASON_OUTDATE)>0){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-                if(latestJob.countIdle(TransferRecord.IDLE_REASON_SUCCESS)>0){
+                if(latestJob.countIdle(SendEntry.IDLE_REASON_SUCCESS)>0){
                     vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_OUTDATE_PARITAL_SUCCESS,TaskAdapter.friendlyTime(latestJob.updateMillis)));
                 }
                 else {
@@ -138,15 +138,21 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 }
                 vh.tvEntrySize.setVisibility(View.GONE);
             }
-            else if(latestJob.countIdle(TransferRecord.IDLE_REASON_NET_ERROR)>0){
+            else if(latestJob.countIdle(SendEntry.IDLE_REASON_NET_ERROR)>0){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
                 vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_NET_ERROR,TaskAdapter.friendlyTime(latestJob.updateMillis)));
                 vh.tvEntrySize.setVisibility(View.GONE);
             }
-            else if(latestJob.countIdle(TransferRecord.IDLE_REASON_IO_ERROR)>0){
+            else if(latestJob.countIdle(SendEntry.IDLE_REASON_IO_ERROR)>0){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
                 vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_IO_ERR,TaskAdapter.friendlyTime(latestJob.updateMillis)));
                 vh.tvEntrySize.setVisibility(View.GONE);
+            }
+            else if(latestJob.isAllSuccess()){
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_SUCCESS,TaskAdapter.friendlyTime(latestJob.updateMillis)));
+                vh.tvEntrySize.setVisibility(View.GONE);
+                vh.pbProgress.setProgress(100);
             }
         }
 

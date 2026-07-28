@@ -95,6 +95,7 @@
     <string name="service_stop">停止</string>
     <string name="TIP_STATUS_NET_ERROR">网络错误 · %s</string>
     <string name="TIP_STATUS_IO_ERR">读取出错 · %s</string>
+    <string name="TIP_STATUS_SUCCESS">发送完成 · %s</string>
     <string name="TIP_STATUS_OUTDATE_PARITAL_SUCCESS">已过期 · 部分完成 · %s</string>
     <string name="TIP_STATUS_OUTDATE">已过期 · %s</string>
 </resources>

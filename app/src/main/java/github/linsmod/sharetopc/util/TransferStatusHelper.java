@@ -4,9 +4,7 @@ import android.content.Context;
 
 import androidx.annotation.Nullable;
 
-import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.SendEntry;
-import github.linsmod.sharetopc.data.TransferRecord;
 
 /**
  * 传输状态公共映射工具：三处传输 Item（设备传输子项 / 传输任务 / 设备任务弹窗）
@@ -37,7 +35,7 @@ public class TransferStatusHelper {
      * - 文本类型只要有 textContent 就可以
      * - 文件类型需 contentUri/localPath 可用，且 PFD 仍有效
      */
-    public static boolean canResumeOrRetry(TransferRecord record, @Nullable PfdChecker pfdChecker) {
+    public static boolean canResumeOrRetry(SendEntry record, @Nullable PfdChecker pfdChecker) {
         if (record == null) return false;
         if (record.contentType == SendEntry.TYPE_TEXT) {
             return record.textContent != null;
@@ -49,23 +47,23 @@ public class TransferStatusHelper {
     }
 
     /** 状态圆点颜色（使用简化后的用户可见状态）。 */
-    public static int dotColor(Context ctx, TransferRecord r) {
+    public static int dotColor(Context ctx, SendEntry r) {
         if (r == null) return 0;
         switch (r.status) {
-            case TransferRecord.STATUS_IDLE:
-                if(r.idleReason==TransferRecord.IDLE_REASON_SUCCESS)
+            case SendEntry.STATUS_IDLE:
+                if(r.idleReason==SendEntry.IDLE_REASON_SUCCESS)
                     return ctx.getColor(android.R.color.holo_green_dark);
-                else if(r.idleReason==TransferRecord.IDLE_REASON_CREATED){
+                else if(r.idleReason==SendEntry.IDLE_REASON_CREATED){
                     return ctx.getColor(android.R.color.darker_gray);
                 }
-                else if(r.idleReason==TransferRecord.IDLE_REASON_IO_ERROR||
-                r.idleReason==TransferRecord.IDLE_REASON_NET_ERROR){
+                else if(r.idleReason==SendEntry.IDLE_REASON_IO_ERROR||
+                r.idleReason==SendEntry.IDLE_REASON_NET_ERROR){
                     return ctx.getColor(android.R.color.holo_red_dark);
                 }
-                else if(r.idleReason==TransferRecord.IDLE_REASON_PAUSED){
+                else if(r.idleReason==SendEntry.IDLE_REASON_PAUSED){
                     return ctx.getColor(android.R.color.holo_blue_light);
                 }
-            case TransferRecord.STATUS_SENDING:
+            case SendEntry.STATUS_SENDING:
                 return ctx.getColor(android.R.color.holo_blue_light);
             default:
                 return ctx.getColor(android.R.color.holo_red_dark);

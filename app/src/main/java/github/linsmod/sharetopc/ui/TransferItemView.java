@@ -18,12 +18,11 @@ import java.util.Locale;
 
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.SendEntry;
-import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.util.FileUtils;
 import github.linsmod.sharetopc.util.TransferStatusHelper;
 public class TransferItemView extends LinearLayout {
     static final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
-    public static BindData createBindData(Context ctx,TransferRecord record) {
+    public static BindData createBindData(Context ctx,SendEntry record) {
         var data  = new BindData();
         data.id = record.id;
 
@@ -43,7 +42,7 @@ public class TransferItemView extends LinearLayout {
         // 第二行 meta: "状态 · percent% · 时间"
         StringBuilder meta = new StringBuilder(record.statusLabel());
         if (record.totalBytes > 0
-                && (TransferRecord.STATUS_SENDING == record.getStatus()
+                && (SendEntry.STATUS_SENDING == record.getStatus()
                 || record.isPaused())) {
             meta.append(" · ").append(record.percent()).append("%");
         }
@@ -54,7 +53,7 @@ public class TransferItemView extends LinearLayout {
 
         // 百分比 + 进度条
         boolean hasProgress = record.totalBytes > 0
-                && (TransferRecord.STATUS_SENDING==(record.getStatus())
+                && (SendEntry.STATUS_SENDING==(record.getStatus())
                 || record.isPaused()
         );
         if (hasProgress) {
@@ -66,14 +65,14 @@ public class TransferItemView extends LinearLayout {
         // 发送完成绿色勾
         data.showCheckMark = record.isSuccess();
         // 过期显示灰色点
-        data.showOutdateDot = record.status == TransferRecord.STATUS_IDLE
-                && record.idleReason == TransferRecord.IDLE_REASON_OUTDATE;
+        data.showOutdateDot = record.status == SendEntry.STATUS_IDLE
+                && record.idleReason == SendEntry.IDLE_REASON_OUTDATE;
         // 其他出错显示红色点
-        data.showErrorDot = record.status == TransferRecord.STATUS_IDLE
-                && record.idleReason != TransferRecord.IDLE_REASON_SUCCESS
-                && record.idleReason != TransferRecord.IDLE_REASON_PAUSED
-                && record.idleReason != TransferRecord.IDLE_REASON_CREATED
-                && record.idleReason != TransferRecord.IDLE_REASON_OUTDATE;
+        data.showErrorDot = record.status == SendEntry.STATUS_IDLE
+                && record.idleReason != SendEntry.IDLE_REASON_SUCCESS
+                && record.idleReason != SendEntry.IDLE_REASON_PAUSED
+                && record.idleReason != SendEntry.IDLE_REASON_CREATED
+                && record.idleReason != SendEntry.IDLE_REASON_OUTDATE;
 
         return data;
     }
@@ -181,7 +180,7 @@ public class TransferItemView extends LinearLayout {
     // ── 统一绑定入口 ──────────────────────────────
 
     /** 一次调用完成所有字段绑定。 */
-    public void bind(@NonNull TransferRecord record) {
+    public void bind(@NonNull SendEntry record) {
         TransferItemView.BindData data =  TransferItemView.createBindData(getContext(),record);
         if (data == null) return;
 

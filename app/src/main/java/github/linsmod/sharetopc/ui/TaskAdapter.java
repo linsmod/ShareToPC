@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Locale;
 
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.util.TransferStatusHelper;
 
 /**
@@ -51,10 +51,10 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static class DisplayItem {
         final int type;          // TYPE_GROUP / TYPE_ENTRY
         final int groupIndex;    // 所属 groups 下标
-        final TransferRecord entry; // TYPE_ENTRY 时非 null
+        final SendEntry entry; // TYPE_ENTRY 时非 null
         final TaskGroup group;   // TYPE_GROUP 时非 null
 
-        DisplayItem(int type, int groupIndex, TransferRecord entry, TaskGroup group) {
+        DisplayItem(int type, int groupIndex, SendEntry entry, TaskGroup group) {
             this.type = type;
             this.groupIndex = groupIndex;
             this.entry = entry;
@@ -73,7 +73,7 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     /** 增量更新单个条目的进度（避免全量 notifyDataSetChanged）。 */
-    public void onEntryProgressChanged(TransferRecord source) {
+    public void onEntryProgressChanged(SendEntry source) {
         if (source == null || source.id == null) return;
 
         // 找到并更新条目
@@ -110,7 +110,7 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             TaskGroup g = groups.get(i);
             displayList.add(new DisplayItem(TYPE_GROUP, i, null, g));
             if (g.expanded) {
-                for (TransferRecord r : g.entries) {
+                for (SendEntry r : g.entries) {
                     displayList.add(new DisplayItem(TYPE_ENTRY, i, r, g));
                 }
             }

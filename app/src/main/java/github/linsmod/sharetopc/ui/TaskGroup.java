@@ -2,11 +2,9 @@ package github.linsmod.sharetopc.ui;
 
 import androidx.annotation.NonNull;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import github.linsmod.sharetopc.data.SendEntry;
-import github.linsmod.sharetopc.data.TransferRecord;
 
 /**
  * 传输任务分组（按 jobId 聚合），用于任务页树状展示。
@@ -18,7 +16,7 @@ public class TaskGroup {
     public final int port;
     public final long timeMillis;
     @NonNull
-    public final List<TransferRecord> entries;
+    public final List<SendEntry> entries;
     public boolean expanded = true;
 
     /** 预计算的聚合进度。 */
@@ -31,7 +29,7 @@ public class TaskGroup {
     public boolean showDeviceInfo = true;
 
     public TaskGroup(String jobId, String deviceName, String host, int port, long timeMillis,
-                     @NonNull List<TransferRecord> entries) {
+                     @NonNull List<SendEntry> entries) {
         this.jobId = jobId;
         this.deviceName = deviceName;
         this.host = host;
@@ -47,11 +45,11 @@ public class TaskGroup {
         sentBytes = 0;
         totalEntries = entries.size();
         completedEntries = 0;
-        for (TransferRecord r : entries) {
+        for (SendEntry r : entries) {
             totalBytes += r.totalBytes > 0 ? r.totalBytes : r.size;
             sentBytes += r.sentBytes;
-            if (r.status == TransferRecord.STATUS_IDLE
-                    && r.idleReason == TransferRecord.IDLE_REASON_SUCCESS) {
+            if (r.status == SendEntry.STATUS_IDLE
+                    && r.idleReason == SendEntry.IDLE_REASON_SUCCESS) {
                 completedEntries++;
             }
         }
@@ -59,8 +57,8 @@ public class TaskGroup {
 
     /** 是否有正在传输的子项。 */
     public boolean hasActive() {
-        for (TransferRecord r : entries) {
-            if (r.status == TransferRecord.STATUS_SENDING) return true;
+        for (SendEntry r : entries) {
+            if (r.status == SendEntry.STATUS_SENDING) return true;
         }
         return false;
     }

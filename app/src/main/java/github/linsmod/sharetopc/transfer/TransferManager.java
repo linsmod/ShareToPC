@@ -31,7 +31,6 @@ import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.JobStore;
 import github.linsmod.sharetopc.data.SendEntry;
-import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.util.LogX;
 
@@ -51,7 +50,8 @@ public class TransferManager {
         private boolean isCancelRequested;
         private boolean isCancelled;
         @Nullable
-        public SendEntry sendingEntry;
+        public SendEntry sendingItem;
+        @Nullable
         public DiscoveredDevice device;
         public SendJob(String id,String deviceId, List<SendEntry> items, String host, int port) {
             this.id = id;
@@ -106,7 +106,7 @@ public class TransferManager {
             int n = 0;
             for (var item :
                     items) {
-                if (item.status==TransferRecord.STATUS_IDLE) {
+                if (item.status==SendEntry.STATUS_IDLE) {
                     if( item.idleReason==reason){
                         n++;
                     }
@@ -116,7 +116,7 @@ public class TransferManager {
         }
 
         public String summary() {
-            return countIdle(TransferRecord.IDLE_REASON_SUCCESS) + "/" + items.size();
+            return countIdle(SendEntry.IDLE_REASON_SUCCESS) + "/" + items.size();
         }
 
         public boolean isSending() {
@@ -228,11 +228,11 @@ public class TransferManager {
      * 请求暂停一条记录。设置 PENDING_ACTION_END_PAUSE 中间状态，
      * 等待 TransferProtocol 实际发送 CANCEL 帧后在 process() 中转为 IDLE_REASON_PAUSED。
      */
-    public void requestPause(TransferRecord record) {
+    public void requestPause(SendEntry record) {
         if (record instanceof SendEntry) {
             SendEntry sendEntry = (SendEntry) record;
             if (!sendEntry.canRequestPause()) return;
-            sendEntry.pendingAction = TransferRecord.PENDING_ACTION_END_PAUSE;
+            sendEntry.pendingAction = SendEntry.PENDING_ACTION_END_PAUSE;
             App.get().jobStore.updateStatus(sendEntry.id, sendEntry.status, sendEntry.idleReason, sendEntry.pendingAction);
         }
     }
@@ -254,9 +254,9 @@ public class TransferManager {
                 if(item.canResume()){
                     canResumeJob = true;
                     // reset paused item state
-                    if(item.pendingAction==TransferRecord.PENDING_ACTION_END_RESUME){
-                        item.status = TransferRecord.STATUS_SENDING;
-                        item.pendingAction = TransferRecord.PENDING_ACTION_NONE;
+                    if(item.pendingAction==SendEntry.PENDING_ACTION_END_RESUME){
+                        item.status = SendEntry.STATUS_SENDING;
+                        item.pendingAction = SendEntry.PENDING_ACTION_NONE;
                         App.get().jobStore.updateStatus(item.id,item.status,item.idleReason, item.pendingAction);
                     }
                 }
@@ -309,7 +309,7 @@ public class TransferManager {
                     continue;
                 }
                 // 走到哪标记到哪
-                item.status = TransferRecord.STATUS_SENDING;
+                item.status = SendEntry.STATUS_SENDING;
                 jobStore.updateStatus(item.id, item.status, item.idleReason, item.pendingAction);
                 jobStore.updateProgress(item.id, 0, item.size);
                 lastProgressNotifyMs = 0;
@@ -323,10 +323,10 @@ public class TransferManager {
                         if (this.currentJob.isCancelRequested()) {
                             break;
                         }
-                        job.sendingEntry =item;
+                        job.sendingItem =item;
                         sendItem(client, job, item);
-                        item.status = TransferRecord.STATUS_IDLE;
-                        item.idleReason = TransferRecord.IDLE_REASON_SUCCESS;
+                        item.status = SendEntry.STATUS_IDLE;
+                        item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
                         break;
                     } catch (Exception e) {
                         // 连接断开，关闭以便下次重连
@@ -339,9 +339,9 @@ public class TransferManager {
                         String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
                         LogX.e("transfer attempt " + attempt + " for " + item.name + " failed: " + errMsg, e);
                         if (attempt >= MAX_ATTEMPTS) {
-                            item.status = TransferRecord.STATUS_IDLE;
-                            if (item.idleReason != TransferRecord.IDLE_REASON_IO_ERROR) {
-                                item.idleReason = TransferRecord.IDLE_REASON_NET_ERROR;
+                            item.status = SendEntry.STATUS_IDLE;
+                            if (item.idleReason != SendEntry.IDLE_REASON_IO_ERROR) {
+                                item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
                             }
                             if (item.errorMsg == null) {
                                 item.errorMsg = errMsg;
@@ -371,24 +371,24 @@ public class TransferManager {
             }
             // 处理取消后的 pending action 状态转换
             for (SendEntry item : job.items) {
-                if (item.pendingAction == TransferRecord.PENDING_ACTION_END_PAUSE) {
+                if (item.pendingAction == SendEntry.PENDING_ACTION_END_PAUSE) {
                     // CANCEL 帧已发送，转为暂停状态
-                    item.status = TransferRecord.STATUS_IDLE;
-                    item.idleReason = TransferRecord.IDLE_REASON_PAUSED;
-                    item.pendingAction = TransferRecord.PENDING_ACTION_NONE;
+                    item.status = SendEntry.STATUS_IDLE;
+                    item.idleReason = SendEntry.IDLE_REASON_PAUSED;
+                    item.pendingAction = SendEntry.PENDING_ACTION_NONE;
                     updateJob(job, item);
-                } else if (item.pendingAction == TransferRecord.PENDING_ACTION_END_RESUME
+                } else if (item.pendingAction == SendEntry.PENDING_ACTION_END_RESUME
                         && job.isCancelRequested()) {
                     // 恢复请求中途被取消，回退到暂停状态
-                    item.status = TransferRecord.STATUS_IDLE;
-                    item.idleReason = TransferRecord.IDLE_REASON_PAUSED;
-                    item.pendingAction = TransferRecord.PENDING_ACTION_NONE;
+                    item.status = SendEntry.STATUS_IDLE;
+                    item.idleReason = SendEntry.IDLE_REASON_PAUSED;
+                    item.pendingAction = SendEntry.PENDING_ACTION_NONE;
                     updateJob(job, item);
                 }
             }
             SendJob finished = currentJob;
             recentJobs.put(currentJob.id,currentJob);
-            currentJob.sendingEntry = null;
+            currentJob.sendingItem = null;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
             mainHandler.post(() -> {
                 for (JobProgressListener l : progressListeners) l.onJobFinished(finished);
@@ -424,7 +424,7 @@ public class TransferManager {
             Uri uri = Uri.parse(item.contentUri);
             try (InputStream in = appContext.getContentResolver().openInputStream(uri)) {
                 if (in == null) {
-                    item.idleReason = TransferRecord.IDLE_REASON_IO_ERROR;
+                    item.idleReason = SendEntry.IDLE_REASON_IO_ERROR;
                     item.errorMsg = "Pfd丢失，无法读取：" + item.name;
                     throw new Exception(item.errorMsg);
                 }
@@ -451,7 +451,7 @@ public class TransferManager {
                 }
             }
         // 所有源都不可用 → IO 错误
-        item.idleReason = TransferRecord.IDLE_REASON_IO_ERROR;
+        item.idleReason = SendEntry.IDLE_REASON_IO_ERROR;
         item.errorMsg = "无可读取的源：" + item.name;
         throw new Exception(item.errorMsg);
     }
@@ -466,7 +466,7 @@ public class TransferManager {
     }
 
     private void onProgress(SendEntry entry) {
-        TransferRecord old = jobStore.getSendEntry(entry.id);
+        SendEntry old = jobStore.getSendEntry(entry.id);
         jobStore.updateProgress(entry.id, entry.sentBytes, entry.totalBytes);
         long now = System.currentTimeMillis();
         var progressed = old.percent() != entry.percent();

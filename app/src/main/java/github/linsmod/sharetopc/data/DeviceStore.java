@@ -89,29 +89,11 @@ public class DeviceStore {
         values.put(DBHelper.COL_DEV_ID, device.deviceId);
         values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());
 
-        // 取已持久化的 latestJobId（兼容：device 对象上的值可能尚未写入）
-        String latestJobId = device.latestJobId != null
-                ? device.latestJobId : getLatestJobId(device.host, device.port);
-        values.put(DBHelper.COL_DEV_LAST_SEND_ID, latestJobId);
+        values.put(DBHelper.COL_DEV_LAST_SEND_ID, device.latestJobId);
 
         // 插入或替换（主键冲突时更新）
         db.insertWithOnConflict(DBHelper.TABLE_DEVICE, null, values,
                 SQLiteDatabase.CONFLICT_REPLACE);
-    }
-
-    /** 获取某个设备的 latestJobId（如果不存在返回 null）。 */
-    public synchronized String getLatestJobId(String host, int port) {
-        Cursor c = db.query(DBHelper.TABLE_DEVICE,
-                new String[]{DBHelper.COL_DEV_LAST_SEND_ID},
-                DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?",
-                new String[]{host, String.valueOf(port)},
-                null, null, null);
-        String id = null;
-        if (c.moveToFirst()) {
-            id = c.getString(0);
-            c.close();
-        }
-        return id;
     }
 
     /** 删除指定设备。 */

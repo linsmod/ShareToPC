@@ -18,7 +18,7 @@ import java.util.Collections;
 
 import github.linsmod.sharetopc.MainViewModel;
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.util.TransferStatusHelper;
 
@@ -122,9 +122,9 @@ public class DeviceQueueDialog extends Dialog {
 
         boolean hasActive = group.hasActive();
         boolean hasResumable = false;
-        for (TransferRecord r : group.entries) {
-            if (r.status == TransferRecord.STATUS_IDLE
-                    && r.idleReason != TransferRecord.IDLE_REASON_SUCCESS
+        for (SendEntry r : group.entries) {
+            if (r.status == SendEntry.STATUS_IDLE
+                    && r.idleReason != SendEntry.IDLE_REASON_SUCCESS
                     && r.pendingAction == 0
                     && github.linsmod.sharetopc.util.TransferStatusHelper.canResumeOrRetry(r, pfdChecker)) {
                 hasResumable = true;

@@ -14,7 +14,6 @@ import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.activity.OnBackPressedCallback;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
@@ -29,7 +28,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
-import github.linsmod.sharetopc.data.TransferRecord;
+import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.ui.DeviceQueueDialog;
@@ -100,17 +99,18 @@ public class MainActivity extends AppCompatActivity {
 
         // 通过 device.latestJobId 直接取该设备最近一次任务的记录
         github.linsmod.sharetopc.ui.TaskGroup group = null;
-        if (device.latestJobId != null) {
-            java.util.List<TransferRecord> history = viewModel.getHistory();
+        String jobId = device.latestJobId;
+        if (jobId != null) {
+            java.util.List<SendEntry> history = viewModel.getHistory();
             if (history != null) {
-                java.util.List<TransferRecord> latestEntries = new java.util.ArrayList<>();
-                for (TransferRecord r : history) {
-                    if (device.latestJobId.equals(r.jobId)) latestEntries.add(r);
+                java.util.List<SendEntry> latestEntries = new java.util.ArrayList<>();
+                for (SendEntry r : history) {
+                    if (jobId.equals(r.jobId)) latestEntries.add(r);
                 }
                 if (!latestEntries.isEmpty()) {
                     java.util.Collections.reverse(latestEntries); // DB 查询为 DESC，反转为提交顺序
-                    TransferRecord first = latestEntries.get(0);
-                    group = new github.linsmod.sharetopc.ui.TaskGroup(device.latestJobId,
+                    SendEntry first = latestEntries.get(0);
+                    group = new github.linsmod.sharetopc.ui.TaskGroup(jobId,
                             first.targetName != null ? first.targetName
                                     : (first.host != null ? first.host : ""),
                             first.host, first.port, first.timeMillis, latestEntries);
@@ -150,7 +150,7 @@ public class MainActivity extends AppCompatActivity {
         deviceQueueDialog.show();
     }
 
-    private void showTextPreview(github.linsmod.sharetopc.data.TransferRecord record) {
+    private void showTextPreview(github.linsmod.sharetopc.data.SendEntry record) {
         TextView tv = new TextView(this);
         tv.setText(record.textContent);
         tv.setTextIsSelectable(true);
