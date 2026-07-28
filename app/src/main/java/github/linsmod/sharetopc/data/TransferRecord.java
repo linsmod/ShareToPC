@@ -7,7 +7,7 @@ public class TransferRecord{
     public static final int STATUS_IDLE = 0;
     public static final int STATUS_SENDING = 1;
     public static final int IDLE_REASON_CREATED=0;
-    public static final int IDLE_REASON_OUTDATE=1; // app restart
+    public static final int IDLE_REASON_OUTDATE=1; // set on app restart for none success
     public static final int IDLE_REASON_PAUSED=2;
     public static final int IDLE_REASON_NET_ERROR=3;
     public static final int IDLE_REASON_IO_ERROR=4;

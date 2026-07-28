@@ -117,14 +117,14 @@ public class JobStore {
 
     // ---------- 公开 API ----------
 
-    /** App 重启时，将所有 STATUS_SENDING 和 IDLE_REASON_CREATED 的记录标记为 OUTDATE，并同步更新对应 job。 */
+    /** App 重启时，将所有 STATUS_SENDING 和 STATUS_IDLE+非SUCCESS 的记录标记为 OUTDATE，并同步更新对应 job。 */
     public synchronized void markOutdateOnStartup() {
         // 查出所有将受影响的 jobId（在更新前查）
         Cursor c = db.query(true, DBHelper.TABLE_JOB_ENTRY,
                 new String[]{DBHelper.COL_JOB_ID},
-                DBHelper.COL_STATUS + "=? OR (" + DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "=?)",
+                DBHelper.COL_STATUS + "=? OR (" + DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "!=?)",
                 new String[]{String.valueOf(TransferRecord.STATUS_SENDING),
-                        String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_CREATED)},
+                        String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_SUCCESS)},
                 null, null, null, null);
         List<String> affectedJobIds = new ArrayList<>();
         if (c != null) {
@@ -144,15 +144,10 @@ public class JobStore {
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_STATUS + "=?", new String[]{String.valueOf(TransferRecord.STATUS_SENDING)});
 
-        // 标记所有未发送的 CREATED → OUTDATE（PFD 已丢失，不可恢复）
+        // 标记所有 STATUS_IDLE 且非 SUCCESS 的记录 → OUTDATE（重启后 PFD 已丢失，不可恢复）
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
-                DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "=?",
-                new String[]{String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_CREATED)});
-
-        // 标记所有暂停的 → OUTDATE（重启后 PFD 已丢失，不可恢复）
-        db.update(DBHelper.TABLE_JOB_ENTRY, values,
-                DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "=?",
-                new String[]{String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_PAUSED)});
+                DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "!=?",
+                new String[]{String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_SUCCESS)});
 
         // 同步受影响的 job 聚合信息
         for (String jid : affectedJobIds) {
