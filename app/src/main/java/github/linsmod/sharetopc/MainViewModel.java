@@ -313,7 +313,7 @@ public class MainViewModel extends AndroidViewModel {
             java.util.Collections.reverse(entries);
         }
 
-        // 第三步：用收集到的最大 timeMillis 创建 TaskGroup
+        // 第三步：用收集到的最大 timeMillis 创建 TaskGroup，并继承旧的折叠状态
         List<TaskGroup> result = new ArrayList<>();
         for (Map.Entry<String, List<SendEntry>> e : entryMap.entrySet()) {
             String jid = e.getKey();
@@ -322,6 +322,13 @@ public class MainViewModel extends AndroidViewModel {
             TaskGroup g = new TaskGroup(jid, nameMap.get(jid),
                     hostMap.get(jid), portMap.get(jid) != null ? portMap.get(jid) : 0,
                     maxTime, entries);
+            // 继承旧的展开/折叠状态，避免刷新时状态丢失
+            for (TaskGroup old : cachedTasks) {
+                if (jid.equals(old.jobId)) {
+                    g.expanded = old.expanded;
+                    break;
+                }
+            }
             g.recomputeProgress();
             result.add(g);
         }

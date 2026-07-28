@@ -122,6 +122,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 vh.tvEntryName.setText(current.name);
                 if (current.totalBytes > 0) {
                     vh.tvEntrySize.setVisibility(View.VISIBLE);
+                    vh.tvEntrySize.setTextColor(vh.tvEntryName.getTextColors().getDefaultColor());
+                    vh.tvEntrySize.setTypeface(null, android.graphics.Typeface.NORMAL);
                     vh.tvEntrySize.setText(formatSize(current.sentBytes) + " / " + formatSize(current.totalBytes));
                 } else {
                     vh.tvEntrySize.setVisibility(View.GONE);
@@ -151,7 +153,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             else if(latestJob.isAllSuccess()){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
                 vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_SUCCESS,TaskAdapter.friendlyTime(latestJob.updateMillis)));
-                vh.tvEntrySize.setVisibility(View.GONE);
+                vh.tvEntrySize.setVisibility(View.VISIBLE);
+                vh.tvEntrySize.setText("✓");
+                vh.tvEntrySize.setTextColor(0xFF4CAF50);
+                vh.tvEntrySize.setTypeface(null, android.graphics.Typeface.BOLD);
                 vh.pbProgress.setProgress(100);
             }
         }

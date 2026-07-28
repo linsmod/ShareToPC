@@ -457,12 +457,11 @@ public class TransferManager {
     }
     }
 
-    /** 更新历史记录状态（发送成功后 / 取消 / 失败）。 */
+    /** 更新历史记录状态（发送成功后 / 取消 / 失败）。targetName 不覆盖，提交时已正确设置。 */
     private void updateJob(SendJob job, SendEntry item) {
-        var name = job.device.alias!=null?job.device.alias:job.device.name;
         job.updateMillis = System.currentTimeMillis();
         jobStore.updateJobEntry(item.id, job.host, job.port,
-                name, item.status, item.idleReason, item.errorMsg, item.pendingAction, job.updateMillis);
+                null, item.status, item.idleReason, item.errorMsg, item.pendingAction, job.updateMillis);
     }
 
     private void onProgress(SendEntry entry) {

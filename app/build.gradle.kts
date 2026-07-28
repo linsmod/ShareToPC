@@ -2,6 +2,27 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
+// ── 自动打包 PC 端 Receiver ──────────────────────────────────────
+val pcDebugDir = rootProject.file("pc_proj/ShareToPcReciver/ShareToPcReciver/bin/Debug")
+val assetsDir = file("src/main/assets")
+val pcZipName = "ShareToPcReciver.zip"
+
+tasks.register<Zip>("packagePcReceiver") {
+    group = "pc"
+    description = "打包 PC 端 Receiver (Debug) 到 assets"
+
+    from(pcDebugDir)
+    include("*.exe", "*.dll", "*.exe.config", "config.json")
+    archiveFileName.set(pcZipName)
+    destinationDirectory.set(assetsDir)
+}
+
+// 在 Android 构建前自动打包 PC 端
+tasks.named("preBuild") {
+    dependsOn("packagePcReceiver")
+}
+
+// ── Android 配置 ──────────────────────────────────────────────────
 android {
     namespace = "github.linsmod.sharetopc"
     buildFeatures {

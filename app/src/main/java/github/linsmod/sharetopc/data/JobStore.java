@@ -228,7 +228,7 @@ public class JobStore {
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_HOST, host);
         values.put(DBHelper.COL_PORT, port);
-        values.put(DBHelper.COL_TARGET_NAME, targetName);
+        if (targetName != null) values.put(DBHelper.COL_TARGET_NAME, targetName);
         values.put(DBHelper.COL_STATUS, status);
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, errorMsg);

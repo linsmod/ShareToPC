@@ -487,7 +487,7 @@ namespace ShareToPcReciver
             if (e.Item.Tag is FileProgressInfo p)
             {
                 string label = p.Failed ? $"{p.Percent}% 失败"
-                             : p.Cancelled ? $"{p.Percent}% 已取消"
+                             : p.Cancelled ? $"{p.Percent}% 暂停"
                              : $"{p.Percent}%";
                 Color clr = p.Failed ? Color.DarkRed : p.Cancelled ? Color.Gray : SystemColors.ControlText;
                 DrawProgressCell(e, p.Percent, label, clr);

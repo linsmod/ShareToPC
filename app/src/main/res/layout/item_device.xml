@@ -80,7 +80,7 @@
             android:ellipsize="middle"
             android:maxLines="1"
             android:textColor="?android:attr/textColorSecondary"
-            android:textSize="11sp" />
+            android:textSize="14sp" />
 
         <TextView
             android:id="@+id/tvEntrySize"
@@ -88,7 +88,7 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="8dp"
             android:textColor="?android:attr/textColorSecondary"
-            android:textSize="11sp" />
+            android:textSize="14sp" />
     </LinearLayout>
 
 </LinearLayout>
