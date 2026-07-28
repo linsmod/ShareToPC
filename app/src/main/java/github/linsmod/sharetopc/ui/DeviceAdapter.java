@@ -38,6 +38,11 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     private static final int TYPE_ADD = 2;
 
     public void submitList(List<DiscoveredDevice> discoveredDevices) {
+        items.clear();
+        items.addAll(discoveredDevices);
+        displayItems.clear();
+        displayItems.addAll(discoveredDevices);
+        notifyDataSetChanged();
     }
 
     public interface OnDeviceClickListener {
