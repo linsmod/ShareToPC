@@ -24,10 +24,6 @@
         android:summary="@string/pref_contact_dev_summary"
         android:title="@string/pref_contact_dev_title" />
 
-    <Preference
-        android:key="pc_client"
-        android:summary="@string/pref_pc_client_summary"
-        android:title="@string/pref_pc_client_title" />
 
     <Preference
         android:key="version"

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -16,7 +17,7 @@ namespace ShareToPcReciver.Net
         public const string ServiceType = "_mytransfer._tcp";
         public const string UdpBroadcastPort = "51235";
         public const int ProtocolVersion = 1;
-        public const string AppVersion = "ShareToPcReciver 1.0";
+        public static readonly string AppVersion = Assembly.GetExecutingAssembly().GetName().Name + "/" + Assembly.GetExecutingAssembly().GetName().Version.Major + "." + Assembly.GetExecutingAssembly().GetName().Version.Minor;
 
         public static async Task<(string headerJson, long payloadLength)> ReadFrameAsync(Stream stream, CancellationToken ct)
         {
