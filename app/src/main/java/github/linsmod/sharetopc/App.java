@@ -42,6 +42,7 @@ public class App extends Application {
         settingsStore = new SettingsStore(this);
         deviceStore = new DeviceStore(this);
         jobStore = new JobStore(this);
+        jobStore.markOutdateOnStartup();
         discoveryManager = new NsdDiscoveryManager(this, deviceStore);
         heartbeatManager = new HeartbeatManager(discoveryManager);
         heartbeatManager.start();

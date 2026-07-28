@@ -6,57 +6,45 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.lifecycle.LifecycleOwner;
-import androidx.lifecycle.LiveData;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.List;
 
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.util.TransferStatusHelper;
 
-/** 设备任务弹窗，仅观察传输历史 LiveData，单一数据源。 */
+/** 设备任务弹窗，复用 TaskAdapter 树状分组，展示传入的 TaskGroup。 */
 public class DeviceQueueDialog extends Dialog {
 
     public interface Listener {
-        void onTextPreviewRequested(TransferRecord record);
-        /** 用户请求暂停当前传输。 */
         void onPauseRequested(TransferRecord record);
-        /** 用户请求继续/重试一条记录。 */
         void onResumeRequested(TransferRecord record);
     }
 
     private final DiscoveredDevice device;
     private final Listener listener;
-    private final LifecycleOwner lifecycleOwner;
-    private final LiveData<List<TransferRecord>> historyLiveData;
+    @Nullable
+    private final TaskGroup group;
     @Nullable
     private final TransferStatusHelper.PfdChecker pfdChecker;
 
-    private DeviceTaskAdapter adapter;
-    private RecyclerView rvTaskList;
-    private TextView tvEmpty;
+    private TaskAdapter adapter;
 
     public DeviceQueueDialog(@NonNull Context context,
                              @NonNull DiscoveredDevice device,
+                             @Nullable TaskGroup group,
                              Listener listener,
-                             @NonNull LifecycleOwner lifecycleOwner,
-                             @NonNull LiveData<List<TransferRecord>> historyLiveData,
                              @Nullable TransferStatusHelper.PfdChecker pfdChecker) {
         super(context);
         this.device = device;
+        this.group = group;
         this.listener = listener;
-        this.lifecycleOwner = lifecycleOwner;
-        this.historyLiveData = historyLiveData;
         this.pfdChecker = pfdChecker;
     }
 
@@ -74,41 +62,44 @@ public class DeviceQueueDialog extends Dialog {
             window.setWindowAnimations(0);
         }
 
-        TextView tvTitle = findViewById(R.id.tvDialogTitle);
+        android.widget.TextView tvTitle = findViewById(R.id.tvDialogTitle);
         tvTitle.setText(device.displayName() + " 的任务");
 
         findViewById(R.id.btnClose).setOnClickListener(v -> dismiss());
-
         findViewById(R.id.chipGroup).setVisibility(View.GONE);
 
-        rvTaskList = findViewById(R.id.rvTaskList);
+        RecyclerView rvTaskList = findViewById(R.id.rvTaskList);
         rvTaskList.setLayoutManager(new LinearLayoutManager(getContext()));
-        adapter = new DeviceTaskAdapter();
+
+        adapter = new TaskAdapter(new TaskAdapter.ActionListener() {
+            @Override
+            public void onRetryRequested(TransferRecord record) {
+                if (listener != null) listener.onResumeRequested(record);
+            }
+
+            @Override
+            public void onSelectionChanged(int count) {
+                // 弹窗不需要多选
+            }
+
+            @Override
+            public void onPauseRequested(TransferRecord record) {
+                if (listener != null) listener.onPauseRequested(record);
+            }
+        }, pfdChecker);
         rvTaskList.setAdapter(adapter);
 
-        tvEmpty = findViewById(R.id.tvEmpty);
+        View tvEmpty = findViewById(R.id.tvEmpty);
 
-        historyLiveData.observe(lifecycleOwner, ignored -> refreshTaskList());
-    }
-
-    private void refreshTaskList() {
-        String deviceKey = device.address();
-        List<TransferRecord> list = historyLiveData.getValue();
-        List<TransferRecord> scopedItems = new ArrayList<>();
-
-        for (TransferRecord tr : list != null ? list : Collections.<TransferRecord>emptyList()) {
-            if (tr.host == null) continue;
-            if (!deviceKey.equals(tr.deviceAddress())) continue;
-            scopedItems.add(tr);
-        }
-
-        if (scopedItems.isEmpty()) {
-            rvTaskList.setVisibility(View.GONE);
-            tvEmpty.setVisibility(View.VISIBLE);
-        } else {
+        if (group != null && !group.entries.isEmpty()) {
+            group.recomputeProgress();
+            group.expanded = true;
+            adapter.submitList(Collections.singletonList(group));
             rvTaskList.setVisibility(View.VISIBLE);
             tvEmpty.setVisibility(View.GONE);
+        } else {
+            rvTaskList.setVisibility(View.GONE);
+            tvEmpty.setVisibility(View.VISIBLE);
         }
-        adapter.submitList(scopedItems);
     }
 }

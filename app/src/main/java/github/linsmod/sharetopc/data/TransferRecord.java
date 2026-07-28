@@ -9,6 +9,7 @@ public class TransferRecord implements TransferProtocol.Cancellable{
     public static final int STATUS_IDLE = 0;
     public static final int STATUS_SENDING = 1;
     public static final int IDLE_REASON_CREATED=0;
+    public static final int IDLE_REASON_OUTDATE=1; // app restart
     public static final int IDLE_REASON_PAUSED=2;
     public static final int IDLE_REASON_NET_ERROR=3;
     public static final int IDLE_REASON_IO_ERROR=4;
@@ -54,6 +55,8 @@ public class TransferRecord implements TransferProtocol.Cancellable{
         else switch (idleReason){
             case IDLE_REASON_CREATED:
                 return "准备发送";
+            case IDLE_REASON_OUTDATE:
+                return "已过期";
             case IDLE_REASON_IO_ERROR:
                 return "读取出错";
             case IDLE_REASON_NET_ERROR:
@@ -76,13 +79,6 @@ public class TransferRecord implements TransferProtocol.Cancellable{
         }
         return contentUri != null
                 || (localPath != null && new java.io.File(localPath).exists());
-    }
-
-    /** 文件类型的记录，本地副本已不存在且无 contentUri 回退（用于视觉灰化）。 */
-    public boolean isFileGone() {
-        return contentType == SendEntry.TYPE_FILE
-                && contentUri == null
-                && (localPath == null || !new java.io.File(localPath).exists());
     }
 
     public SendEntry createSendEntry() {

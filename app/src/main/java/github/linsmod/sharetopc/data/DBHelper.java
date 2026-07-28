@@ -38,7 +38,7 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_DEV_PORT = "port";
     public static final String COL_DEV_ID = "id";
     public static final String COL_DEV_NAME = "name";
-    public static final String COL_DEV_LAST_SEND_ID = "lastJobId";
+    public static final String COL_DEV_LAST_SEND_ID = "latestJobId";
     public static final String COL_DEV_LAST_SEEN = "lastSeen";
 
     private static final String CREATE_JOB_ENTRY_TABLE =

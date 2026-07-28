@@ -58,6 +58,7 @@ public class DevicesFragment extends Fragment {
 
         viewModel.getDevices().observe(getViewLifecycleOwner(), deviceAdapter::submitList);
         viewModel.getConnState().observe(getViewLifecycleOwner(), tvConnState::setText);
+        viewModel.setDeviceProgressListener(deviceAdapter::notifyProgressChanged);
 
         return view;
     }
@@ -66,5 +67,11 @@ public class DevicesFragment extends Fragment {
     public void onResume() {
         super.onResume();
         viewModel.refreshDevices();
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        viewModel.setDeviceProgressListener(null);
     }
 }

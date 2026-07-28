@@ -3,12 +3,16 @@ package github.linsmod.sharetopc;
 import android.app.Application;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import github.linsmod.sharetopc.data.SendEntry;
@@ -16,6 +20,8 @@ import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
 import github.linsmod.sharetopc.transfer.TransferManager;
+import github.linsmod.sharetopc.ui.TaskGroup;
+
 public class MainViewModel extends AndroidViewModel {
 
     private final MutableLiveData<List<DiscoveredDevice>> devices = new MutableLiveData<>();
@@ -23,11 +29,40 @@ public class MainViewModel extends AndroidViewModel {
     private final MutableLiveData<String> searchHint = new MutableLiveData<>();
     private final MutableLiveData<Boolean> scanning = new MutableLiveData<>(false);
     private final MutableLiveData<List<TransferRecord>> history = new MutableLiveData<>();
-    private final MutableLiveData<List<TransferRecord>> tasks = new MutableLiveData<>();
+    private final MutableLiveData<List<TaskGroup>> tasks = new MutableLiveData<>();
 
     private final App app;
 
+    /** 设备进度更新回调（不用 LiveData，直接通知 UI 刷新）。 */
+    public interface DeviceProgressListener {
+        void onDeviceProgressChanged(@NonNull String deviceAddress);
+    }
+    private DeviceProgressListener deviceProgressListener;
+
     private NsdDiscoveryManager.Listener discoveryListener;
+    private final TransferManager.QueueListener queueListener = jobs -> {
+        refreshTasks();
+        updateDeviceProgressInPlace();
+    };
+    private final TransferManager.JobProgressListener progressListener = new TransferManager.JobProgressListener() {
+        @Override
+        public void onProgress(@NonNull TransferManager.SendJob job) {
+            updateDeviceProgressInPlace();
+            refreshTasks();
+        }
+
+        @Override
+        public void onJobStarted(@NonNull TransferManager.SendJob job) {
+            updateDeviceProgressInPlace();
+            refreshTasks();
+        }
+
+        @Override
+        public void onJobFinished(@NonNull TransferManager.SendJob job) {
+            updateDeviceProgressInPlace();
+            refreshHistory();
+        }
+    };
 
     private final android.os.Handler countdownHandler =
             new android.os.Handler(android.os.Looper.getMainLooper());
@@ -47,7 +82,7 @@ public class MainViewModel extends AndroidViewModel {
         discoveryListener = new NsdDiscoveryManager.Listener() {
             @Override
             public void onDevicesChanged(List<DiscoveredDevice> list) {
-                devices.setValue(mergeManualDevice(list));
+                devices.setValue(enrichDeviceProgress(mergeManualDevice(list)));
                 updateConnState();
             }
 
@@ -70,10 +105,10 @@ public class MainViewModel extends AndroidViewModel {
         app = (App) application;
         initListeners();
         app.discoveryManager.addListener(discoveryListener);
+        app.transferManager.addQueueListener(queueListener);
+        app.transferManager.addProgressListener(progressListener);
         refreshHistory();
         refreshTasks();
-        app.transferManager.queueJobsLiveData.observeForever(jobs -> refreshTasks());
-        // 立即显示已知设备（离线状态），包含手动设备
         refreshDevices();
         updateConnState();
     }
@@ -90,7 +125,6 @@ public class MainViewModel extends AndroidViewModel {
         return searchHint;
     }
 
-    /** 根据扫描状态与已发现数量生成状态文案（扫描中在已发现x台设备后追加秒数）。 */
     private void updateConnState() {
         List<DiscoveredDevice> list = devices.getValue();
         int count = list != null ? list.size() : 0;
@@ -108,8 +142,12 @@ public class MainViewModel extends AndroidViewModel {
         }
     }
 
-    public LiveData<List<TransferRecord>> getTasks() {
+    public LiveData<List<TaskGroup>> getTasks() {
         return tasks;
+    }
+
+    public void setDeviceProgressListener(DeviceProgressListener l) {
+        this.deviceProgressListener = l;
     }
 
     public LiveData<List<TransferRecord>> getHistory() {
@@ -122,23 +160,194 @@ public class MainViewModel extends AndroidViewModel {
         app.discoveryManager.startDiscovery(app.settingsStore.getScanTimeoutSec() * 1000L);
     }
 
-    /** 刷新任务列表（合并历史记录与正在进行的传输队列）。 */
+    // ── 设备进度 ──────────────────────────────────────────
+
+    /** 计算每个设备的当前传输进度，用于设备卡片上显示进度条。 */
+    private Map<String, DiscoveredDevice.DeviceProgress> computeDeviceProgress() {
+        Map<String, DiscoveredDevice.DeviceProgress> map = new HashMap<>();
+
+        // 1) 当前正在传输的 job
+        TransferManager.SendJob cur = app.transferManager.getCurrentJob();
+        if (cur != null) {
+            DiscoveredDevice.DeviceProgress p = new DiscoveredDevice.DeviceProgress();
+            p.jobId = cur.id;
+            p.state = cur.isCancelRequested() || cur.isCancelled()
+                    ? DiscoveredDevice.DeviceProgress.STATE_PAUSED
+                    : DiscoveredDevice.DeviceProgress.STATE_SENDING;
+            p.totalEntries = cur.items.size();
+            for (SendEntry e : cur.items) {
+                p.totalBytes += e.totalBytes > 0 ? e.totalBytes : e.size;
+                p.sentBytes += e.sentBytes;
+                if (e.isSuccess()) p.completedEntries++;
+            }
+            // 当前正在发送的 entry 名称
+            p.currentEntryName = findCurrentEntryName(cur.items);
+            map.put(cur.host + ":" + cur.port, p);
+        }
+
+        // 2) 队列中等待的 job（设备当前无活动 job 且有排队任务时显示排队状态）
+        for (TransferManager.SendJob job : app.transferManager.getQueueSnapshot()) {
+            String key = job.host + ":" + job.port;
+            if (!map.containsKey(key)) {
+                DiscoveredDevice.DeviceProgress p = new DiscoveredDevice.DeviceProgress();
+                p.jobId = job.id;
+                p.state = DiscoveredDevice.DeviceProgress.STATE_QUEUED;
+                p.totalEntries = job.items.size();
+                for (SendEntry e : job.items) {
+                    p.totalBytes += e.size;
+                }
+                map.put(key, p);
+            }
+        }
+
+        // 3) 从 DB 历史中，为没有活跃任务的设备补上最近一次已完成的 job 进度
+        List<TransferRecord> history = app.jobStore.all();
+        if (history != null && !history.isEmpty()) {
+            // 找到每个设备的最新 jobId
+            Map<String, String> deviceLatestJobId = new HashMap<>();
+            Map<String, Long> deviceLatestTime = new HashMap<>();
+            for (TransferRecord r : history) {
+                String deviceKey = r.deviceAddress();
+                if (map.containsKey(deviceKey)) continue; // 有活跃任务的不覆盖
+                if (r.jobId == null) continue;
+                Long prev = deviceLatestTime.get(deviceKey);
+                if (prev == null || r.timeMillis > prev) {
+                    deviceLatestTime.put(deviceKey, r.timeMillis);
+                    deviceLatestJobId.put(deviceKey, r.jobId);
+                }
+            }
+            // 为每个设备构造进度（根据 DB 中 entry 的实际状态还原）
+            for (Map.Entry<String, String> e : deviceLatestJobId.entrySet()) {
+                String deviceKey = e.getKey();
+                String jobId = e.getValue();
+                DiscoveredDevice.DeviceProgress p = new DiscoveredDevice.DeviceProgress();
+                p.jobId = jobId;
+                boolean allSuccess = true;
+                for (TransferRecord r : history) {
+                    if (jobId.equals(r.jobId)) {
+                        p.totalEntries++;
+                        p.totalBytes += r.size;
+                        p.sentBytes += r.sentBytes;
+                        if (r.idleReason == TransferRecord.IDLE_REASON_SUCCESS) {
+                            p.completedEntries++;
+                        } else {
+                            allSuccess = false;
+                        }
+                    }
+                }
+                p.state = allSuccess
+                        ? DiscoveredDevice.DeviceProgress.STATE_COMPLETED
+                        : DiscoveredDevice.DeviceProgress.STATE_PAUSED;
+                map.put(deviceKey, p);
+            }
+        }
+
+        return map;
+    }
+
+    /** 从 SendEntry 列表中找出当前正在发送的 entry 名称。 */
+    @Nullable
+    private String findCurrentEntryName(List<SendEntry> items) {
+        if (items == null || items.isEmpty()) return null;
+        // 优先找 STATUS_SENDING 状态的
+        for (SendEntry e : items) {
+            if (e.status == TransferRecord.STATUS_SENDING) return e.name;
+        }
+        // 找第一个未完成的
+        for (SendEntry e : items) {
+            if (!e.isSuccess()) return e.name;
+        }
+        return null;
+    }
+
+    /** 高德设备列表，关联合并传输进度。 */
+    private List<DiscoveredDevice> enrichDeviceProgress(List<DiscoveredDevice> list) {
+        Map<String, DiscoveredDevice.DeviceProgress> progressMap = computeDeviceProgress();
+        for (DiscoveredDevice d : list) {
+            DiscoveredDevice.DeviceProgress p = progressMap.get(d.address());
+            d.currentProgress = p != null ? p : new DiscoveredDevice.DeviceProgress();
+        }
+        return list;
+    }
+
+    /** 原地更新当前设备列表的进度（无需重查 DB/网络），通过回调直接通知 UI 刷新。 */
+    private void updateDeviceProgressInPlace() {
+        List<DiscoveredDevice> list = devices.getValue();
+        if (list == null || deviceProgressListener == null) return;
+        Map<String, DiscoveredDevice.DeviceProgress> progressMap = computeDeviceProgress();
+        for (DiscoveredDevice d : list) {
+            DiscoveredDevice.DeviceProgress p = progressMap.get(d.address());
+            d.currentProgress = p != null ? p : new DiscoveredDevice.DeviceProgress();
+        }
+        for (String addr : progressMap.keySet()) {
+            deviceProgressListener.onDeviceProgressChanged(addr);
+        }
+    }
+
+    /** 刷新任务列表（按 jobId 分组，树状展示）。 */
     public void refreshTasks() {
+        // 从 DB 取所有历史记录
         List<TransferRecord> all = new ArrayList<>(app.jobStore.all());
-        List<TransferManager.SendJob> queue = app.transferManager.queueJobsLiveData.getValue();
+        // 合并队列中未入库的 entry
+        List<TransferManager.SendJob> queue = app.transferManager.getQueueSnapshot();
         if (queue != null) {
             for (TransferManager.SendJob job : queue) {
                 for (SendEntry entry : job.items) {
-                    all.add(0, entry);
+                    all.add(entry);
                 }
             }
         }
-        tasks.setValue(all);
+
+        // 第一步：按 jobId 收集条目，同时记录最大 timeMillis 和设备信息
+        Map<String, List<TransferRecord>> entryMap = new LinkedHashMap<>();
+        Map<String, Long> maxTimeMap = new HashMap<>();
+        Map<String, String> nameMap = new HashMap<>();
+        Map<String, String> hostMap = new HashMap<>();
+        Map<String, Integer> portMap = new HashMap<>();
+
+        for (TransferRecord r : all) {
+            String jid = r.jobId != null ? r.jobId : "__no_job__";
+            List<TransferRecord> list = entryMap.get(jid);
+            if (list == null) {
+                list = new ArrayList<>();
+                entryMap.put(jid, list);
+                nameMap.put(jid, r.targetName != null ? r.targetName : (r.host != null ? r.host : ""));
+                hostMap.put(jid, r.host);
+                portMap.put(jid, r.port);
+                maxTimeMap.put(jid, r.timeMillis);
+            }
+            list.add(r);
+            if (r.timeMillis > maxTimeMap.get(jid)) {
+                maxTimeMap.put(jid, r.timeMillis);
+                // 用时间最新的那条记录的设备名
+                if (r.targetName != null && !r.targetName.isEmpty()) {
+                    nameMap.put(jid, r.targetName);
+                }
+                if (r.host != null) {
+                    hostMap.put(jid, r.host);
+                    portMap.put(jid, r.port);
+                }
+            }
+        }
+
+        // 第二步：用收集到的最大 timeMillis 创建 TaskGroup
+        List<TaskGroup> result = new ArrayList<>();
+        for (Map.Entry<String, List<TransferRecord>> e : entryMap.entrySet()) {
+            String jid = e.getKey();
+            List<TransferRecord> entries = e.getValue();
+            long maxTime = maxTimeMap.get(jid) != null ? maxTimeMap.get(jid) : 0;
+            TaskGroup g = new TaskGroup(jid, nameMap.get(jid),
+                    hostMap.get(jid), portMap.get(jid) != null ? portMap.get(jid) : 0,
+                    maxTime, entries);
+            g.recomputeProgress();
+            result.add(g);
+        }
+        tasks.setValue(result);
     }
 
     /** 刷新设备列表（备注名变更后调用）。也用于手动设备保存后刷新。 */
     public void refreshDevices() {
-        devices.setValue(mergeManualDevice(app.discoveryManager.getDevices()));
+        devices.setValue(enrichDeviceProgress(mergeManualDevice(app.discoveryManager.getDevices())));
     }
 
     /** 将手动添加的设备合并到列表中（去重）。 */
@@ -186,7 +395,7 @@ public class MainViewModel extends AndroidViewModel {
     /** 暂停当前传输：cancelJob + 写 PAUSED 状态，PFD 不释放，支持继续。 */
     public void pauseTransfer(TransferRecord record) {
         TransferManager.SendJob job = app.transferManager.getCurrentJob();
-        if(job!= null && Objects.equals(job.id, record.id)){
+        if (job != null && Objects.equals(job.id, record.id)) {
             job.cancel();
         }
     }
@@ -200,6 +409,8 @@ public class MainViewModel extends AndroidViewModel {
     protected void onCleared() {
         countdownHandler.removeCallbacks(countdownTick);
         app.discoveryManager.removeListener(discoveryListener);
+        app.transferManager.removeQueueListener(queueListener);
+        app.transferManager.removeProgressListener(progressListener);
         super.onCleared();
     }
 }

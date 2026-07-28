@@ -10,12 +10,11 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * 传输任务：SQLite 持久化。最多保留 200 条。
- * 注意：已修复原代码中 updateStatus 缺少参数的 Bug。
+ * 传输任务：SQLite 持久化。按 jobId 分组，最多保留 200 个任务。
  */
 public class JobStore {
 
-    private static final int MAX_RECORDS = 200;
+    private static final int MAX_JOBS = 200;
 
     private final SQLiteDatabase db;   // 单例，应用生命周期内打开
 
@@ -43,6 +42,7 @@ public class JobStore {
         values.put(DBHelper.COL_TEXT_CONTENT, r.textContent);
         values.put(DBHelper.COL_LOCAL_PATH, r.localPath);
         values.put(DBHelper.COL_CONTENT_URI, r.contentUri);
+        values.put(DBHelper.COL_IDLE_REASON, r.idleReason);
         values.put(DBHelper.COL_HOST, r.host);
         values.put(DBHelper.COL_PORT, r.port);
         values.put(DBHelper.COL_TARGET_NAME, r.targetName);
@@ -61,6 +61,7 @@ public class JobStore {
         r.mime = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_MIME));
         r.id = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_TRANSFER_ID));
         r.status = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_STATUS));
+        r.idleReason = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_IDLE_REASON));
         r.sentBytes = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_SENT_BYTES));
         r.totalBytes = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_TOTAL_BYTES));
         r.errorMsg = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_ERROR_MSG));
@@ -74,39 +75,53 @@ public class JobStore {
         return r;
     }
 
-    // ---------- 内部方法：删除超出上限的记录 ----------
+    // ---------- 内部方法：按 jobId 分组，超出上限时删除最旧的任务 ----------
 
-    private synchronized void trimIfNeeded() {
-        // 查询当前记录数
-        Cursor countCursor = db.query(DBHelper.TABLE_JOB_ENTRY,
-                new String[]{"COUNT(*)"}, null, null, null, null, null);
-        long count = 0;
+    private synchronized void trimJobsIfNeeded() {
+        Cursor countCursor = db.rawQuery(
+                "SELECT COUNT(DISTINCT " + DBHelper.COL_JOB_ID
+                + ") FROM " + DBHelper.TABLE_JOB_ENTRY, null);
+        long jobCount = 0;
         if (countCursor != null) {
             if (countCursor.moveToFirst()) {
-                count = countCursor.getLong(0);
+                jobCount = countCursor.getLong(0);
             }
             countCursor.close();
         }
-        if (count <= MAX_RECORDS) return;
+        if (jobCount <= MAX_JOBS) return;
 
-        // 删除最旧的多余记录（保留最新的 MAX_RECORDS 条）
-        String deleteSql = "DELETE FROM " + DBHelper.TABLE_JOB_ENTRY +
-                " WHERE " + DBHelper.COL_ID + " IN (" +
-                "  SELECT " + DBHelper.COL_ID +
-                "  FROM " + DBHelper.TABLE_JOB_ENTRY +
-                "  ORDER BY " + DBHelper.COL_TIME_MILLIS + " ASC" +
-                "  LIMIT " + (count - MAX_RECORDS) +
-                ")";
+        long excess = jobCount - MAX_JOBS;
+        String deleteSql = "DELETE FROM " + DBHelper.TABLE_JOB_ENTRY
+                + " WHERE " + DBHelper.COL_JOB_ID + " IN ("
+                + "  SELECT " + DBHelper.COL_JOB_ID + " FROM ("
+                + "    SELECT " + DBHelper.COL_JOB_ID
+                + ", MAX(" + DBHelper.COL_TIME_MILLIS + ") AS _mt"
+                + "    FROM " + DBHelper.TABLE_JOB_ENTRY
+                + "    WHERE " + DBHelper.COL_JOB_ID + " IS NOT NULL"
+                + "    GROUP BY " + DBHelper.COL_JOB_ID
+                + "    ORDER BY _mt ASC"
+                + "    LIMIT " + excess
+                + "  )"
+                + ")";
         db.execSQL(deleteSql);
     }
 
     // ---------- 公开 API ----------
 
-    /** 新记录插入到最前（按时间倒序），自动裁切到 200 条。 */
+    /** App 重启时，将所有 STATUS_SENDING 的记录标记为 OUTDATE。 */
+    public synchronized void markOutdateOnStartup() {
+        ContentValues values = new ContentValues();
+        values.put(DBHelper.COL_STATUS, TransferRecord.STATUS_IDLE);
+        values.put(DBHelper.COL_IDLE_REASON, TransferRecord.IDLE_REASON_OUTDATE);
+        db.update(DBHelper.TABLE_JOB_ENTRY, values,
+                DBHelper.COL_STATUS + "=?", new String[]{String.valueOf(TransferRecord.STATUS_SENDING)});
+    }
+
+    /** 插入记录，若任务数超过上限则删除最旧的任务（同 jobId 的条目整体删除）。 */
     public synchronized void addJobEntry(TransferRecord record) {
         db.insertWithOnConflict(DBHelper.TABLE_JOB_ENTRY, null,
                 toValues(record), SQLiteDatabase.CONFLICT_REPLACE);
-        trimIfNeeded();
+        trimJobsIfNeeded();
     }
 
     /** 按 id 更新主机、端口、目标名，并更新最终状态。 */
@@ -178,13 +193,14 @@ public class JobStore {
     private static TransferRecord copy(TransferRecord src) {
         TransferRecord r = new TransferRecord();
         r.id = src.id;
+        r.jobId = src.jobId;
         r.timeMillis = src.timeMillis;
         r.contentType = src.contentType;
         r.name = src.name;
         r.size = src.size;
         r.mime = src.mime;
-        r.id = src.id;
         r.status = src.status;
+        r.idleReason = src.idleReason;
         r.sentBytes = src.sentBytes;
         r.totalBytes = src.totalBytes;
         r.errorMsg = src.errorMsg;

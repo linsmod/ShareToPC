@@ -63,12 +63,6 @@ public class TaskFragment extends Fragment {
 
         viewModel.getTasks().observe(getViewLifecycleOwner(), taskAdapter::submitList);
 
-        btnSelectAll.setOnClickListener(v -> taskAdapter.toggleSelectAll());
-        btnDeleteSelected.setOnClickListener(v -> confirmDeleteSelected());
-        btnCancelSelection.setOnClickListener(v -> taskAdapter.exitSelectionMode());
-
-        viewModel.getTasks().observe(getViewLifecycleOwner(), taskAdapter::submitList);
-
         return view;
     }
 

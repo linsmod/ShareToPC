@@ -35,10 +35,43 @@
         android:layout_height="wrap_content"
         android:textSize="13sp" />
 
-    <TextView
-        android:id="@+id/tvLastJobId"
+    <!-- 传输进度区（无活跃任务时隐藏） -->
+    <LinearLayout
+        android:id="@+id/layoutProgress"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/pbDeviceJob"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="4dp"
+            android:layout_weight="1"
+            android:max="100"
+            android:progress="0" />
+
+        <TextView
+            android:id="@+id/tvDeviceProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/tvEntryName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="middle"
+        android:maxLines="1"
+        android:textColor="?android:attr/textColorSecondary"
         android:textSize="11sp"
-        android:textColor="?android:attr/textColorTertiary" />
+        android:visibility="gone" />
+
 </LinearLayout>

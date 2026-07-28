@@ -3,47 +3,26 @@ package github.linsmod.sharetopc.ui;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
 import github.linsmod.sharetopc.R;
-import github.linsmod.sharetopc.data.SendEntry;
-import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
-import github.linsmod.sharetopc.util.FileUtils;
-import github.linsmod.sharetopc.util.TransferStatusHelper;
 
 /**
- * 设备列表适配器（设备 / 传输子项 / 手动添加入口 三种 ViewType）。
- * <p>
- * 通过 {@link DiscoveredDevice#lastJobId} 关联设备与其当前传输记录，
- * 无需外部维护 deviceKey→TransferRecord 的映射。
+ * 设备列表适配器（设备卡片 + 手动添加入口）。
  */
 public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     private static final int TYPE_DEVICE = 0;
-    private static final int TYPE_TRANSFER = 1;
-    private static final int TYPE_ADD = 2;
-
-    public void submitList(List<DiscoveredDevice> discoveredDevices) {
-        items.clear();
-        items.addAll(discoveredDevices);
-        displayItems.clear();
-        displayItems.addAll(discoveredDevices);
-        notifyDataSetChanged();
-    }
+    private static final int TYPE_ADD = 1;
 
     public interface OnDeviceClickListener {
         void onClick(DiscoveredDevice device);
@@ -51,13 +30,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     }
 
     public interface OnAddDeviceClickListener { void onAddDevice(); }
-    private final List<Object> displayItems = new ArrayList<>();
-    private final List<DiscoveredDevice> items = new ArrayList<>();
+
+    private final List<DiscoveredDevice> displayItems = new ArrayList<>();
     private final OnDeviceClickListener clickListener;
     private OnAddDeviceClickListener addClickListener;
-
-    private RecyclerView recyclerView;
-    private final SimpleDateFormat timeFormat = new SimpleDateFormat("MM-dd HH:mm", Locale.getDefault());
 
     public DeviceAdapter(OnDeviceClickListener clickListener) {
         this.clickListener = clickListener;
@@ -65,43 +41,25 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     public void setOnAddDeviceClickListener(OnAddDeviceClickListener l) { this.addClickListener = l; }
 
-    private void updateTransferProgressViews(TransferRecord record) {
-        if (recyclerView == null || record == null) return;
-        String targetKey = record.host + ":" + record.port;
+    public void submitList(List<DiscoveredDevice> discoveredDevices) {
+        displayItems.clear();
+        if (discoveredDevices != null) displayItems.addAll(discoveredDevices);
+        notifyDataSetChanged();
+    }
+
+    /** 按设备地址刷新进度条（不重建整个列表）。 */
+    public void notifyProgressChanged(String deviceAddress) {
         for (int i = 0; i < displayItems.size(); i++) {
-            Object item = displayItems.get(i);
-            if (item instanceof TransferRecord) {
-                TransferRecord display = (TransferRecord) item;
-                if (targetKey.equals(display.host + ":" + display.port)) {
-                    // 用新鲜 record 替换 displayItems 中的旧拷贝 + 绑定视图
-                    displayItems.set(i, record);
-                    TransferVH holder = (TransferVH) recyclerView.findViewHolderForAdapterPosition(i);
-                    if (holder != null) {
-                        holder.item.bind(record);
-                    }
-                    return;
-                }
+            if (displayItems.get(i).address().equals(deviceAddress)) {
+                notifyItemChanged(i);
+                return;
             }
         }
     }
 
     @Override
-    public void onAttachedToRecyclerView(@NonNull RecyclerView rv) {
-        super.onAttachedToRecyclerView(rv);
-        this.recyclerView = rv;
-    }
-
-    @Override
-    public void onDetachedFromRecyclerView(@NonNull RecyclerView rv) {
-        super.onDetachedFromRecyclerView(rv);
-        this.recyclerView = null;
-    }
-
-    @Override
     public int getItemViewType(int position) {
         if (position >= displayItems.size()) return TYPE_ADD;
-        Object item = displayItems.get(position);
-        if (item instanceof TransferRecord) return TYPE_TRANSFER;
         return TYPE_DEVICE;
     }
 
@@ -109,10 +67,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     @Override
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         LayoutInflater inflater = LayoutInflater.from(parent.getContext());
-        if (viewType == TYPE_TRANSFER) {
-            TransferItemView view = new TransferItemView(parent.getContext());
-            return new TransferVH(view);
-        }
         if (viewType == TYPE_ADD) {
             return new RecyclerView.ViewHolder(
                     inflater.inflate(R.layout.item_add_device, parent, false)) {};
@@ -128,31 +82,31 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             });
             return;
         }
-        if (getItemViewType(position) == TYPE_TRANSFER) {
-            DiscoveredDevice parentDevice = (position > 0 && displayItems.get(position - 1) instanceof DiscoveredDevice)
-                    ? (DiscoveredDevice) displayItems.get(position - 1) : null;
-            TransferRecord record = (TransferRecord) displayItems.get(position);
-            TransferVH vh = (TransferVH) holder;
-            vh.item.bind(record);
-             if (parentDevice != null) {
-                vh.itemView.setOnClickListener(v -> {
-                    if (clickListener != null) clickListener.onClick(parentDevice);
-                });
-                vh.itemView.setOnLongClickListener(v -> {
-                    if (clickListener != null) { clickListener.onLongClick(parentDevice); return true; }
-                    return false;
-                });
-            }
-            return;
-        }
-        bindDevice((DeviceVH) holder, (DiscoveredDevice) displayItems.get(position));
+        bindDevice((DeviceVH) holder, displayItems.get(position));
     }
 
     private void bindDevice(DeviceVH vh, DiscoveredDevice device) {
         vh.tvName.setText(device.displayName());
         vh.tvAddr.setText(device.address());
-        vh.tvLastJobId.setText(device.lastJobId != null
-                ? "lastJobId: " + device.lastJobId : "lastJobId: null");
+
+        // 传输进度
+        DiscoveredDevice.DeviceProgress progress = device.currentProgress;
+        if (progress != null && progress.isActive()) {
+            vh.layoutProgress.setVisibility(View.VISIBLE);
+            vh.pbProgress.setProgress(progress.percent());
+            vh.tvProgress.setText(progress.summary());
+            // 当前 entry 名称
+            if (progress.currentEntryName != null && !progress.currentEntryName.isEmpty()) {
+                vh.tvEntryName.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText(progress.currentEntryName);
+            } else {
+                vh.tvEntryName.setVisibility(View.GONE);
+            }
+        } else {
+            vh.layoutProgress.setVisibility(View.GONE);
+            vh.tvEntryName.setVisibility(View.GONE);
+        }
+
         vh.vOnlineDot.setBackgroundResource(
                 device.isOnline ? R.drawable.dot_online : R.drawable.dot_offline);
         vh.itemView.setOnClickListener(v -> {
@@ -163,6 +117,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             return false;
         });
     }
+
     @Override
     public int getItemCount() { return displayItems.size() + 1; }
 
@@ -170,18 +125,18 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     static class DeviceVH extends RecyclerView.ViewHolder {
         final View vOnlineDot;
-        final TextView tvName, tvAddr, tvLastJobId;
+        final TextView tvName, tvAddr, tvProgress, tvEntryName;
+        final LinearLayout layoutProgress;
+        final ProgressBar pbProgress;
         DeviceVH(@NonNull View v) {
             super(v);
             vOnlineDot = v.findViewById(R.id.vOnlineDot);
             tvName = v.findViewById(R.id.tvDeviceName);
             tvAddr = v.findViewById(R.id.tvDeviceAddr);
-            tvLastJobId = v.findViewById(R.id.tvLastJobId);
+            layoutProgress = v.findViewById(R.id.layoutProgress);
+            pbProgress = v.findViewById(R.id.pbDeviceJob);
+            tvProgress = v.findViewById(R.id.tvDeviceProgress);
+            tvEntryName = v.findViewById(R.id.tvEntryName);
         }
-    }
-
-    static class TransferVH extends RecyclerView.ViewHolder {
-        final TransferItemView item;
-        TransferVH(TransferItemView v) { super(v); item = v; }
     }
 }

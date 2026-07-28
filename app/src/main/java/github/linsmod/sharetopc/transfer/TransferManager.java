@@ -6,8 +6,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.lifecycle.MutableLiveData;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -94,8 +95,49 @@ public class TransferManager {
     private final DeviceStore deviceStore;
     private final Context appContext;
 
-    /** 队列状态 LiveData：入队/出队/取消时更新，供 UI 响应式观察。 */
-    public final MutableLiveData<List<SendJob>> queueJobsLiveData = new MutableLiveData<>();
+    /** 队列变更监听器：入队/出队/取消时回调，供 UI 响应式更新。 */
+    public interface QueueListener {
+        void onQueueChanged(@NonNull List<SendJob> queue);
+    }
+
+    /** 传输进度监听器：当前 job 的某个 entry 进度更新时回调。 */
+    public interface JobProgressListener {
+        /** @param job 当前正在传输的 job（含更新后的 entry 进度） */
+        void onProgress(@NonNull SendJob job);
+        /** 某个 job 开始处理 */
+        void onJobStarted(@NonNull SendJob job);
+        /** 某个 job 处理完毕 */
+        void onJobFinished(@NonNull SendJob job);
+    }
+
+    private final List<QueueListener> queueListeners = new CopyOnWriteArrayList<>();
+    private final List<JobProgressListener> progressListeners = new CopyOnWriteArrayList<>();
+
+    /** 注册队列变更监听器。 */
+    public void addQueueListener(@NonNull QueueListener listener) {
+        queueListeners.add(listener);
+    }
+
+    /** 取消注册队列变更监听器。 */
+    public void removeQueueListener(@NonNull QueueListener listener) {
+        queueListeners.remove(listener);
+    }
+
+    /** 注册进度监听器。 */
+    public void addProgressListener(@NonNull JobProgressListener listener) {
+        progressListeners.add(listener);
+    }
+
+    /** 取消注册进度监听器。 */
+    public void removeProgressListener(@NonNull JobProgressListener listener) {
+        progressListeners.remove(listener);
+    }
+
+    /** 获取当前队列快照（线程安全）。 */
+    @NonNull
+    public List<SendJob> getQueueSnapshot() {
+        return new ArrayList<>(queue);
+    }
 
     /** PFD 注册表：transferId → FileChannel，供重试/继续时复用内核文件句柄。 */
     private final Map<String, PfdHandle> pfdHandles = new ConcurrentHashMap<>();
@@ -116,10 +158,14 @@ public class TransferManager {
         return currentJob;
     }
 
-    /** 拍快照并通过 LiveData 发出（入队/出队/取消后调用）。 */
+    /** 拍快照并通过监听器回调到主线程（入队/出队/取消后调用）。 */
     private void emitQueueChanged() {
         List<SendJob> snapshot = new ArrayList<>(queue);
-        mainHandler.post(() -> queueJobsLiveData.setValue(snapshot));
+        mainHandler.post(() -> {
+            for (QueueListener listener : queueListeners) {
+                listener.onQueueChanged(snapshot);
+            }
+        });
     }
 
     /**
@@ -166,7 +212,10 @@ public class TransferManager {
     private void process(SendJob job) {
         currentJob = job;
         String error = null;
-        deviceStore.setLastJobId(job.host, job.port, job.id);
+        deviceStore.setLatestJobId(job.host, job.port, job.id);
+        mainHandler.post(() -> {
+            for (JobProgressListener l : progressListeners) l.onJobStarted(job);
+        });
 
         try {
             for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -224,6 +273,11 @@ public class TransferManager {
             // 防御：connect/send 阶段出现未预期异常也不会崩溃
             LogX.e("unexpected error in transfer for job: " + job.displayName(), t);
             error = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
+        } finally {
+            SendJob finished = currentJob;
+            mainHandler.post(() -> {
+                for (JobProgressListener l : progressListeners) l.onJobFinished(finished);
+            });
         }
     }
 
@@ -280,13 +334,19 @@ public class TransferManager {
         TransferRecord old = jobStore.getSendEntry(entry.id);
         jobStore.updateProgress(entry.id, entry.sentBytes, entry.totalBytes);
         long now = System.currentTimeMillis();
-        var percentOld = old.totalBytes>0? old.sentBytes/old.totalBytes:0;
-        var percentNew = entry.totalBytes>0? entry.sentBytes/entry.totalBytes:0;
-        var progressed = (int)percentOld!=(int)percentNew;
+        var progressed = old.percent() != entry.percent();
         if (!progressed || now - lastProgressNotifyMs < PROGRESS_THROTTLE_MS) {
             return;
         }
         lastProgressNotifyMs = now;
+
+        // 通知进度监听器（设备卡片实时更新进度条）
+        SendJob job = currentJob;
+        if (job != null) {
+            mainHandler.post(() -> {
+                for (JobProgressListener l : progressListeners) l.onProgress(job);
+            });
+        }
     }
 
     // ---- PFD 管理：内核文件句柄，支持可靠的 skip/seek 断点续传 ----

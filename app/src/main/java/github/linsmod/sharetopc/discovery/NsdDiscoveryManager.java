@@ -72,6 +72,10 @@ public class NsdDiscoveryManager {
         List<DiscoveredDevice> list = new ArrayList<>(devices.values());
         for (DiscoveredDevice d : list) {
             d.alias = settingsStore.getDeviceAlias(d.host, d.port);
+            // 加载最新 jobId（同会话内 TransferManager 写 DB 后这里就能读到）
+            if (d.latestJobId == null) {
+                d.latestJobId = deviceStore.getLatestJobId(d.host, d.port);
+            }
         }
         // 在线设备在前，同组内按名称排序
         Collections.sort(list, (a, b) -> {

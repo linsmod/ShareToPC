@@ -24,6 +24,7 @@ public class SendEntry extends TransferRecord  {
         c.name = text.length() > 20 ? text.substring(0, 20) + "…" : text;
         c.size = text.getBytes().length;
         c.mime = "text/plain";
+        c.timeMillis = System.currentTimeMillis();
         return c;
     }
 
@@ -41,6 +42,7 @@ public class SendEntry extends TransferRecord  {
         c.size = size;
         c.mime = mime;
         c.contentUri = contentUri;
+        c.timeMillis = System.currentTimeMillis();
         return c;
     }
 
@@ -54,6 +56,7 @@ public class SendEntry extends TransferRecord  {
         c.name = name;
         c.size = size;
         c.mime = mime;
+        c.timeMillis = System.currentTimeMillis();
         return c;
     }
 

@@ -32,9 +32,9 @@ public class DeviceStore {
                 String host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_HOST));
                 int port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PORT));
                 String name = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_NAME));
-                String lastJobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_LAST_SEND_ID));
+                String latestJobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_LAST_SEND_ID));
                 DiscoveredDevice d = new DiscoveredDevice(name, host, port, false);
-                d.lastJobId = lastJobId;
+                d.latestJobId = latestJobId;
                 result.add(d);
             }
             c.close();
@@ -50,17 +50,18 @@ public class DeviceStore {
         values.put(DBHelper.COL_DEV_NAME, device.name);
         values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());
 
-        // 保留已有的 lastJobId（如果存在）
-        String existingId = getLastJobId(device.host, device.port);
-        values.put(DBHelper.COL_DEV_LAST_SEND_ID, existingId);
+        // 取已持久化的 latestJobId（兼容：device 对象上的值可能尚未写入）
+        String latestJobId = device.latestJobId != null
+                ? device.latestJobId : getLatestJobId(device.host, device.port);
+        values.put(DBHelper.COL_DEV_LAST_SEND_ID, latestJobId);
 
         // 插入或替换（主键冲突时更新）
         db.insertWithOnConflict(DBHelper.TABLE_DEVICE, null, values,
                 SQLiteDatabase.CONFLICT_REPLACE);
     }
 
-    /** 获取某个设备的 lastJobId（如果不存在返回 null）。 */
-    private String getLastJobId(String host, int port) {
+    /** 获取某个设备的 latestJobId（如果不存在返回 null）。 */
+    public synchronized String getLatestJobId(String host, int port) {
         Cursor c = db.query(DBHelper.TABLE_DEVICE,
                 new String[]{DBHelper.COL_DEV_LAST_SEND_ID},
                 DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?",
@@ -97,8 +98,8 @@ public class DeviceStore {
         db.execSQL(deleteSql);
     }
 
-    /** 更新设备的 lastJobId 并更新最后出现时间。 */
-    public synchronized void setLastJobId(String host, int port, String sendId) {
+    /** 更新设备的 latestJobId 并更新最后出现时间。 */
+    public synchronized void setLatestJobId(String host, int port, String sendId) {
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_DEV_LAST_SEND_ID, sendId);
         values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());

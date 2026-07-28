@@ -1,5 +1,6 @@
 package github.linsmod.sharetopc.share;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -242,7 +243,10 @@ public class ShareReceiverActivity extends AppCompatActivity {
         App.get().transferManager.enqueue(jobId, pendingItems,
                 target.host, target.port, target.displayName());
         jobId = null;
-        // 立即关闭窗口，传输在后台继续
+        // 跳转主页面，传输在后台继续
+        Intent intent = new Intent(this, github.linsmod.sharetopc.MainActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        startActivity(intent);
         finish();
     }
 

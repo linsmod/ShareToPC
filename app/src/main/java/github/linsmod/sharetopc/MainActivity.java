@@ -90,12 +90,48 @@ public class MainActivity extends AppCompatActivity {
         if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
             deviceQueueDialog.dismiss();
         }
-        deviceQueueDialog = new DeviceQueueDialog(this, device, new DeviceQueueDialog.Listener() {
-            @Override
-            public void onTextPreviewRequested(github.linsmod.sharetopc.data.TransferRecord record) {
-                showTextPreview(record);
-            }
 
+        // 从 history LiveData 取快照，过滤该设备的记录，取最近一个 job 构造成 TaskGroup
+        github.linsmod.sharetopc.ui.TaskGroup group = null;
+        java.util.List<TransferRecord> history = viewModel.getHistory().getValue();
+        if (history != null) {
+            String deviceKey = device.address();
+            java.util.List<TransferRecord> scoped = new java.util.ArrayList<>();
+            for (TransferRecord r : history) {
+                if (r.host != null && deviceKey.equals(r.host + ":" + r.port)) {
+                    scoped.add(r);
+                }
+            }
+            if (!scoped.isEmpty()) {
+                // 找 timeMillis 最大的 jobId
+                String latestJobId = null;
+                long latestTime = 0;
+                for (TransferRecord r : scoped) {
+                    if (latestJobId == null || r.timeMillis > latestTime) {
+                        latestTime = r.timeMillis;
+                        latestJobId = r.jobId;
+                    }
+                }
+                // 筛选该 jobId 的所有条目
+                java.util.List<TransferRecord> latestEntries = new java.util.ArrayList<>();
+                if (latestJobId != null) {
+                    for (TransferRecord r : scoped) {
+                        if (latestJobId.equals(r.jobId)) latestEntries.add(r);
+                    }
+                }
+                if (!latestEntries.isEmpty()) {
+                    TransferRecord first = latestEntries.get(0);
+                    group = new github.linsmod.sharetopc.ui.TaskGroup(latestJobId,
+                            first.targetName != null ? first.targetName
+                                    : (first.host != null ? first.host : ""),
+                            first.host, first.port, latestTime, latestEntries);
+                    group.recomputeProgress();
+                }
+            }
+        }
+
+        deviceQueueDialog = new DeviceQueueDialog(this, device, group,
+                new DeviceQueueDialog.Listener() {
             @Override
             public void onPauseRequested(TransferRecord record) {
                 viewModel.pauseTransfer(record);
@@ -105,7 +141,7 @@ public class MainActivity extends AppCompatActivity {
             public void onResumeRequested(github.linsmod.sharetopc.data.TransferRecord record) {
                 viewModel.retry(record);
             }
-        }, this, viewModel.getTasks(), transferId -> viewModel.hasPfd(transferId));
+        }, transferId -> viewModel.hasPfd(transferId));
         deviceQueueDialog.show();
     }
 
