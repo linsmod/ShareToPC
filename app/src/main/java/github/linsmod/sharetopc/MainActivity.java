@@ -1,11 +1,13 @@
 package github.linsmod.sharetopc;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -15,12 +17,17 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.material.bottomnavigation.BottomNavigationView;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 
 import github.linsmod.sharetopc.data.TransferRecord;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
@@ -204,6 +211,22 @@ public class MainActivity extends AppCompatActivity {
         TextView tvTitle = layout.findViewById(R.id.tvAliasTitle);
         tvTitle.setText(device.name);
 
+        TextView tvVersion = layout.findViewById(R.id.tvDeviceVersion);
+        if (device.version != null && !device.version.isEmpty()) {
+            tvVersion.setText("程序版本: " + device.version);
+            tvVersion.setVisibility(View.VISIBLE);
+        } else {
+            tvVersion.setVisibility(View.GONE);
+        }
+
+        TextView tvProtoVersion = layout.findViewById(R.id.tvDeviceProtoVersion);
+        if (device.protoVersion != null && !device.protoVersion.isEmpty()) {
+            tvProtoVersion.setText("协议版本: v" + device.protoVersion);
+            tvProtoVersion.setVisibility(View.VISIBLE);
+        } else {
+            tvProtoVersion.setVisibility(View.GONE);
+        }
+
         layout.findViewById(R.id.btnPresetLaptop).setOnClickListener(v -> etAlias.setText(R.string.preset_laptop));
         layout.findViewById(R.id.btnPresetOffice).setOnClickListener(v -> etAlias.setText(R.string.preset_office));
         layout.findViewById(R.id.btnPresetDesktop).setOnClickListener(v -> etAlias.setText(R.string.preset_desktop));
@@ -297,6 +320,68 @@ public class MainActivity extends AppCompatActivity {
             w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
                     ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+    }
+
+    public void showPcClientDialog() {
+        View layout = getLayoutInflater().inflate(R.layout.dialog_pc_client, null);
+
+        Button btnShare = layout.findViewById(R.id.btnSharePcClient);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(layout)
+                .setNegativeButton(R.string.close, null)
+                .show();
+
+        btnShare.setOnClickListener(v -> {
+            sharePcClientZip();
+            dialog.dismiss();
+        });
+
+        View customPanel = dialog.findViewById(android.R.id.custom);
+        if (customPanel instanceof ViewGroup) {
+            ((ViewGroup) customPanel).setPadding(0, 0, 0, 0);
+        }
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setBackgroundDrawableResource(R.drawable.bg_dialog);
+            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
+    }
+
+    private void sharePcClientZip() {
+        final String fileName = "ShareToPcReciver.zip";
+        new Thread(() -> {
+            try {
+                File cacheDir = new File(getCacheDir(), "pc_client");
+                if (!cacheDir.exists()) cacheDir.mkdirs();
+                File outFile = new File(cacheDir, fileName);
+
+                try (InputStream in = getAssets().open(fileName);
+                     FileOutputStream out = new FileOutputStream(outFile)) {
+                    byte[] buf = new byte[8192];
+                    int len;
+                    while ((len = in.read(buf)) > 0) {
+                        out.write(buf, 0, len);
+                    }
+                }
+
+                Uri uri = FileProvider.getUriForFile(this,
+                        getPackageName() + ".fileprovider", outFile);
+
+                Intent share = new Intent(Intent.ACTION_SEND);
+                share.setType("application/zip");
+                share.putExtra(Intent.EXTRA_STREAM, uri);
+                share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                runOnUiThread(() ->
+                        startActivity(Intent.createChooser(share, "分享电脑端程序")));
+            } catch (Exception e) {
+                runOnUiThread(() ->
+                        Toast.makeText(this, "分享失败: " + e.getMessage(),
+                                Toast.LENGTH_SHORT).show());
+            }
+        }).start();
     }
 
     private static boolean isValidIp(String ip) {

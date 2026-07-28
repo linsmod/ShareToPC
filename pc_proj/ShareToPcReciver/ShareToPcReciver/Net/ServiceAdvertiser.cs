@@ -20,7 +20,8 @@ namespace ShareToPcReciver.Net
                     instanceName: Environment.MachineName,
                     serviceName: Protocol.ServiceType,
                     port: (ushort)port);
-                _profile.AddProperty("version", "1");
+                _profile.AddProperty("version", Protocol.AppVersion);
+                _profile.AddProperty("protoVersion", Protocol.ProtocolVersion.ToString());
                 _sd.Advertise(_profile);
                 Util.Log.Info($"mDNS advertised: {Protocol.ServiceType} on port {port}");
             }

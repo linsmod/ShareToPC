@@ -217,11 +217,31 @@ public class NsdDiscoveryManager {
                     if (host != null) {
                         DiscoveredDevice device = new DiscoveredDevice(
                                 serviceInfo.getServiceName(), host, serviceInfo.getPort(), true);
+                        // 从 mDNS TXT 记录中解析 version 和 protoVersion
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                            Map<String, byte[]> attrs = serviceInfo.getAttributes();
+                            if (attrs != null) {
+                                byte[] verBytes = attrs.get("version");
+                                if (verBytes != null) {
+                                    device.version = new String(verBytes, java.nio.charset.StandardCharsets.UTF_8);
+                                }
+                                byte[] protoBytes = attrs.get("protoVersion");
+                                if (protoBytes != null) {
+                                    device.protoVersion = new String(protoBytes, java.nio.charset.StandardCharsets.UTF_8);
+                                }
+                            }
+                        }
                         synchronized (NsdDiscoveryManager.this) {
-                            // 如果已存在同 key 的离线设备，替换为在线设备（保留 alias）
+                            // 如果已存在同 key 的离线设备，替换为在线设备（保留 version）
                             DiscoveredDevice existing = devices.get(device.address());
                             if (existing != null) {
                                 existing.isOnline = true;
+                                if (device.version != null) {
+                                    existing.version = device.version;
+                                }
+                                if (device.protoVersion != null) {
+                                    existing.protoVersion = device.protoVersion;
+                                }
                             } else {
                                 devices.put(device.address(), device);
                             }

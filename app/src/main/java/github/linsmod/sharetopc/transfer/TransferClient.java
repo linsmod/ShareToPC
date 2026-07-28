@@ -76,9 +76,24 @@ public class TransferClient implements Closeable {
         JsonObject header = new JsonObject();
         header.addProperty("type", "HELLO");
         header.addProperty("device", Build.MODEL != null ? Build.MODEL : "Android");
-        header.addProperty("version", TransferProtocol.PROTOCOL_VERSION);
+        header.addProperty("version", TransferProtocol.APP_VERSION);
+        header.addProperty("protoVersion", TransferProtocol.PROTOCOL_VERSION);
         TransferProtocol.writeFrame(out, header);
-        expectAck();
+        // 读 PC 的 HELLO ACK，其中携带 PC 程序版本与协议版本
+        JsonObject ack = TransferProtocol.readHeader(in);
+        if (!TransferProtocol.isAckOk(ack)) {
+            if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
+                throw new IOException("peer error: " + TransferProtocol.ackError(ack));
+            }
+            throw new IOException("unexpected frame: " + ack);
+        }
+        String pcVersion = ack.has("version") && !ack.get("version").isJsonNull()
+                ? ack.get("version").getAsString() : "unknown";
+        int pcProto = ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()
+                ? ack.get("protoVersion").getAsInt() : 0;
+        android.util.Log.d("TransferClient",
+                "HELLO handshake OK: PC " + pcVersion + " proto v" + pcProto
+                + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
     }
 
     public void sendText(String text) throws IOException {

@@ -23,6 +23,7 @@ public final class TransferProtocol {
 
     public static final int MAX_HEADER_BYTES = 64 * 1024;
     public static final int PROTOCOL_VERSION = 1;
+    public static final String APP_VERSION = "ShareToPC 1.0";
 
     private static final Gson gson = new Gson();
 

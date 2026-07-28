@@ -52,6 +52,10 @@ public class DiscoveredDevice {
     public final int port;
     /** 用户备注名（可选），由 SettingsStore 填充。 */
     public String alias;
+    /** 设备程序版本（由 mDNS TXT 或 HELLO 握手获取）。 */
+    public String version;
+    /** 设备协议版本号（由 mDNS TXT 或 HELLO 握手获取）。 */
+    public String protoVersion;
     /** 是否在线（当前扫描中发现）。 */
     public boolean isOnline;
     /** 该设备最近一次发送的 jobId。 */

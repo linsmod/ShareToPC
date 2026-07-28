@@ -12,7 +12,10 @@ namespace ShareToPcReciver.Net
         public string Device { get; set; } = "";
 
         [JsonPropertyName("version")]
-        public int Version { get; set; }
+        public string Version { get; set; } = "";
+
+        [JsonPropertyName("protoVersion")]
+        public int ProtoVersion { get; set; }
     }
 
     public class TextMsg

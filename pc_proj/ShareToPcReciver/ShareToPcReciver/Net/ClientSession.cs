@@ -133,10 +133,12 @@ namespace ShareToPcReciver.Net
         private async Task HandleHello(Stream stream, JsonElement header)
         {
             string device = header.TryGetProperty("device", out JsonElement d) ? d.GetString() ?? "Unknown" : "Unknown";
+            string clientVersion = header.TryGetProperty("version", out JsonElement v) ? v.GetString() ?? "unknown" : "unknown";
+            int clientProto = header.TryGetProperty("protoVersion", out JsonElement pv) ? pv.GetInt32() : 0;
             DeviceName = device;
-            Util.Log.Info($"HELLO from {device}");
+            Util.Log.Info($"HELLO from {device} (app: {clientVersion}, proto v{clientProto}, self: {Protocol.AppVersion} proto v{Protocol.ProtocolVersion})");
             _server.OnClientConnected(new ClientInfo { Name = device, Address = ((IPEndPoint)_client.Client.RemoteEndPoint).Address.ToString() });
-            await Protocol.WriteAckAsync(stream, true, "", _ct);
+            await Protocol.WriteHelloAckAsync(stream, _ct);
         }
 
         private async Task HandleText(Stream stream, JsonElement header)

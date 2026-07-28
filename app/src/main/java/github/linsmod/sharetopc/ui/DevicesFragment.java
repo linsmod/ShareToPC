@@ -54,6 +54,8 @@ public class DevicesFragment extends Fragment {
         rvDevices.setAdapter(deviceAdapter);
         deviceAdapter.setOnAddDeviceClickListener(() ->
                 ((MainActivity) requireActivity()).showManualDeviceDialog());
+        deviceAdapter.setOnPcClientClickListener(() ->
+                ((MainActivity) requireActivity()).showPcClientDialog());
 
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
 

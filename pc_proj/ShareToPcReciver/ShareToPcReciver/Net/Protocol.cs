@@ -15,6 +15,8 @@ namespace ShareToPcReciver.Net
         public const int DefaultPort = 51234;
         public const string ServiceType = "_mytransfer._tcp";
         public const string UdpBroadcastPort = "51235";
+        public const int ProtocolVersion = 1;
+        public const string AppVersion = "ShareToPcReciver 1.0";
 
         public static async Task<(string headerJson, long payloadLength)> ReadFrameAsync(Stream stream, CancellationToken ct)
         {
@@ -76,6 +78,18 @@ namespace ShareToPcReciver.Net
         public static async Task WriteAckAsync(Stream stream, bool ok, string msg, CancellationToken ct)
         {
             var ack = new { type = "ACK", status = ok ? "OK" : "ERROR", msg = msg ?? "" };
+            string json = JsonSerializer.Serialize(ack);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+
+        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本与协议版本。</summary>
+        public static async Task WriteHelloAckAsync(Stream stream, CancellationToken ct)
+        {
+            var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion };
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

@@ -26,6 +26,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     private static final int TYPE_DEVICE = 0;
     private static final int TYPE_ADD = 1;
+    private static final int TYPE_PC_CLIENT = 2;
 
     public interface OnDeviceClickListener {
         void onClick(DiscoveredDevice device);
@@ -33,16 +34,19 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     }
 
     public interface OnAddDeviceClickListener { void onAddDevice(); }
+    public interface OnPcClientClickListener { void onPcClient(); }
 
     private final List<DiscoveredDevice> displayItems = new ArrayList<>();
     private final OnDeviceClickListener clickListener;
     private OnAddDeviceClickListener addClickListener;
+    private OnPcClientClickListener pcClientClickListener;
 
     public DeviceAdapter(OnDeviceClickListener clickListener) {
         this.clickListener = clickListener;
     }
 
     public void setOnAddDeviceClickListener(OnAddDeviceClickListener l) { this.addClickListener = l; }
+    public void setOnPcClientClickListener(OnPcClientClickListener l) { this.pcClientClickListener = l; }
 
     public void submitList(List<DiscoveredDevice> discoveredDevices) {
         displayItems.clear();
@@ -62,7 +66,8 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     @Override
     public int getItemViewType(int position) {
-        if (position >= displayItems.size()) return TYPE_ADD;
+        if (position == displayItems.size()) return TYPE_ADD;
+        if (position > displayItems.size()) return TYPE_PC_CLIENT;
         return TYPE_DEVICE;
     }
 
@@ -74,6 +79,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             return new RecyclerView.ViewHolder(
                     inflater.inflate(R.layout.item_add_device, parent, false)) {};
         }
+        if (viewType == TYPE_PC_CLIENT) {
+            return new RecyclerView.ViewHolder(
+                    inflater.inflate(R.layout.item_pc_client, parent, false)) {};
+        }
         return new DeviceVH(inflater.inflate(R.layout.item_device, parent, false));
     }
 
@@ -82,6 +91,12 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         if (getItemViewType(position) == TYPE_ADD) {
             holder.itemView.setOnClickListener(v -> {
                 if (addClickListener != null) addClickListener.onAddDevice();
+            });
+            return;
+        }
+        if (getItemViewType(position) == TYPE_PC_CLIENT) {
+            holder.itemView.setOnClickListener(v -> {
+                if (pcClientClickListener != null) pcClientClickListener.onPcClient();
             });
             return;
         }
@@ -150,7 +165,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     }
 
     @Override
-    public int getItemCount() { return displayItems.size() + 1; }
+    public int getItemCount() { return displayItems.size() + 2; }
 
     /** 将毫秒时间戳转为对人友好文案，如"今天 14:30""昨天 09:15""7月25日 16:00"。 */
     @NonNull

@@ -32,8 +32,12 @@ public class DeviceStore {
                 String host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_HOST));
                 int port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PORT));
                 String name = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_NAME));
+                String version = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_VERSION));
+                String protoVersion = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PROTO_VERSION));
                 String latestJobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_LAST_SEND_ID));
                 DiscoveredDevice d = new DiscoveredDevice(name, host, port, false);
+                d.version = version;
+                d.protoVersion = protoVersion;
                 d.latestJobId = latestJobId;
                 result.add(d);
             }
@@ -48,6 +52,8 @@ public class DeviceStore {
         values.put(DBHelper.COL_DEV_HOST, device.host);
         values.put(DBHelper.COL_DEV_PORT, device.port);
         values.put(DBHelper.COL_DEV_NAME, device.name);
+        values.put(DBHelper.COL_DEV_VERSION, device.version);
+        values.put(DBHelper.COL_DEV_PROTO_VERSION, device.protoVersion);
         values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());
 
         // 取已持久化的 latestJobId（兼容：device 对象上的值可能尚未写入）
