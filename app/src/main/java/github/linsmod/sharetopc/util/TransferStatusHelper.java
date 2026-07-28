@@ -32,10 +32,20 @@ public class TransferStatusHelper {
      * - 文本类型只要有 textContent 就可以
      * - 文件类型需 contentUri/localPath 存在，且 PFD 仍有效
      */
+    /**
+     * 判断传输记录是否可以重试/继续。
+     * - 文本类型只要有 textContent 就可以
+     * - 文件类型需 contentUri/localPath 可用，且 PFD 仍有效
+     */
     public static boolean canResumeOrRetry(TransferRecord record, @Nullable PfdChecker pfdChecker) {
-        if (record == null || !record.canDeliver()) return false;
-        if (record.contentType == SendEntry.TYPE_TEXT) return true;
-        return pfdChecker == null || pfdChecker.hasPfd(record.id);
+        if (record == null) return false;
+        if (record.contentType == SendEntry.TYPE_TEXT) {
+            return record.textContent != null;
+        }
+        return pfdChecker != null
+                && pfdChecker.hasPfd(record.id)
+                && (record.contentUri != null
+                    || (record.localPath != null && new java.io.File(record.localPath).exists()));
     }
 
     /** 状态圆点颜色（使用简化后的用户可见状态）。 */

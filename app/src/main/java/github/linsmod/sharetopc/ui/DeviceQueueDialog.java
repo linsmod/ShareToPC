@@ -115,14 +115,14 @@ public class DeviceQueueDialog extends Dialog {
             if (r.status == TransferRecord.STATUS_IDLE
                     && r.idleReason != TransferRecord.IDLE_REASON_SUCCESS
                     && r.pendingAction == 0
-                    && r.canDeliver()) {
+                    && github.linsmod.sharetopc.util.TransferStatusHelper.canResumeOrRetry(r, pfdChecker)) {
                 hasResumable = true;
                 break;
             }
         }
 
         popup.getMenu().findItem(R.id.action_pause_group).setEnabled(hasActive);
-        popup.getMenu().findItem(R.id.action_resume_group).setEnabled(hasResumable);
+        popup.getMenu().findItem(R.id.action_resume_group).setEnabled(hasResumable && !hasActive);
 
         popup.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();

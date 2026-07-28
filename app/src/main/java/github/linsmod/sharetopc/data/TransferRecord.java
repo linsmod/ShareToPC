@@ -72,15 +72,6 @@ public class TransferRecord implements TransferProtocol.Cancellable{
         return totalBytes>0? (int)(sentBytes * 100 / totalBytes):0;
     }
 
-    /** 内容仍可投递：文本永远可以；文件需有 contentUri 或仍存在的 localPath。 */
-    public boolean canDeliver() {
-        if (contentType == SendEntry.TYPE_TEXT) {
-            return textContent != null;
-        }
-        return contentUri != null
-                || (localPath != null && new java.io.File(localPath).exists());
-    }
-
     public SendEntry createSendEntry() {
         SendEntry c;
         if (contentType == SendEntry.TYPE_TEXT) {

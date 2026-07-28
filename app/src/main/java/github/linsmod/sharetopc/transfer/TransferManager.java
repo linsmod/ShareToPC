@@ -288,8 +288,13 @@ public class TransferManager {
                             item.idleReason = TransferRecord.IDLE_REASON_SUCCESS;
                         } catch (Exception e) {
                             item.status = TransferRecord.STATUS_IDLE;
-                            item.idleReason = TransferRecord.IDLE_REASON_NET_ERROR;
-                            item.errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                            // sendItem 已区分 IO 错误（PFD 丢失/流不可读），不覆写为 NET_ERROR
+                            if (item.idleReason != TransferRecord.IDLE_REASON_IO_ERROR) {
+                                item.idleReason = TransferRecord.IDLE_REASON_NET_ERROR;
+                            }
+                            if (item.errorMsg == null) {
+                                item.errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                            }
                             throw e;
                         } finally {
                             updateJob(job, item);
@@ -378,7 +383,9 @@ public class TransferManager {
             Uri uri = Uri.parse(item.contentUri);
             try (InputStream in = appContext.getContentResolver().openInputStream(uri)) {
                 if (in == null) {
-                    throw new Exception("无法读取内容：" + item.name);
+                    item.idleReason = TransferRecord.IDLE_REASON_IO_ERROR;
+                    item.errorMsg = "Pfd丢失，无法读取：" + item.name;
+                    throw new Exception(item.errorMsg);
                 }
                 client.sendFileFromStream(item, in,
                         (sent, total) -> {
@@ -402,8 +409,11 @@ public class TransferManager {
                     return;
                 }
             }
-            throw new Exception("无可读取的源：" + item.name);
-        }
+        // 所有源都不可用 → IO 错误
+        item.idleReason = TransferRecord.IDLE_REASON_IO_ERROR;
+        item.errorMsg = "无可读取的源：" + item.name;
+        throw new Exception(item.errorMsg);
+    }
     }
 
     /** 更新历史记录状态（发送成功后 / 取消 / 失败）。 */
