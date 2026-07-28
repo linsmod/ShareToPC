@@ -47,6 +47,36 @@ public class DeviceStore {
         }
         return result;
     }
+    public synchronized DiscoveredDevice getById(String deviceId) {
+        if (deviceId == null) return null;
+        Cursor c = null;
+        try {
+            c = db.query(DBHelper.TABLE_DEVICE,
+                    null, // 所有列
+                    DBHelper.COL_DEV_ID + " = ?",
+                    new String[]{deviceId},
+                    null, null, null);
+            if (c.moveToFirst()) {
+                String host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_HOST));
+                int port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PORT));
+                String name = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_NAME));
+                String version = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_VERSION));
+                String protoVersion = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PROTO_VERSION));
+                String latestJobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_LAST_SEND_ID));
+                String id = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_ID));
+
+                DiscoveredDevice device = new DiscoveredDevice(name, host, port, false);
+                device.version = version;
+                device.protoVersion = protoVersion;
+                device.deviceId = id;
+                device.latestJobId = latestJobId;
+                return device;
+            }
+        } finally {
+            if (c != null) c.close();
+        }
+        return null;
+    }
 
     /** 记录一个设备（在线发现时调用），按 (host, port) 去重，并更新最后出现时间。 */
     public synchronized void saveDevice(DiscoveredDevice device) {

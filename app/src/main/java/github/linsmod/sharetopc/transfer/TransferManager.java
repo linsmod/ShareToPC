@@ -47,11 +47,11 @@ public class TransferManager {
         public final int port;
         public final String deviceId;
         public final Long createMillis;
-        public final Long updateMillis;
+        public Long updateMillis;
         private boolean isCancelRequested;
         private boolean isCancelled;
         @Nullable
-        public SendEntry transferringEntry;
+        public SendEntry sendingEntry;
         public DiscoveredDevice device;
         public SendJob(String id,String deviceId, List<SendEntry> items, String host, int port) {
             this.id = id;
@@ -251,7 +251,7 @@ public class TransferManager {
             boolean canResumeJob = false;
             for (var item :
                     job.items) {
-                if(item.canResumeJob()){
+                if(item.canResume()){
                     canResumeJob = true;
                     // reset paused item state
                     if(item.pendingAction==TransferRecord.PENDING_ACTION_END_RESUME){
@@ -278,6 +278,7 @@ public class TransferManager {
             SendJob job;
             try {
                 job = queue.take();
+                job.device = deviceStore.getById(job.deviceId);
                 emitQueueChanged();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -304,7 +305,7 @@ public class TransferManager {
                 if (this.currentJob.isCancelRequested()) {
                     break;
                 }
-                if (!item.canResumeJob()) {
+                if (!item.canResume()) {
                     continue;
                 }
                 // 走到哪标记到哪
@@ -322,6 +323,7 @@ public class TransferManager {
                         if (this.currentJob.isCancelRequested()) {
                             break;
                         }
+                        job.sendingEntry =item;
                         sendItem(client, job, item);
                         item.status = TransferRecord.STATUS_IDLE;
                         item.idleReason = TransferRecord.IDLE_REASON_SUCCESS;
@@ -386,6 +388,7 @@ public class TransferManager {
             }
             SendJob finished = currentJob;
             recentJobs.put(currentJob.id,currentJob);
+            currentJob.sendingEntry = null;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
             mainHandler.post(() -> {
                 for (JobProgressListener l : progressListeners) l.onJobFinished(finished);
@@ -457,8 +460,9 @@ public class TransferManager {
     /** 更新历史记录状态（发送成功后 / 取消 / 失败）。 */
     private void updateJob(SendJob job, SendEntry item) {
         var name = job.device.alias!=null?job.device.alias:job.device.name;
+        job.updateMillis = System.currentTimeMillis();
         jobStore.updateJobEntry(item.id, job.host, job.port,
-                name, item.status, item.idleReason, item.errorMsg, item.pendingAction);
+                name, item.status, item.idleReason, item.errorMsg, item.pendingAction, job.updateMillis);
     }
 
     private void onProgress(SendEntry entry) {

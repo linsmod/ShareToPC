@@ -111,7 +111,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         // 传输进度
         TransferManager.SendJob latestJob = device.latestJob;
         if (latestJob != null) {
-            var current = latestJob.transferringEntry;
+            var current = latestJob.sendingEntry;
             if(current!=null && current.isSending()){
                 vh.layoutProgress.setVisibility(View.VISIBLE);
                 vh.pbProgress.setProgress(current.percent());

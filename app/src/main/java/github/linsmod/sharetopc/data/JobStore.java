@@ -56,6 +56,7 @@ public class JobStore {
         values.put(DBHelper.COL_TARGET_NAME, r.targetName);
         values.put(DBHelper.COL_POLICY, r.policy);
         values.put(DBHelper.COL_PENDING_ACTION, r.pendingAction);
+        values.put(DBHelper.COL_UPDATE_MILLIS, r.updateMillis);
         return values;
     }
 
@@ -82,6 +83,7 @@ public class JobStore {
         r.targetName = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_TARGET_NAME));
         r.policy = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_POLICY));
         r.pendingAction = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PENDING_ACTION));
+        r.updateMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_UPDATE_MILLIS));
         return r;
     }
 
@@ -222,7 +224,7 @@ public class JobStore {
     /** 按 id 更新主机、端口、目标名，并更新最终状态。 */
     public synchronized void updateJobEntry(String id, String host, int port,
                                             String targetName, int status, int idle_reason, String errorMsg,
-                                            int pendingAction) {
+                                            int pendingAction, long updateMillis) {
         if (id == null) return;
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_HOST, host);
@@ -232,6 +234,7 @@ public class JobStore {
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, errorMsg);
         values.put(DBHelper.COL_PENDING_ACTION, pendingAction);
+        values.put(DBHelper.COL_UPDATE_MILLIS, updateMillis);
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
     }
@@ -389,6 +392,7 @@ public class JobStore {
         r.targetName = src.targetName;
         r.policy = src.policy;
         r.pendingAction = src.pendingAction;
+        r.updateMillis = src.updateMillis;
         return r;
     }
 

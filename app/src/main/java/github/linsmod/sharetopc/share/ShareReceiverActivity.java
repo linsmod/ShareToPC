@@ -227,7 +227,8 @@ public class ShareReceiverActivity extends AppCompatActivity {
             item.port = target.port;
             item.targetName = target.displayName();
             App.get().jobStore.updateJobEntry(item.id, target.host, target.port,
-                    target.displayName(), item.status, item.idleReason, item.errorMsg, item.pendingAction);
+                    target.displayName(), item.status, item.idleReason, item.errorMsg, item.pendingAction,
+                    System.currentTimeMillis());
             var pfd = ShareParser.createPfd(getApplicationContext(), item);
             if(pfd!=null)
                 App.get().transferManager.registerPfdIfNeeded(item.name,item.id,pfd);
@@ -236,6 +237,7 @@ public class ShareReceiverActivity extends AppCompatActivity {
             throw new RuntimeException("Null of jobId");
         App.get().transferManager.enqueue(jobId,target.deviceId, pendingItems,
                 target.host, target.port);
+        App.get().deviceStore.setLatestJobId(target.host, target.port, jobId);
         jobId = null;
         // 跳转主页面，传输在后台继续
         Intent intent = new Intent(this, github.linsmod.sharetopc.MainActivity.class);

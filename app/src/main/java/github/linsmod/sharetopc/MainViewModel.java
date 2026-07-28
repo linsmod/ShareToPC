@@ -394,7 +394,7 @@ public class MainViewModel extends AndroidViewModel {
     public void resumeGroup(TaskGroup group) {
         boolean resumed = false;
         for (TransferRecord r : group.entries) {
-            if(r.canResumeJob()){
+            if(r.canResume()){
                 resumed = app.transferManager.resumeJob(group.jobId);
                 break;
             }

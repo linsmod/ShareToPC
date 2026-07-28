@@ -38,6 +38,7 @@ public class TransferRecord{
     public int port;
     public String targetName;
     public String policy;        // CleanupPolicy name
+    public long updateMillis;
 
     /** 状态读取（兼容旧数据：无 status 字段时按 success 推导）。 */
     public int getStatus() {
@@ -99,7 +100,7 @@ public class TransferRecord{
     }
 
     //暂停状态或网络错误时允许重试
-    public boolean canResumeJob() {
+    public boolean canResume() {
         return this.pendingAction==0 &&  status==TransferRecord.STATUS_IDLE &&
                 (
                 idleReason==TransferRecord.IDLE_REASON_PAUSED || idleReason==IDLE_REASON_NET_ERROR || idleReason==IDLE_REASON_CREATED);
