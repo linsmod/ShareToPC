@@ -588,6 +588,31 @@ namespace ShareToPcReciver
             return item;
         }
 
+        /// <summary>将毫秒时间戳转为对人友好文案，如"今天 14:30""昨天 09:15""7月25日 16:00"。</summary>
+        private static string FriendlyTime(long timeMillis)
+        {
+            var now = DateTime.Now;
+            var target = DateTimeOffset.FromUnixTimeMilliseconds(timeMillis).LocalDateTime;
+            string hourMin = target.ToString("HH:mm");
+
+            if (now.Year == target.Year && now.DayOfYear == target.DayOfYear)
+                return "今天 " + hourMin;
+
+            var yesterday = now.AddDays(-1);
+            if (yesterday.Year == target.Year && yesterday.DayOfYear == target.DayOfYear)
+                return "昨天 " + hourMin;
+
+            return target.ToString("M月d日 HH:mm");
+        }
+
+        /// <summary>从 tag 中提取时间戳（毫秒），用于分组显示。</summary>
+        private static long GetTagTime(object tag)
+        {
+            if (tag is ReceivedText rt) return rt.Time;
+            if (tag is ReceivedFile rf) return rf.Time;
+            return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        }
+
         /// <summary>按 jobId 分组，若无 jobId 则按设备名分组。活跃分组排在最前。</summary>
         private ListViewGroup GetOrCreateGroup(object tag, string deviceName)
         {
@@ -597,7 +622,7 @@ namespace ShareToPcReciver
             else if (tag is FileProgressInfo pi) jobId = pi.JobId;
 
             string key = !string.IsNullOrEmpty(jobId) ? "job:" + jobId : "dev:" + (deviceName ?? "(未知)");
-            string header = deviceName ?? "(未知)";
+            string header = (deviceName ?? "(未知)") + " · " + FriendlyTime(GetTagTime(tag));
 
             foreach (ListViewGroup g in lvHistory.Groups)
             {

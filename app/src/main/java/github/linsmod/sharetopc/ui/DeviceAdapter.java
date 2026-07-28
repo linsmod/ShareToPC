@@ -10,9 +10,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -117,7 +115,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             if (progress.state == DiscoveredDevice.DeviceProgress.STATE_COMPLETED
                     && progress.completedAt > 0) {
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-                vh.tvEntryName.setText("传输完成 · " + friendlyTime(progress.completedAt));
+                vh.tvEntryName.setText("传输完成 · " + TaskAdapter.friendlyTime(progress.completedAt));
                 vh.tvEntrySize.setVisibility(View.GONE);
             } else if (progress.currentEntryName != null && !progress.currentEntryName.isEmpty()) {
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
@@ -136,7 +134,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             // 进度归 IDLE 但仍保留完成时间时，显示一条简短完成提示
             if (progress != null && progress.completedAt > 0) {
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-                vh.tvEntryName.setText("传输完成 · " + friendlyTime(progress.completedAt));
+                vh.tvEntryName.setText("传输完成 · " + TaskAdapter.friendlyTime(progress.completedAt));
                 vh.tvEntrySize.setVisibility(View.GONE);
             } else {
                 vh.layoutEntryInfo.setVisibility(View.GONE);
@@ -145,12 +143,12 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         // 过期 · 部分完成提示优先于"传输完成"
         if (progress.hasOutdate && progress.partialSuccess) {
             vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-            vh.tvEntryName.setText("已过期 · 部分完成 · " + friendlyTime(progress.lastUpdateAt));
+            vh.tvEntryName.setText("已过期 · 部分完成 · " + TaskAdapter.friendlyTime(progress.lastUpdateAt));
             vh.tvEntrySize.setVisibility(View.GONE);
         }
         else if(progress.hasOutdate){
             vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-            vh.tvEntryName.setText("已过期 · " + friendlyTime(progress.lastUpdateAt));
+            vh.tvEntryName.setText("已过期 · " + TaskAdapter.friendlyTime(progress.lastUpdateAt));
         }
 
         vh.vOnlineDot.setBackgroundResource(
@@ -166,32 +164,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     @Override
     public int getItemCount() { return displayItems.size() + 2; }
-
-    /** 将毫秒时间戳转为对人友好文案，如"今天 14:30""昨天 09:15""7月25日 16:00"。 */
-    @NonNull
-    private static String friendlyTime(long timeMillis) {
-        java.util.Calendar now = java.util.Calendar.getInstance();
-        java.util.Calendar cal = java.util.Calendar.getInstance();
-        cal.setTimeInMillis(timeMillis);
-
-        SimpleDateFormat hm = new SimpleDateFormat("HH:mm", Locale.getDefault());
-        String hourMin = hm.format(new Date(timeMillis));
-
-        if (now.get(java.util.Calendar.YEAR) == cal.get(java.util.Calendar.YEAR)
-                && now.get(java.util.Calendar.DAY_OF_YEAR) == cal.get(java.util.Calendar.DAY_OF_YEAR)) {
-            return "今天 " + hourMin;
-        }
-
-        java.util.Calendar yesterday = (java.util.Calendar) now.clone();
-        yesterday.add(java.util.Calendar.DAY_OF_YEAR, -1);
-        if (yesterday.get(java.util.Calendar.YEAR) == cal.get(java.util.Calendar.YEAR)
-                && yesterday.get(java.util.Calendar.DAY_OF_YEAR) == cal.get(java.util.Calendar.DAY_OF_YEAR)) {
-            return "昨天 " + hourMin;
-        }
-
-        SimpleDateFormat md = new SimpleDateFormat("M月d日 HH:mm", Locale.getDefault());
-        return md.format(new Date(timeMillis));
-    }
 
     /** 将字节数转为友好文案，如 "1.2 MB""340 KB"。 */
     @NonNull
