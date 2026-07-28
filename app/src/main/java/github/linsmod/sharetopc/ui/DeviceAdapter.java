@@ -128,10 +128,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             }
         }
         // 过期 · 部分完成提示优先于"传输完成"
-        if (progress != null && progress.expiredAt > 0) {
+        if (progress.hasOutdate && progress.partialSuccess) {
             vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-            vh.tvEntryName.setText("过期 · 部分完成 · " + friendlyTime(progress.expiredAt));
+            vh.tvEntryName.setText("已过期 · 部分完成 · " + friendlyTime(progress.lastUpdateAt));
             vh.tvEntrySize.setVisibility(View.GONE);
+        }
+        else if(progress.hasOutdate){
+            vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+            vh.tvEntryName.setText("已过期 · " + friendlyTime(progress.lastUpdateAt));
         }
 
         vh.vOnlineDot.setBackgroundResource(

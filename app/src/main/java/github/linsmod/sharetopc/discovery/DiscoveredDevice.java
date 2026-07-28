@@ -29,7 +29,9 @@ public class DiscoveredDevice {
         /** 最后一次传输完成的时间戳（job 全部完成时设置）。 */
         public long completedAt;
         /** job 中存在已过期的 entry（IDLE_REASON_OUTDATE），且部分完成时记录最后更新时间。0 表示无过期。 */
-        public long expiredAt;
+        public long lastUpdateAt;
+        public boolean partialSuccess;
+        public boolean hasOutdate;
 
         public boolean isActive() {
             return state == STATE_SENDING || state == STATE_QUEUED

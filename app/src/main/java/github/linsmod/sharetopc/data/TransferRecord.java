@@ -2,8 +2,6 @@ package github.linsmod.sharetopc.data;
 
 import java.util.Objects;
 
-import github.linsmod.sharetopc.transfer.TransferProtocol;
-
 /** 传输历史记录。保留足够字段以支持失败重发。 */
 public class TransferRecord{
     public static final int STATUS_IDLE = 0;
@@ -101,8 +99,9 @@ public class TransferRecord{
     }
 
     //暂停状态或网络错误时允许重试
-    public boolean canResume() {
-        return this.pendingAction==0 && (
+    public boolean canResumeJob() {
+        return this.pendingAction==0 &&  status==TransferRecord.STATUS_IDLE &&
+                (
                 idleReason==TransferRecord.IDLE_REASON_PAUSED || idleReason==IDLE_REASON_NET_ERROR || idleReason==IDLE_REASON_CREATED);
     }
 

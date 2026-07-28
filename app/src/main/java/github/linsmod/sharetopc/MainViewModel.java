@@ -133,8 +133,6 @@ public class MainViewModel extends AndroidViewModel {
         app.transferManager.addQueueListener(queueListener);
         app.transferManager.addProgressListener(progressListener);
         refreshHistory();
-        refreshTasks();
-        refreshDevices();
         updateConnState();
     }
 
@@ -286,7 +284,9 @@ public class MainViewModel extends AndroidViewModel {
                 if (allSuccess) {
                     p.completedAt = maxTime;
                 }
-                p.expiredAt = (hasOutdate && !allSuccess && p.completedEntries > 0) ? maxTime : 0;
+                p.lastUpdateAt = maxTime;
+                p.partialSuccess = !allSuccess && p.completedEntries > 0;
+                p.hasOutdate = hasOutdate;
                 map.put(deviceKey, p);
             }
         }
@@ -476,7 +476,7 @@ public class MainViewModel extends AndroidViewModel {
     public void resumeGroup(TaskGroup group) {
         boolean resumed = false;
         for (TransferRecord r : group.entries) {
-            if(r.canResume()){
+            if(r.canResumeJob()){
                 resumed = app.transferManager.resumeJob(group.jobId);
                 break;
             }

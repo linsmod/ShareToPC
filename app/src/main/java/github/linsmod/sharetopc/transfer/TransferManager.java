@@ -17,7 +17,6 @@ import java.io.InputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -202,24 +201,6 @@ public class TransferManager {
         }
     }
 
-    /**
-     * 重发一条历史记录（完成后原地更新该记录状态）。
-     */
-    public void retry(TransferRecord record) {
-        recentJobs.get(record.jobId);
-        if(record instanceof SendEntry){
-            SendEntry sendEntry = (SendEntry) record;
-            if(!sendEntry.canResume()){
-                return;
-            }
-            sendEntry.status = TransferRecord.STATUS_IDLE;
-            sendEntry.pendingAction = TransferRecord.PENDING_ACTION_END_RESUME;
-            App.get().jobStore.updateStatus(sendEntry.id,sendEntry.status,sendEntry.idleReason, sendEntry.pendingAction);
-            enqueue(sendEntry.jobId, Collections.singletonList(sendEntry),
-                    sendEntry.host, sendEntry.port, sendEntry.targetName);
-        }
-    }
-
     public void enqueue(String id, List<SendEntry> items, String host, int port,
                         String deviceName) {
         SendJob job = new SendJob(id,items, host, port, deviceName);
@@ -235,7 +216,7 @@ public class TransferManager {
             boolean canResumeJob = false;
             for (var item :
                     job.items) {
-                if(item.canResume()){
+                if(item.canResumeJob()){
                     canResumeJob = true;
                     // reset paused item state
                     if(item.pendingAction==TransferRecord.PENDING_ACTION_END_RESUME){
@@ -277,85 +258,80 @@ public class TransferManager {
     }
     private void process(SendJob job) {
         currentJob = job;
-        String error = null;
         deviceStore.setLatestJobId(job.host, job.port, job.id);
         mainHandler.post(() -> {
             for (JobProgressListener l : progressListeners) l.onJobStarted(job);
         });
 
+        TransferClient client = new TransferClient(job.host,job.port);
         try {
-            for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            for (SendEntry item : job.items) {
                 if (this.currentJob.isCancelRequested()) {
                     break;
                 }
-                var client = new TransferClient();
-                try {
-                    client.connect(job.host, job.port);
+                if (!item.canResumeJob()) {
+                    continue;
+                }
+                // 走到哪标记到哪
+                item.status = TransferRecord.STATUS_SENDING;
+                jobStore.updateStatus(item.id, item.status, item.idleReason, item.pendingAction);
+                jobStore.updateProgress(item.id, 0, item.size);
+                lastProgressNotifyMs = 0;
+
+                // 复用连接，断开时自动重连
+                for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
                     if (this.currentJob.isCancelRequested()) {
                         break;
                     }
-                    client.hello();
-                    for (SendEntry item : job.items) {
+                    try {
                         if (this.currentJob.isCancelRequested()) {
                             break;
                         }
-                        if (item.isSuccess()) {
-                            continue;
+                        sendItem(client, job, item);
+                        item.status = TransferRecord.STATUS_IDLE;
+                        item.idleReason = TransferRecord.IDLE_REASON_SUCCESS;
+                        break;
+                    } catch (Exception e) {
+                        // 连接断开，关闭以便下次重连
+                        if (client != null) {
+                            client.close();
                         }
-                        item.status = TransferRecord.STATUS_SENDING;
-                        jobStore.updateStatus(item.id, item.status, item.idleReason, item.pendingAction);
-                        jobStore.updateProgress(item.id, 0, item.size);
-                        // 每个 item 重置节流计时器，确保首个进度回调不被上一个文件抑制
-                        lastProgressNotifyMs = 0;
-                        try {
-                            sendItem(client, job, item);
+                        if (this.currentJob.isCancelRequested()) {
+                            break;
+                        }
+                        String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                        LogX.e("transfer attempt " + attempt + " for " + item.name + " failed: " + errMsg, e);
+                        if (attempt >= MAX_ATTEMPTS) {
                             item.status = TransferRecord.STATUS_IDLE;
-                            item.idleReason = TransferRecord.IDLE_REASON_SUCCESS;
-                        } catch (Exception e) {
-                            item.status = TransferRecord.STATUS_IDLE;
-                            // sendItem 已区分 IO 错误（PFD 丢失/流不可读），不覆写为 NET_ERROR
                             if (item.idleReason != TransferRecord.IDLE_REASON_IO_ERROR) {
                                 item.idleReason = TransferRecord.IDLE_REASON_NET_ERROR;
                             }
                             if (item.errorMsg == null) {
-                                item.errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                                item.errorMsg = errMsg;
                             }
-                            throw e;
-                        } finally {
-                            updateJob(job, item);
+                            job.cancel(); // cancel to skip reset of items
                         }
-                        if (item.isSuccess()) {
-                            releasePfd(item.id);
-                        }
-                    }
-                    if (this.currentJob.isCancelRequested()) {
-                        break;
-                    }
-                    error = null;
-                    break;
-                } catch (Exception e) {
-                    if (this.currentJob.isCancelRequested()) {
-                        break;
-                    }
-                    error = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                    LogX.e("transfer attempt " + attempt + " failed: " + error, e);
-                    if (attempt < MAX_ATTEMPTS) {
-                        try {
-                            Thread.sleep(RETRY_DELAY_MS);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                            break;
+                        if (attempt < MAX_ATTEMPTS) {
+                            try {
+                                Thread.sleep(RETRY_DELAY_MS);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                break;
+                            }
                         }
                     }
-                } finally {
-                    client.close();
+                }
+                updateJob(job, item);
+                if (item.isSuccess()) {
+                    releasePfd(item.id);
                 }
             }
         } catch (Throwable t) {
-            // 防御：connect/send 阶段出现未预期异常也不会崩溃
             LogX.e("unexpected error in transfer for job: " + job.displayName(), t);
-            error = t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
         } finally {
+            if (client != null) {
+                client.close();
+            }
             // 处理取消后的 pending action 状态转换
             for (SendEntry item : job.items) {
                 if (item.pendingAction == TransferRecord.PENDING_ACTION_END_PAUSE) {
@@ -383,6 +359,7 @@ public class TransferManager {
     }
 
     private void sendItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
+        client.connect();
         if (item.isText()) {
             client.sendText(item.text);
         } else {

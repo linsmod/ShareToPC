@@ -18,25 +18,33 @@ import github.linsmod.sharetopc.util.FileUtils;
 
 /** 单次 TCP 会话：HELLO → 连续发送 TEXT/FILE，每条阻塞等 ACK。 */
 public class TransferClient implements Closeable {
-
     public static final int CONNECT_TIMEOUT_MS = 5000;
     public static final int ACK_TIMEOUT_MS = 10000;
+    private final String host;
+    private final int port;
 
     private Socket socket;
     private DataOutputStream out;
     private DataInputStream in;
     private int state;
 
-    public static class State {
-        public static final int IDLE = 0;
-        public static final int CONNECTING = 1;
-        public static final int SENDING = 1;
+    public static final int DISCONNECTED = 0;
+    public static final int CONNECTING = 1;
+    public static final int CONNECTED = 2;
+    public static final int CONNECTION_LOST = 3;
+
+    public TransferClient(String host, int port) {
+        this.host = host;
+        this.port = port;
     }
 
     public int getState(){
         return this.state;
     }
-    public void connect(String host, int port) throws IOException {
+    public void connect() throws IOException {
+        if(state==CONNECTED){
+            return;
+        }
         if (host == null || host.isEmpty()) {
             throw new IOException("主机地址为空");
         }
@@ -44,7 +52,7 @@ public class TransferClient implements Closeable {
             throw new IOException("无效端口: " + port);
         }
         socket = new Socket();
-        state = State.CONNECTING;
+        state = CONNECTING;
         try {
             socket.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MS);
             socket.setSoTimeout(ACK_TIMEOUT_MS);
@@ -55,22 +63,22 @@ public class TransferClient implements Closeable {
             socket.setKeepAlive(true);
             out = new DataOutputStream(socket.getOutputStream());
             in = new DataInputStream(socket.getInputStream());
+            hello();
+            state = CONNECTED;
         } catch (IOException e) {
-            state = State.IDLE;
             // 连接失败时主动关闭 socket，避免资源泄漏
             close();
             throw e;
         }
     }
 
-    public void hello() throws IOException {
+    void hello() throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "HELLO");
         header.addProperty("device", Build.MODEL != null ? Build.MODEL : "Android");
         header.addProperty("version", TransferProtocol.PROTOCOL_VERSION);
         TransferProtocol.writeFrame(out, header);
         expectAck();
-        this.state = State.SENDING;
     }
 
     public void sendText(String text) throws IOException {
@@ -196,5 +204,6 @@ public class TransferClient implements Closeable {
             } catch (IOException ignored) {
             }
         }
+        this.state= CONNECTION_LOST;
     }
 }
