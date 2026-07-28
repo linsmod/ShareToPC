@@ -56,15 +56,6 @@ public class TaskFragment extends Fragment {
         rvTask.setLayoutManager(new LinearLayoutManager(requireContext()));
         rvTask.setItemAnimator(null); // 禁用动画，避免频繁 notifyItemChanged 导致闪烁
         taskAdapter = new TaskAdapter(new Listeners.TaskActionListener() {
-            @Override
-            public void onRetryRequested(TransferRecord record) {
-                viewModel.retry(record);
-            }
-
-            @Override
-            public void onPauseRequested(TransferRecord record) {
-                viewModel.pauseTransfer(record);
-            }
 
             @Override
             public void onGroupMenuRequested(TaskGroup group, View anchor, float touchX) {

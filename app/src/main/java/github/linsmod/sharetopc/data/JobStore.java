@@ -149,6 +149,11 @@ public class JobStore {
                 DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "=?",
                 new String[]{String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_CREATED)});
 
+        // 标记所有暂停的 → OUTDATE（重启后 PFD 已丢失，不可恢复）
+        db.update(DBHelper.TABLE_JOB_ENTRY, values,
+                DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "=?",
+                new String[]{String.valueOf(TransferRecord.STATUS_IDLE), String.valueOf(TransferRecord.IDLE_REASON_PAUSED)});
+
         // 同步受影响的 job 聚合信息
         for (String jid : affectedJobIds) {
             syncJobFromEntries(jid);

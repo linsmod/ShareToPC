@@ -17,6 +17,8 @@ import java.io.InputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
@@ -76,11 +78,14 @@ public class TransferManager {
         @Override
         public void cancel() {
             this.isCancelRequested = true;
-            items.forEach(TransferRecord::cancel);
         }
 
         public boolean isCancelled(){
             return this.isCancelled;
+        }
+
+        public String deviceAddress() {
+            return this.host+":"+this.port;
         }
     }
 
@@ -143,6 +148,7 @@ public class TransferManager {
     private final Map<String, PfdHandle> pfdHandles = new ConcurrentHashMap<>();
 
     private volatile SendJob currentJob;
+    private volatile Map<String,SendJob> recentJobs = new HashMap<>();
     private volatile long lastProgressNotifyMs;
 
     public TransferManager(Context context, JobStore jobStore, DeviceStore deviceStore) {
@@ -158,31 +164,18 @@ public class TransferManager {
         return currentJob;
     }
 
-    /** 从等待队列中移除指定 jobId 的任务（不影响当前正在执行的任务）。 */
-    public void removeFromQueue(String jobId) {
-        queue.removeIf(job -> job.id.equals(jobId));
-        emitQueueChanged();
-    }
-
     /** 取消当前正在执行的任务并从等待队列中移除同 jobId 的任务（用于删除分组）。 */
-    public void cancelAndRemoveJob(String jobId) {
-        SendJob cur = currentJob;
-        if (cur != null && cur.id.equals(jobId)) {
-            cur.cancel();
-        }
-        removeFromQueue(jobId);
-    }
-
-    /** 暂停当前或队列中指定 jobId 的任务（走 cancel 请求协议，会发包通知 PC 端）。 */
     public void cancelJob(String jobId) {
         SendJob cur = currentJob;
         if (cur != null && cur.id.equals(jobId)) {
-            cur.cancel(); // 触发 TransferProtocol.writeContentLoop 发送 CANCEL 帧
-        }
-        for (SendJob job : queue) {
-            if (job.id.equals(jobId)) {
-                job.cancel(); // 标记取消，worker 取到时自动跳过
+            cur.cancel();
+            for (SendEntry entry : cur.items) {
+                if (entry.canRequestPause()) {
+                    requestPause(entry);
+                }
             }
+            if(queue.remove(cur))
+                recentJobs.put(cur.id,cur);
         }
     }
 
@@ -213,6 +206,7 @@ public class TransferManager {
      * 重发一条历史记录（完成后原地更新该记录状态）。
      */
     public void retry(TransferRecord record) {
+        recentJobs.get(record.jobId);
         if(record instanceof SendEntry){
             SendEntry sendEntry = (SendEntry) record;
             if(!sendEntry.canResume()){
@@ -221,6 +215,8 @@ public class TransferManager {
             sendEntry.status = TransferRecord.STATUS_IDLE;
             sendEntry.pendingAction = TransferRecord.PENDING_ACTION_END_RESUME;
             App.get().jobStore.updateStatus(sendEntry.id,sendEntry.status,sendEntry.idleReason, sendEntry.pendingAction);
+            enqueue(sendEntry.jobId, Collections.singletonList(sendEntry),
+                    sendEntry.host, sendEntry.port, sendEntry.targetName);
         }
     }
 
@@ -230,6 +226,35 @@ public class TransferManager {
         queue.offer(job);
         emitQueueChanged();
         LogX.d("enqueue job: " + job.displayName() + " -> " + host + ":" + port);
+    }
+
+    public boolean resumeJob(String jobId){
+        SendJob job = recentJobs.get(jobId);
+        if(job!=null){
+            // reset states
+            boolean canResumeJob = false;
+            for (var item :
+                    job.items) {
+                if(item.canResume()){
+                    canResumeJob = true;
+                    // reset paused item state
+                    if(item.pendingAction==TransferRecord.PENDING_ACTION_END_RESUME){
+                        item.status = TransferRecord.STATUS_SENDING;
+                        item.pendingAction = TransferRecord.PENDING_ACTION_NONE;
+                        App.get().jobStore.updateStatus(item.id,item.status,item.idleReason, item.pendingAction);
+                    }
+                }
+            }
+            if(canResumeJob){
+                // reset job state and enqueue
+                job.isCancelRequested = false;
+                queue.offer(job);
+                emitQueueChanged();
+                LogX.d("resume job: " + job.displayName() + " -> " + job.deviceAddress() );
+                return true;
+            }
+        }
+        return false;
     }
 
     private void consumeLoop() {
@@ -271,7 +296,7 @@ public class TransferManager {
                     }
                     client.hello();
                     for (SendEntry item : job.items) {
-                        if (this.currentJob.isCancelRequested()||item.isCancelRequested()) {
+                        if (this.currentJob.isCancelRequested()) {
                             break;
                         }
                         if (item.isSuccess()) {
@@ -349,6 +374,7 @@ public class TransferManager {
                 }
             }
             SendJob finished = currentJob;
+            recentJobs.put(currentJob.id,currentJob);
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
             mainHandler.post(() -> {
                 for (JobProgressListener l : progressListeners) l.onJobFinished(finished);
@@ -366,7 +392,7 @@ public class TransferManager {
                 if (handle != null) {
                     try {
                         InputStream in = handle.newInputStream();
-                    client.sendFileFromStream(item, in,
+                    client.sendFileFromStream(job,item, in,
                             (sent, total) -> {
                                 item.sentBytes = sent;
                                 item.totalBytes = total;
@@ -387,7 +413,7 @@ public class TransferManager {
                     item.errorMsg = "Pfd丢失，无法读取：" + item.name;
                     throw new Exception(item.errorMsg);
                 }
-                client.sendFileFromStream(item, in,
+                client.sendFileFromStream(job,item, in,
                         (sent, total) -> {
                             item.sentBytes = sent;
                             item.totalBytes = total;
@@ -400,7 +426,7 @@ public class TransferManager {
         if (item.localPath != null) {
             File file = new File(item.localPath);
             if (file.exists()) {
-                client.sendFile(item, file,
+                client.sendFile(job,item, file,
                         (sent, total) -> {
                             item.sentBytes = sent;
                             item.totalBytes = total;

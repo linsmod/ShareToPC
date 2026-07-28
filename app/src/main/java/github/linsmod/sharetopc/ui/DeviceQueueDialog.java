@@ -76,16 +76,6 @@ public class DeviceQueueDialog extends Dialog {
 
         adapter = new TaskAdapter(new Listeners.TaskActionListener() {
             @Override
-            public void onRetryRequested(TransferRecord record) {
-                if (listener != null) listener.onRetryRequested(record);
-            }
-
-            @Override
-            public void onPauseRequested(TransferRecord record) {
-                if (listener != null) listener.onPauseRequested(record);
-            }
-
-            @Override
             public void onGroupMenuRequested(TaskGroup group, View anchor, float touchX) {
                 showGroupMenu(group, anchor, touchX);
             }

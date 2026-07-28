@@ -93,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 从 history LiveData 取快照，过滤该设备的记录，取最近一个 job 构造成 TaskGroup
         github.linsmod.sharetopc.ui.TaskGroup group = null;
-        java.util.List<TransferRecord> history = viewModel.getHistory().getValue();
+        java.util.List<TransferRecord> history = viewModel.getHistory();
         if (history != null) {
             String deviceKey = device.address();
             java.util.List<TransferRecord> scoped = new java.util.ArrayList<>();
@@ -133,16 +133,6 @@ public class MainActivity extends AppCompatActivity {
 
         deviceQueueDialog = new DeviceQueueDialog(this, device, group,
                 new Listeners.TaskActionListener() {
-            @Override
-            public void onPauseRequested(TransferRecord record) {
-                viewModel.pauseTransfer(record);
-            }
-
-            @Override
-            public void onRetryRequested(TransferRecord record) {
-                viewModel.retry(record);
-            }
-
             @Override
             public void onGroupMenuRequested(github.linsmod.sharetopc.ui.TaskGroup group,
                                              View anchor, float touchX) {

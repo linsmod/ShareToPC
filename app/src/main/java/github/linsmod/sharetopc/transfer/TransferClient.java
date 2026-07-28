@@ -83,7 +83,7 @@ public class TransferClient implements Closeable {
     }
 
     /** 从 File 读文件发送（历史兼容：本地 inbox 仍有副本时使用）。 */
-    public void sendFile(SendEntry entry,File file,
+    public void sendFile(TransferManager.SendJob job, SendEntry entry, File file,
                          TransferProtocol.Progress progress) throws IOException {
         sendFileHeader(entry.name, entry.mime, file.length(), entry.id);
         long resumeOffset = expectAckForFile();
@@ -91,17 +91,17 @@ public class TransferClient implements Closeable {
             skipExactly(fin, resumeOffset);
             if (resumeOffset > 0) {
                 TransferProtocol.writeFileContentWithResume(out, fin, file.length(),
-                        resumeOffset, progress, entry);
+                        resumeOffset, progress, job);
             } else {
                 TransferProtocol.writeFileContent(out, fin, file.length(), progress,
-                        entry);
+                        job);
             }
         }
         expectAck();
     }
 
     /** 从 InputStream 读文件发送（新路径：直接从 content:// URI 读流，无需本地文件）。 */
-    public void sendFileFromStream(SendEntry entry,
+    public void sendFileFromStream(TransferManager.SendJob job, SendEntry entry,
                                    InputStream contentStream,
                                    TransferProtocol.Progress progress) throws IOException {
         sendFileHeader(entry.name, entry.mime, entry.size, entry.id);
@@ -109,10 +109,10 @@ public class TransferClient implements Closeable {
         skipExactly(contentStream, resumeOffset);
         if (resumeOffset > 0) {
             TransferProtocol.writeFileContentWithResume(out, contentStream, entry.size,
-                    resumeOffset, progress,entry);
+                    resumeOffset, progress,job);
         } else {
             TransferProtocol.writeFileContent(out, contentStream, entry.size, progress,
-                    entry);
+                    job);
         }
         expectAck();
     }

@@ -165,7 +165,6 @@ public final class TransferProtocol {
                 writeFrame(out, cancel);
                 writeFrame(out, cancel);
                 out.flush();
-                cancellable.onCancelled();
                 throw new IOException("Transfer cancelled by user");
             }
             if (isResume && firstChunk) {

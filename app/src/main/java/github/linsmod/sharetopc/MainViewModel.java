@@ -14,7 +14,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import github.linsmod.sharetopc.data.SendEntry;
@@ -28,9 +27,8 @@ public class MainViewModel extends AndroidViewModel {
 
     private final MutableLiveData<List<DiscoveredDevice>> devices = new MutableLiveData<>();
     private final MutableLiveData<String> connState = new MutableLiveData<>();
-    private final MutableLiveData<String> searchHint = new MutableLiveData<>();
-    private final MutableLiveData<Boolean> scanning = new MutableLiveData<>(false);
-    private final MutableLiveData<List<TransferRecord>> history = new MutableLiveData<>();
+    private boolean scanning = false;
+    private List<TransferRecord> history = null;
 
     /** 任务列表变更回调（替代 LiveData，避免 lifecycle 延迟丢失初始值）。 */
     public interface TasksChangeListener {
@@ -82,6 +80,12 @@ public class MainViewModel extends AndroidViewModel {
         public void onJobFinished(@NonNull TransferManager.SendJob job) {
             updateDeviceProgressInPlace();
             refreshHistory();
+            // 通知条目级监听器，确保弹窗中的列表即时更新（如暂停后状态变更）
+            for (SendEntry entry : job.items) {
+                for (EntryUpdateListener l : entryUpdateListeners) {
+                    l.onEntryUpdated(entry);
+                }
+            }
         }
     };
 
@@ -91,7 +95,7 @@ public class MainViewModel extends AndroidViewModel {
     private final Runnable countdownTick = new Runnable() {
         @Override
         public void run() {
-            if (!Boolean.TRUE.equals(scanning.getValue())) {
+            if (!scanning) {
                 return;
             }
             updateConnState();
@@ -109,7 +113,7 @@ public class MainViewModel extends AndroidViewModel {
 
             @Override
             public void onScanStateChanged(boolean isScanning) {
-                scanning.setValue(isScanning);
+                scanning = isScanning;
                 countdownHandler.removeCallbacks(countdownTick);
                 if (isScanning) {
                     scanEndAtMillis = System.currentTimeMillis()
@@ -142,24 +146,17 @@ public class MainViewModel extends AndroidViewModel {
         return connState;
     }
 
-    public LiveData<String> getSearchHint() {
-        return searchHint;
-    }
-
     private void updateConnState() {
         List<DiscoveredDevice> list = devices.getValue();
         int count = list != null ? list.size() : 0;
-        boolean isScanning = Boolean.TRUE.equals(scanning.getValue());
         String base = count > 0
                 ? app.getString(R.string.status_found, count)
                 : app.getString(R.string.status_not_found);
-        if (isScanning) {
+        if (scanning) {
             long remainingSec = Math.max(0, (scanEndAtMillis - System.currentTimeMillis() + 999) / 1000);
             connState.setValue(base + "（" + remainingSec + "s）");
-            searchHint.setValue(null);
         } else {
             connState.setValue(base);
-            searchHint.setValue(null);
         }
     }
 
@@ -184,7 +181,8 @@ public class MainViewModel extends AndroidViewModel {
         entryUpdateListeners.remove(l);
     }
 
-    public LiveData<List<TransferRecord>> getHistory() {
+    @Nullable
+    public List<TransferRecord> getHistory() {
         return history;
     }
 
@@ -426,12 +424,8 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     public void refreshHistory() {
-        history.setValue(app.jobStore.all());
+        history = app.jobStore.all();
         refreshTasks();
-    }
-
-    public void retry(TransferRecord record) {
-        app.transferManager.retry(record);
     }
 
     /** 查询指定 transferId 是否仍有 PFD 可用（用于 UI 判断是否允许重试/继续）。 */
@@ -448,7 +442,7 @@ public class MainViewModel extends AndroidViewModel {
     /** 删除整个任务分组：先取消传输 + 清理队列，再删除数据库记录。 */
     public void deleteGroup(TaskGroup group) {
         // 1. 取消正在传输的任务 + 清理等待队列
-        app.transferManager.cancelAndRemoveJob(group.jobId);
+        app.transferManager.cancelJob(group.jobId);
         // 2. 从数据库删除
         java.util.List<String> ids = new java.util.ArrayList<>();
         for (TransferRecord r : group.entries) {
@@ -475,42 +469,20 @@ public class MainViewModel extends AndroidViewModel {
 
     /** 暂停分组：对所有 canRequestPause() 的条目设置 pending pause + cancel。 */
     public void pauseGroup(TaskGroup group) {
-        TransferManager.SendJob cur = app.transferManager.getCurrentJob();
-        boolean cancelled = false;
-        if (cur != null && cur.id.equals(group.jobId)) {
-            for (SendEntry entry : cur.items) {
-                if (entry.canRequestPause()) {
-                    app.transferManager.requestPause(entry);
-                    cancelled = true;
-                }
-            }
-            if (cancelled) {
-                cur.cancel(); // 触发 CANCEL 帧发送
-            }
-        }
-        // 队列中等待的 job：直接标记 cancel，worker 取到时自动跳过
-        for (TransferManager.SendJob job : app.transferManager.getQueueSnapshot()) {
-            if (job.id.equals(group.jobId)) {
-                job.cancel();
-            }
-        }
+        app.transferManager.cancelJob(group.jobId);
     }
 
     /** 继续/恢复分组中所有可恢复的条目。 */
     public void resumeGroup(TaskGroup group) {
+        boolean resumed = false;
         for (TransferRecord r : group.entries) {
-            if (r.status == TransferRecord.STATUS_IDLE
-                    && r.idleReason != TransferRecord.IDLE_REASON_SUCCESS
-                    && r.pendingAction == 0) {
-                retry(r);
+            if(r.canResume()){
+                resumed = app.transferManager.resumeJob(group.jobId);
+                break;
             }
         }
-        refreshHistory();
-    }
-
-    /** 继续/重试指定记录。 */
-    public void resumeTransfer(TransferRecord record) {
-        retry(record);
+        if(resumed)
+            refreshHistory();
     }
 
     @Override

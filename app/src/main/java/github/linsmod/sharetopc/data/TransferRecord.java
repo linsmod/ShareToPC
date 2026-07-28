@@ -5,7 +5,7 @@ import java.util.Objects;
 import github.linsmod.sharetopc.transfer.TransferProtocol;
 
 /** 传输历史记录。保留足够字段以支持失败重发。 */
-public class TransferRecord implements TransferProtocol.Cancellable{
+public class TransferRecord{
     public static final int STATUS_IDLE = 0;
     public static final int STATUS_SENDING = 1;
     public static final int IDLE_REASON_CREATED=0;
@@ -40,9 +40,6 @@ public class TransferRecord implements TransferProtocol.Cancellable{
     public int port;
     public String targetName;
     public String policy;        // CleanupPolicy name
-
-    private boolean isCancelRequested;
-    private boolean isCancelled;
 
     /** 状态读取（兼容旧数据：无 status 字段时按 success 推导）。 */
     public int getStatus() {
@@ -88,25 +85,6 @@ public class TransferRecord implements TransferProtocol.Cancellable{
         }
         return c;
     }
-
-
-
-    public void cancel(){
-        this.isCancelRequested = true;
-    }
-
-    @Override
-    public boolean isCancelRequested() {
-        return this.isCancelRequested;
-    }
-
-    @Override
-    public void onCancelled() {
-        this.isCancelled= true;
-    }
-    public boolean isCancelled(){
-        return this.isCancelled;
-    }
     public boolean isSuccess(){
         return this.status == STATUS_IDLE && this.idleReason == IDLE_REASON_SUCCESS;
     }
@@ -125,7 +103,7 @@ public class TransferRecord implements TransferProtocol.Cancellable{
     //暂停状态或网络错误时允许重试
     public boolean canResume() {
         return this.pendingAction==0 && (
-                idleReason==TransferRecord.IDLE_REASON_PAUSED || idleReason==IDLE_REASON_NET_ERROR);
+                idleReason==TransferRecord.IDLE_REASON_PAUSED || idleReason==IDLE_REASON_NET_ERROR || idleReason==IDLE_REASON_CREATED);
     }
 
     public String deviceAddress() {
