@@ -122,7 +122,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 vh.tvEntryName.setText(current.name);
                 if (current.totalBytes > 0) {
                     vh.tvEntrySize.setVisibility(View.VISIBLE);
-                    vh.tvEntrySize.setText(formatSize(current.totalBytes));
+                    vh.tvEntrySize.setText(formatSize(current.sentBytes) + " / " + formatSize(current.totalBytes));
                 } else {
                     vh.tvEntrySize.setVisibility(View.GONE);
                 }

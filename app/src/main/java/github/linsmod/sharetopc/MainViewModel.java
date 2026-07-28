@@ -78,6 +78,7 @@ public class MainViewModel extends AndroidViewModel {
 
         @Override
         public void onJobFinished(@NonNull TransferManager.SendJob job) {
+            deviceJobs = null; // 使 DB 缓存失效，下次 computeDeviceLatestJob 重新读取最新状态
             updateDeviceProgressInPlace();
             refreshHistory();
             // 通知条目级监听器，确保弹窗中的列表即时更新（如暂停后状态变更）
@@ -243,12 +244,15 @@ public class MainViewModel extends AndroidViewModel {
         if (list == null || deviceProgressListener == null) return;
         Map<String, TransferManager.SendJob> progressMap = computeDeviceLatestJob();
         for (DiscoveredDevice d : list) {
-            TransferManager.SendJob p = progressMap.get(d.address());
+            // 优先用 deviceId 匹配（与 enrichDeviceProgress 保持一致），fallback 到 address()
+            TransferManager.SendJob p = progressMap.get(d.deviceId);
+            if (p == null) p = progressMap.get(d.address());
             d.latestJob = p;
             if (p != null) d.latestJobId = p.id;
         }
-        for (String addr : progressMap.keySet()) {
-            deviceProgressListener.onDeviceProgressChanged(addr);
+        // 直接遍历设备列表通知，确保 key 与 DeviceAdapter 中 address() 匹配
+        for (DiscoveredDevice d : list) {
+            deviceProgressListener.onDeviceProgressChanged(d.address());
         }
     }
 
