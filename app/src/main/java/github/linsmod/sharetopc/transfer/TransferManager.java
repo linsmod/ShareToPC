@@ -237,11 +237,10 @@ public class TransferManager {
         }
     }
 
-    public void enqueue(String id, String deviceId, List<SendEntry> items, String host, int port) {
-        SendJob job = new SendJob(id,deviceId,items, host, port);
+    public void enqueue(SendJob job) {
         queue.offer(job);
         emitQueueChanged();
-        LogX.d("enqueue job: " + job.displayName() + " -> " + host + ":" + port);
+        LogX.d("enqueue job: " + job.displayName() + " -> " + job.host + ":" + job.port);
     }
 
     public boolean resumeJob(String jobId){
@@ -468,6 +467,7 @@ public class TransferManager {
         job.updateMillis = now;
         jobStore.updateJobEntry(item.id, job.host, job.port,
                 null, item.status, item.idleReason, item.errorMsg, item.pendingAction, now);
+        jobStore.upsertJob(job);
     }
 
     private void onProgress(SendEntry entry) {

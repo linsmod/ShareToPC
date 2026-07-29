@@ -284,6 +284,20 @@ public class JobStore {
         return entries;
     }
 
+    /** 插入或更新 job 聚合记录（TABLE_JOB），使 allDeviceLatestJobs 能读到正确的 updateMillis。 */
+    public synchronized void upsertJob(TransferManager.SendJob job) {
+        if (job == null) return;
+        ContentValues values = new ContentValues();
+        values.put(DBHelper.COL_JOB_ID_PK, job.id);
+        values.put(DBHelper.COL_JOB_DEVICE_HOST, job.host);
+        values.put(DBHelper.COL_JOB_DEVICE_PORT, job.port);
+        values.put(DBHelper.COL_JOB_DEVICE_NAME, job.device != null ? job.device.displayName() : "");
+        values.put(DBHelper.COL_JOB_DEVICE_ID, job.deviceId);
+        values.put(DBHelper.COL_JOB_TIME_MILLIS, job.createMillis != null ? job.createMillis : 0);
+        values.put(DBHelper.COL_JOB_UPDATE_MILLIS, job.updateMillis != null ? job.updateMillis : 0);
+        db.insertWithOnConflict(DBHelper.TABLE_JOB, null, values, SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
     /** 清空所有记录。 */
     public synchronized void clear() {
         db.delete(DBHelper.TABLE_JOB_ENTRY, null, null);

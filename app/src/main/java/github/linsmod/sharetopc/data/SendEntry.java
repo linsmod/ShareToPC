@@ -12,11 +12,13 @@ public class SendEntry {
     public static final int IDLE_REASON_PAUSED=2;
     public static final int IDLE_REASON_NET_ERROR=3;
     public static final int IDLE_REASON_IO_ERROR=4;
-    public static final int IDLE_REASON_SUCCESS =6;
+    public static final int IDLE_REASON_REMOTE_REJECTED=5; // pair progress not finished.
+    public static final int IDLE_REASON_SUCCESS =100;
 
     public static final int PENDING_ACTION_NONE=0;
     public static final int PENDING_ACTION_END_PAUSE=1;
     public static final int PENDING_ACTION_END_RESUME=2;
+    public static final int PENDING_ACTION_END_PAIR = 3;
     public String id;
     public int idleReason;
     public int pendingAction;

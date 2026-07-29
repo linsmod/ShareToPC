@@ -26,6 +26,7 @@ import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
+import github.linsmod.sharetopc.transfer.TransferManager;
 
 /** 接收 Sharesheet 的对话框式 Activity：解析 → 选设备/策略 → 发送 → 结束。 */
 public class ShareReceiverActivity extends AppCompatActivity {
@@ -236,8 +237,11 @@ public class ShareReceiverActivity extends AppCompatActivity {
         App.get().jobStore.trimJobsIfNeeded();
         if(jobId==null)
             throw new RuntimeException("Null of jobId");
-        App.get().transferManager.enqueue(jobId,target.deviceId, pendingItems,
+
+        TransferManager.SendJob job = new TransferManager.SendJob(jobId,target.deviceId, pendingItems,
                 target.host, target.port);
+        App.get().jobStore.upsertJob(job);
+        App.get().transferManager.enqueue(job);
         App.get().deviceStore.setLatestJobId(target.host, target.port, jobId);
         jobId = null;
         // 跳转主页面，传输在后台继续

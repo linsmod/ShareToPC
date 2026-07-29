@@ -185,6 +185,19 @@ public class MainViewModel extends AndroidViewModel {
         return history;
     }
 
+    /** 从当前队列中按 jobId 查找对应的 SendJob。 */
+    @Nullable
+    public TransferManager.SendJob findJobById(@Nullable String jobId) {
+        if (jobId == null) return null;
+        List<TransferManager.SendJob> queue = app.transferManager.getQueueSnapshot();
+        if (queue != null) {
+            for (TransferManager.SendJob j : queue) {
+                if (jobId.equals(j.id)) return j;
+            }
+        }
+        return null;
+    }
+
     public void setDeviceProgressListener(DeviceProgressListener l) {
         this.deviceProgressListener = l;
     }
@@ -313,15 +326,26 @@ public class MainViewModel extends AndroidViewModel {
             java.util.Collections.reverse(entries);
         }
 
-        // 第三步：用收集到的最大 timeMillis 创建 TaskGroup，并继承旧的折叠状态
+        // 构建 jobId -> SendJob 映射，用于取 job.updateMillis 作为分组时间
+        Map<String, TransferManager.SendJob> jobMap = new HashMap<>();
+        if (queue != null) {
+            for (TransferManager.SendJob j : queue) {
+                if (j.id != null) jobMap.put(j.id, j);
+            }
+        }
+
+        // 第三步：创建 TaskGroup，优先用 job.updateMillis，回退到 entry max time
         List<TaskGroup> result = new ArrayList<>();
         for (Map.Entry<String, List<SendEntry>> e : entryMap.entrySet()) {
             String jid = e.getKey();
             List<SendEntry> entries = e.getValue();
-            long maxTime = maxTimeMap.get(jid) != null ? maxTimeMap.get(jid) : 0;
+            TransferManager.SendJob job = jobMap.get(jid);
+            long groupTime = (job != null && job.updateMillis != null && job.updateMillis > 0)
+                    ? job.updateMillis
+                    : (maxTimeMap.get(jid) != null ? maxTimeMap.get(jid) : 0);
             TaskGroup g = new TaskGroup(jid, nameMap.get(jid),
                     hostMap.get(jid), portMap.get(jid) != null ? portMap.get(jid) : 0,
-                    maxTime, entries);
+                    groupTime, entries);
             // 继承旧的展开/折叠状态，避免刷新时状态丢失
             for (TaskGroup old : cachedTasks) {
                 if (jid.equals(old.jobId)) {

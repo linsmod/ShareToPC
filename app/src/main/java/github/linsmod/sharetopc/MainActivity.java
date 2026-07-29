@@ -97,25 +97,18 @@ public class MainActivity extends AppCompatActivity {
             deviceQueueDialog.dismiss();
         }
 
-        // 通过 device.latestJobId 直接取该设备最近一次任务的记录
+        // 通过 device.latestJobId 直接取该设备最近一次任务，优先用队列中的 SendJob 信息
         github.linsmod.sharetopc.ui.TaskGroup group = null;
         String jobId = device.latestJobId;
         if (jobId != null) {
-            java.util.List<SendEntry> history = viewModel.getHistory();
-            if (history != null) {
-                java.util.List<SendEntry> latestEntries = new java.util.ArrayList<>();
-                for (SendEntry r : history) {
-                    if (jobId.equals(r.jobId)) latestEntries.add(r);
-                }
-                if (!latestEntries.isEmpty()) {
-                    java.util.Collections.reverse(latestEntries); // DB 查询为 DESC，反转为提交顺序
-                    SendEntry first = latestEntries.get(0);
-                    group = new github.linsmod.sharetopc.ui.TaskGroup(jobId,
-                            first.targetName != null ? first.targetName
-                                    : (first.host != null ? first.host : ""),
-                            first.host, first.port, first.timeMillis, latestEntries);
-                    group.recomputeProgress();
-                }
+            github.linsmod.sharetopc.transfer.TransferManager.SendJob job = viewModel.findJobById(jobId);
+            if (job != null && job.items != null && !job.items.isEmpty()) {
+                // 用 SendJob 自身的 updateMillis，不再从 entry 算时间
+                long time = job.updateMillis != null ? job.updateMillis : 0;
+                String name = job.device != null ? job.device.displayName() : (job.host != null ? job.host : "");
+                group = new github.linsmod.sharetopc.ui.TaskGroup(jobId, name,
+                        job.host, job.port, time, new java.util.ArrayList<>(job.items));
+                group.recomputeProgress();
             }
         }
 
