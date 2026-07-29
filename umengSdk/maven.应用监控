@@ -1,0 +1,75 @@
+完成初始化集成即可使用U-APM。接入U-APM遇到困难,进钉钉群咨询
+推荐使用maven线上接入SDK，手动集成SDK：查看文档
+
+复制buildscript {
+  repositories {
+    google()
+    jcenter()
+    maven { url 'https://repo1.maven.org/maven2/' }
+  }
+  dependencies {
+    classpath 'com.android.tools.build:gradle:3.4.0'
+    // NOTE: Do not place your application dependencies here; they belong
+    // in the individual module build.gradle files
+  }
+}
+allprojects {
+  repositories {
+    google()
+    jcenter()
+    maven { url 'https://repo1.maven.org/maven2/' }
+  }
+}
+2.集成组件化各业务SDK
+在工程App对应build.gradle配置脚本dependencies段中添加基础组件库和U-APM SDK库依赖
+
+复制dependencies {
+// 友盟基础组件库（所有友盟业务SDK都依赖基础组件库）
+implementation 'com.umeng.umsdk:common:9.4.4' //（必选）
+implementation 'com.umeng.umsdk:asms:1.4.1' // asms包依赖(必选)
+implementation 'com.umeng.umsdk:apm:1.5.2' // U-APM包依赖(必选)
+}
+
+1.合规预初始化
+1、请务必确保您已经将友盟+SDK升级到满足监管新规的最新版本。各类最新SDK下载链接：https://developer.umeng.com/sdk
+
+2、请务必在《隐私政策》中向用户告知使用友盟SDK，参考条款如下：
+
+使用SDK名称：友盟SDK
+
+服务类型：请按SDK功能填写，如应用性能监控平台 U-APM
+
+收集个人信息类型：设备信息（IMEI/MAC/Android ID/IDFA/OpenUDID/GUID/SIM 卡 IMSI 信息等）
+
+隐私权政策链接：https://www.umeng.com/page/policy
+
+2.通用初始化
+您务必确保用户同意《隐私政策》之后，再初始化友盟+SDK。具体初始化步骤详见下文。
+
+本方案需要依赖友盟统计SDK的预初始化接口UMConfigure.preInit()，请升级到统计SDK版本9.3.8或更高版本。
+为保证您的在集成【友盟+】SDK之后，能够满足工信部相关合规要求，您应确保在App安装后首次冷启动时按照如下方式进行初始化。
+
+复制// SDK预初始化函数不会采集设备信息，也不会向友盟后台上报数据。
+// preInit预初始化函数耗时极少，不会影响App首次冷启动用户体验
+public static void preInit(Context context, String appkey, String channel)
+在Applicaiton.onCreate函数中调用预初始化函数UMConfigure.preInit()，预初始化函数不会采集设备信息，也不会向友盟后台上报数据。
+
+确保App首次冷启动时，在用户阅读您的《隐私政策》并取得用户授权之后，才调用正式初始化函数UMConfigure.init()初始化统计SDK，此时SDK才会真正采集设备信息并上报数据。反之，如果用户不同意《隐私政策》授权，则不能调用UMConfigure.init()初始化函数。
+
+一旦App获取到《隐私政策》的用户授权，后续的App冷启动，开发者应该保证在Applicaiton.onCreate函数中调用预初始化函数UMConfigure.preInit()。正式初始化函数UMConfigure.init可以按需调用（可以在预初始化函数之后紧接着调用，也可以放到后台线程中延迟调用，但还是必须调用，不能遗漏)。
+
+3.通用初始化
+统一对各个业务进行初始化接口
+复制接口
+
+/**
+* 注意: 即使您已经在AndroidManifest.xml中配置过appkey和channel值，也需要在App代码中调
+* 用初始化接口（如需要使用AndroidManifest.xml中配置好的appkey和channel值，
+* UMConfigure.init调用中appkey和channel参数请置为null）。
+*/
+UMConfigure.init(Context context, String appkey, String channel, int deviceType, String pushSecret);
+复制代码示例
+
+//初始化组件化基础库, 所有友盟业务SDK都必须调用此初始化接口。
+//建议在宿主App的Application.onCreate函数中调用基础组件库初始化函数。
+UMConfigure.init(this, "59892f08310c9307b60023d0", "Umeng", UMConfigure.DEVICE_TYPE_PHONE, "");

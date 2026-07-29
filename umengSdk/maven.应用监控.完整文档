@@ -1,0 +1,584 @@
+接入与基础功能
+* U-APM推荐在国内发行的APP上使用，我们持续更新优化SDK，提供APP性能监控产品。
+
+* 如您需要应用在海外应用市场，请您通过工单提交申请，申请入口
+
+集成SDK
+方式1：maven自动集成（推荐）
+通过在Android Studio工程的build.gradle配置脚本中添加maven线上依赖，导入最新版本组件化SDK。
+
+maven依赖配置
+在工程的build.gradle配置脚本中buildscript和allprojects段中添加【友盟+】SDK新maven仓库地址。
+
+maven { url 'https://repo1.maven.org/maven2/' }
+参考示例：
+
+buildscript {
+    repositories {
+        google()
+        jcenter()
+        maven { url 'https://repo1.maven.org/maven2/' }
+     }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:3.4.0'
+
+         // NOTE: Do not place your application dependencies here; they belong
+         // in the individual module build.gradle files
+     }
+ }
+
+allprojects {
+    repositories {
+        google()
+        jcenter()
+        maven { url 'https://repo1.maven.org/maven2/' }
+     }
+}
+在工程App 对应build.gradle配置脚本dependencies段中添加SDK库依赖：
+
+// 友盟基础组件库（所有友盟业务SDK都依赖基础组件库
+  implementation  'com.umeng.umsdk:common:+'// 必选
+  implementation  'com.umeng.umsdk:asms:+'// 必选
+
+  implementation 'com.umeng.umsdk:apm:+'// U-APM产品包依赖，必选
+方式2：手动集成
+访问【友盟+】官网组件化SDK下载地址，选择Android平台下载页面，选择U-APM产品的SDK进行下载。
+
+将下载的SDK zip包解压缩，得到如下文件：
+
+umeng-common-x.x.x.jar // 统计SDK
+
+umeng-asms-armeabi-x.x.x.aar // 重要组件，如不集成会在初始化时输出e级别的LOG提示和Toast提示
+
+umeng-apm-armeabi-x.x.x.aar // APM组件，实现APM相关功能
+
+Android Studio集成 （推荐）
+在Android Studio的项目工程libs目录中拷入umeng-common-x.x.x.jar包并进行依赖
+
+如果您的项目工程没有使用过.so动态库，或者仅适配armeabi 平台，则可以从解压的.zip文件中，找到umeng-asms-armeabi-vx.x.x.aar库和umeng-apm-armeabi-vx.x.x.aar库（注意：umeng-asms-armeabi-vx.x.x.aar库和umeng-apm-armeabi-vx.x.x.aar库默认仅适配armeabi平台），在项目工程的libs目录中拷入umeng-asms-armeabi-vx.x.x.aar和umeng-apm-armeabi-vx.x.x.aar组件，在app的build.gradle文件中引入相应的组件包。参考示例如下:
+
+repositories{
+    flatDir{
+        dirs 'libs'
+     }
+}
+
+dependencies {
+    implementation fileTree(include:['*.jar'], dir:'libs')
+    implementation (name:'umeng-asms-armeabi-vx.x.x', ext:'aar')
+    implementation (name:'umeng-apm-armeabi-vx.x.x', ext:'aar')
+}
+如果您的项目工程需要适配armeabi 以外的平台，如：armeabi-v7、x86等，则需要下载umeng-asms-vx.x.x库和umeng-apm-vx.x.x库，在Android Studio的项目工程libs目录中拷入所有组件jar包，并根据项目工程对应的平台分别拷入对应的.so
+
+常见问题：so库加载失败、couldn’t find “libumeng-spy.so” 、couldn’t find “libcrashsdk.so”该如何解决？查看解决方案
+
+权限授予
+统计SDK需要宿主APP授予如下权限：
+
+权限
+
+用途
+
+ACCESS_NETWORK_STATE
+
+检测联网方式，在网络异常状态下避免数据发送，节省流量和电量。
+
+ACCESS_WIFI_STATE
+
+获取WIFI mac地址，在平板设备或电视盒子上，无法通过IMEI标识设备，我们会将WIFI mac地址作为用户的唯一标识，以便正常提供统计分析服务。
+
+INTERNET
+
+允许应用程序联网和发送统计数据的权限，以便提供统计分析服务。
+
+ACCESS_FINE_LOCATION（可选）
+
+通过获取位置信息，为开发者提供反作弊功能，剔除作弊设备；同时校正用户的地域分布数据，使报表数据更加准确。
+
+ACCESS_COARSE_LOCATION（可选）
+
+通过获取位置信息，为开发者提供反作弊功能，剔除作弊设备；同时校正用户的地域分布数据，使报表数据更加准确。
+
+下面给出AndroidManifest.xml清单文件示例：
+
+<manifest ……>
+<uses-sdkandroid:minSdkVersion="8"></uses-sdk>
+<uses-permissionandroid:name="android.permission.ACCESS_NETWORK_STATE"/>
+<uses-permissionandroid:name="android.permission.ACCESS_WIFI_STATE"/>
+<uses-permissionandroid:name="android.permission.INTERNET"/>
+<application ……>
+Application属性设置
+为确保Native崩溃正常采集，需要在AndroidManifest.xml 中 <application> 标签中添加属性 android:extractNativeLibs，并设置为true。
+
+<application
+    android:allowBackup="true"
+    android:label="@string/app_name"
+    android:supportsRtl="true"
+    android:extractNativeLibs="true"
+    android:theme="@style/Theme.UMJavaTest">
+    <activity
+        android:name=".MainActivity"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity>
+</application>
+混淆设置
+如果您的应用使用了代码混淆，请添加如下配置，以避免【友盟+】SDK被错误混淆导致SDK不可用。
+
+-keep class com.umeng.** { *; }
+
+-keep class com.uc.** { *; }
+
+-keep class com.efs.** { *; }
+
+-keepclassmembers class *{
+     public<init>(org.json.JSONObject);
+}
+-keepclassmembers enum *{
+      publicstatic**[] values();
+      publicstatic** valueOf(java.lang.String);
+}
+SDK需要引用导入工程的资源文件，通过了反射机制得到资源引用文件R.java，但是在开发者通过proguard等混淆/优化工具处理apk时，proguard可能会将R.java删除，如果遇到这个问题，请添加如下配置：
+
+-keep publicclass [您的应用包名].R$*{ 
+      publicstaticfinalint*;
+}
+功能说明
+初始化SDK
+重要 我们强烈建议您仅使用一款错误及性能捕获SDK（U-APM），多款错误捕获SDK可能存在彼此拦截干扰及对您终端用户性能影响。如果您因为特殊需要集成多个SDK，请于最后初始化友盟+的 Android U-APM SDK。
+初始化方法由基础组件包提供，要使用SDK，需要在宿主应用application.onCreate函数中调用基础组件包提供的初始化函数：
+
+/**
+* 注意: 即使您已经在AndroidManifest.xml中配置过appkey和channel值，也需要在App代码中调
+* 用初始化接口（如需要使用AndroidManifest.xml中配置好的appkey和channel值，
+* UMConfigure.init调用中appkey和channel参数请置为null）。
+*/
+UMConfigure.init(Context context,String appkey,String channel,int deviceType,String pushSecret);
+或者
+
+/** 
+* 注意：如果您已经在AndroidManifest.xml中配置过appkey和channel值，可以调用此版本初始化函数。
+*/
+UMConfigure.init(Context context,int deviceType,String pushSecret);
+Channel渠道的使用规范
+每台设备仅记录首次安装激活的渠道，在其他渠道再次安装不会重复计量。 所以在测试不同的渠道的时候，请使用不同的设备来分别测试不要改变’UMENG_CHANNEL’。
+
+Channel渠道的命名规范
+可以由英文字母、阿拉伯数字、下划线、中划线、空格、括号组成，可以含汉字以及其他明文字符，但是不建议使用中文命名，会出现乱码。
+
+首尾字符不可以为空格。
+
+不要使用纯数字作为渠道ID。
+
+最多256个字符。
+
+“unknown” 及其各种大小写形式，作为【友盟+】保留的字段，不可以作为渠道名。
+
+在您查看数据时，渠道会作为一个数据细分的维度。
+
+预初始化SDK
+如果App不能保证在Appcalition.onCreate函数中调用UMConfigure.init初始化函数，则必须在Appcalition.onCreate函数中调用此预初始化函数。
+
+对于有延迟初始化SDK需求的开发者(不能在Application.onCreate函数中调用UMConfigure.init初始化函数），必须在Application.onCreate函数中调用UMConfigure.preInit预初始化函数(preInit耗时极少，不会影响冷启动体验)，而后UMConfigure.init函数可以按需延迟调用(可以放到后台线程中延时调用，可以延迟，但还是必须调用)。如果您的App已经是在Application.onCreate函数中调用UMConfigure.init进行初始化，则无需额外调用UMConfigure.preInit预初始化函数。
+
+public static void preInit(Context context,String appkey,String channel)
+初始化函数使用说明见：初始化及通用接口
+
+查看日志
+概述
+可通过UMConfigure.setLogEnabled(boolean)接口控制【友盟+】LOG的输出。
+
+说明 注意： App正式上线前请关闭SDK运行调试日志。避免无关Log输出。
+日志开关
+可以通过调用如下方法控制SDK运行调试日志是否输出，默认情况下SDK运行调试日志关闭。需要用户手动打开。
+
+/**
+*设置组件化的Log开关
+*参数: boolean 默认为false，如需查看LOG设置为true
+*/
+UMConfigure.setLogEnabled(true);
+说明 注意： 如果查看初始化过程中的LOG，一定要在调用初始化方法前将LOG开关打开。
+日志等级
+日志分为四种等级，方便用户查看：
+
+Error(打印SDK集成或运行时错误信息)。
+
+Warn(打印SDK警告信息)。
+
+Info(打印SDK提示信息)。
+
+Debug(打印SDK调试信息)。
+
+Common基础库的版本依赖
+如果您想使用UApm相关功能需要使用common的9.0.4以上版本SDK，同时需要集成umeng-apm-vx.x.x.aar插件。
+
+说明 请务必增加混淆 -keep class com.uc.** {*;}和-keep class com.efs.** {*;} 详细参考集成文档的混淆设置：查看文档
+崩溃分析
+通用崩溃
+如您完成common和apm插件的接入，即可使用Java、Native崩溃分析、ANR分析功能，无需额外其他接入操作。
+
+如果您使用我们的SDK捕获native崩溃后，其他捕获工具无法捕获到native 崩溃，可以使用如下方法在初始化SDK后进行设置，是其他SDK可以捕获到native 崩溃
+
+final Bundle customInfo = newBundle();
+customInfo.putBoolean("mCallNativeDefaultHandler",true);
+CrashApi.getInstance().updateCustomInfo(customInfo);
+崩溃回调（自定义字段）
+重要 崩溃、卡顿、自定义异常共用同一个回调接口。回调支持根据崩溃、卡顿、 自定义错误追加不同上下文。该接口在Android SDK至1.9.8及以上做了升级，如使用升级后的方法，需要删除旧方法。
+新方法（适用Android SDK 1.9.8及以上）
+UMCrash.registerUMCrashCallback(new IUMCrashCallbackWithType() {
+    @Override
+    public String onCallback(CrashType type) {
+        switch (type) {
+            case CRASH_TYPE_NATIVE:
+                return "Native 崩溃时register的自定义内容字符串";
+            case CRASH_TYPE_JAVA:
+                return "JAVA 崩溃时register的自定义内容字符串";
+            case CRASH_TYPE_ANR:
+                return "ANR 时register的自定义内容字符串";
+            case CRASH_TYPE_CUSTOM_LOG:
+                return "自定义错误 register的自定义内容字符串";
+            case CRASH_TYPE_BLOCK:
+                return "卡顿 时register的自定义内容字符串";
+            default:
+                return null;
+        }
+    }
+});
+旧方法（适用Android SDK1.9.8以下）
+当崩溃发生时，您可以在该回调方法中返回string类型的业务自定义数据，该数据会写入到崩溃文件中并上传到服务器展示。注意：崩溃回调中返回string类型数据的长度限制为256个字符。
+
+接口示例
+
+UMCrash.registerUMCrashCallback(newUMCrashCallback(){
+     @Override
+     publicString onCallback(){
+         return"崩溃时register的自定义内容字符串";
+    }
+});
+上传后即可在错误详情-自定义字段中「异常发生字段」中展示，「使用过程字段」由自定义信息更新接口提供
+
+image
+
+自定义信息更新
+重要 该接口需升级 APM Android SDK至1.9.8及以上，崩溃、ANR、自定义异常共用同一个接口
+用于客户记录App使用过程中（非崩溃时）的关键信息，最大键值对数量为10个
+
+UMCrash.addCustomInfo(String key, String value) 
+上传后即可在错误详情-自定义字段中「使用过程字段」中展示，「异常发生字段」由崩溃回调接口提供
+
+image
+
+是否开启崩溃后主动退出进程功能
+重要 该接口需升级 APM Android SDK至1.9.8及以上，如需要请先升级SDK。注意：务必在SDK初始化前调用
+当监测到App发生Java崩溃时，在SDK采集完日志后，会默认退出当前进程，若开发者不希望主动退出进程，可以调用该接口关闭。
+
+UMCrash.enableKillProcessAfterCrash(false);
+自定义日志（日志跟踪）
+重要 崩溃、自定义异常共用同一个回调接口。
+public class UAPMCustomLog {
+    //  tag 字节最大长度为64， msg 字节最大长度为 256
+
+    public static void v(String tag, String msg);
+
+    public static void d(String tag, String msg);
+
+    public static void i(String tag, String msg);
+
+    public static void w(String tag, String msg);
+
+    public static void e(String tag, String msg);
+
+    /**
+     * 设置写入日志的缓存大小，日志将根据设置的缓存大小循环写入，最大限制100条，未设置默认100条
+     * @param size 日志缓存条数
+     */
+    public static void setCache(int size);
+}
+image
+
+自定义维度
+支持的数据类型：String，SDK预设10个key。开发者可根据实际需求，选择合适的Key上报数据。
+
+public static final String STRING_PARAM_1 = "s1";
+public static final String STRING_PARAM_2 = "s2";
+public static final String STRING_PARAM_3 = "s3";
+public static final String STRING_PARAM_4 = "s4";
+public static final String STRING_PARAM_5 = "s5";
+public static final String STRING_PARAM_6 = "s6";
+public static final String STRING_PARAM_7 = "s7";
+public static final String STRING_PARAM_8 = "s8";
+public static final String STRING_PARAM_9 = "s9";
+public static final String STRING_PARAM_10 = "s10";
+SDK接口
+SDK初始化完成后即可调用，作用于稳定性日志（崩溃、卡顿、ANR）和部分性能日志（启动、电量分析）。
+
+public static String getStringParam(String key) {
+    return InnerCustomMappingManager.getStringParam(key);
+}
+
+public static boolean putStringParam(String key, String value) {
+    return InnerCustomMappingManager.putStringParam(key, value);
+}
+示例：
+
+        UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_1, "1");
+        UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_2, "2");
+稳定性日志
+除全局设置外，支持在稳定性日志回调中设置。
+
+示例：
+
+UMCrash.registerUMCrashCallback(new IUMCrashCallbackWithType() {
+	@Override
+	public String onCallback(CrashType type) {
+		switch (type) {
+			case CRASH_TYPE_NATIVE:
+				UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_5, "native");
+
+				return "Native 崩溃时register的自定义内容字符串";
+			case CRASH_TYPE_JAVA:
+				UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_6, "java");
+
+				return "JAVA 崩溃时register的自定义内容字符串";
+			case CRASH_TYPE_ANR:
+				UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_7, "anr");
+
+				return "ANR 时register的自定义内容字符串";
+			case CRASH_TYPE_CUSTOM_LOG:
+				UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_8, "自定义");
+
+				return "自定义错误 register的自定义内容字符串";
+			case CRASH_TYPE_BLOCK:
+				UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_9, "卡顿");
+
+				return "卡顿 时register的自定义内容字符串";
+			default:
+				return null;
+		}
+	}
+});
+性能日志
+除全局设置外，支持在性能日志（启动和电量）上传前设置，SDK提供了上传前的回调接口。
+
+UMCrash.registerPerfCallback(new IUMPerfCallback() {
+    @Override
+    public void onCallback(PerfType type) {
+        Log.d(TAG, "onCallback: " + type);
+        UAPMCustomMapping.putStringParam(UAPMCustomMapping.STRING_PARAM_4, type.toString());
+    }
+});
+设置上报后，您可以在「设置管理」里对自定义维度进行展示名称命名。自定义维度会在如下地方体现：
+
+①个例下会展示错误在自定义维度下的value值。
+
+image
+
+②在菜单的筛选项里，可以根据自定义维度指定Key-Value筛选出符合条件的错误，查看错误个例和分布。
+
+③在菜单的错误分布中，选择查看某自定义维度下各Value的占比分布
+
+本地调试
+重要 接口需在SDK初始化之前设置，否则可能不生效。
+通过接口开启备份功能，文件将存储在应用沙盒目录/apm_backup_files/文件夹内，卡顿日志为gzip压缩，需解压后查看。
+
+支持的文件类型：
+
+Java崩溃
+
+Native崩溃
+
+ANR
+
+自定义异常
+
+卡顿
+
+接口设置：
+
+UMCrash.enableLogBackup(boolean enable);
+默认为false，不备份日志文件。
+
+符号表
+具体符号表说明，请见 点我了解
+
+自定义异常接口
+说明 自定义异常的崩溃回调（自定义字段）、自定义信息更新、自定义日志、本地调试能力对应的接口，均在上面崩溃分析中提供接口描述，如需使用请参考上文。
+、
+
+如果开发者自己捕获了错误，需要手动上传到【友盟+】服务器可以调用下面两种方法：
+
+方法一：
+
+public static void UMCrash.generateCustomLog(Throwable e,String type)
+
+
+public static void UMCrash.generateCustomLog(Throwable e, String type, boolean withLogcat, boolean allThreadsDump) 
+参数
+
+含义
+
+e
+
+错误异常
+
+type
+
+自定义错误的类型
+
+withLogcat
+
+是否采集logcat
+
+allThreadsDump
+
+是否获取全部线程堆栈
+
+方法一示例：
+
+try{
+      // 抛出异常的代码
+}catch(Exception e){
+      UMCrash.generateCustomLog(e,"UmengException");
+}
+
+
+try{
+      // 抛出异常的代码
+}catch(Exception e){
+      UMCrash.generateCustomLog(e, "UmengException", true, true);
+}
+方法二：
+
+public static void UMCrash.generateCustomLog(String e,String type)
+
+
+public static void UMCrash.generateCustomLog(String e, String type, boolean withLogcat, boolean allThreadsDump)
+参数
+
+含义
+
+e
+
+错误异常
+
+type
+
+自定义错误的类型
+
+withLogcat
+
+是否采集logcat
+
+allThreadsDump
+
+是否获取全部线程堆栈
+
+方法二示例：
+
+String e ="自定义异常代码";
+UMCrash.generateCustomLog(e,"UmengException");
+
+
+String e ="自定义异常代码";
+UMCrash.generateCustomLog(e,"UmengException", true, true);
+使用自定义错误，查看时请在错误列表页面选择【自定义异常】。
+
+警告 dump全部堆栈时会导致线程挂起，可能会引起主线程卡顿，请谨慎使用。
+网络分析
+警告 网络分析功已开放至全部应用可用（免费版采样率1%），如您需要可升级SDK至1.9.4并集成网络分析；请务必在此操作前，完成U-APM相关功能组件的集成。
+重要 从1.9.13版本开始，网络分析功能具备了网络请求Header和Body采集能力。Body采集需满足以下条件：
+RequestBody
+Content-Type为application/json、application/x-www-form-urlencoded其中之一
+ResponseBody的长度需小于 10K
+ResponseBody
+Content-Type为application/json、application/x-www-form-urlencoded、text/plain 其中之一
+ResponseBody的长度需小于 10K
+适用范围
+目前网络监控仅支持监控OkHttp网络请求 ，并且需要手动设置eventListenerFactory和NetworkInterceptor
+
+功能开通
+重要 目前U-APM 网络分析模块在免费、专业、尊享版均提供，但不同采样率，可根据实际情况选择。
+网络分析采集开关 "UMCrash.KEY_ENABLE_NET" 设置为true (默认即为true，详情可以查看本文档采集开关部分)
+
+手动集成
+手动集成监控即需要您手动将网络监控 SDK 相关 API 预埋到您项目工程的OkHttp中。
+
+1、设置eventListenerFactory和NetworkInterceptor。
+
+在您build OkHttpClient时，通过OkHttp的eventListenerFactory方法和addNetworkInterceptor方法分别设置事件监听器和拦截器，示例如下：
+
+OkHttpClient okHttpClient = newOkHttpClient.Builder()
+        //设置事件监听器，OkHttpListener.get()为SDK API
+        .eventListenerFactory(OkHttpListener.get())
+        //设置拦截器，new OkHttpInterceptor()为SDK API
+        .addNetworkInterceptor(new OkHttpInterceptor())
+        .build();
+日志查看是否集成
+重要 因网络分析在免费版采样率1%，专业版采样率5%，采样率是按照启动时随机下发的（可以理解为每次启动都包括1/5%的被采样的可能，但不能保证一台设备多次尝试就可以被采样），所以在正式环境下，使用某一台设备可能存在采样或者被采样的状态如果在测试阶段需要使设备100%被采样，请使用设置顶导下的「集成测试」功能，并在集成测试的日志中查看测试阶段的网络数据，了解详情可以参考集成测试产品文档
+被采样的状态：打开SDK Log开关，通过NetTrace过滤Logcat信息，可以查看整个网络监控的状态信息，如下：
+
+网络监控信息
+
+没有被采样的状态：
+
+
+
+日志回捞
+功能介绍和使用详见文档：日志回捞
+
+模块开关
+通过如下接口设置回捞标识：
+
+Bundle bundle = new Bundle();
+...
+bundle.putBoolean(UMCrash.KEY_ENABLE_CODE_LOG, true); // 开启日志回捞功能
+bundle.putString(UMCrash.KEY_LOG_USER_ID, "张三"); // 设置识别ID
+UMCrash.initConfig(bundle);
+重要
+该设置必须在初始化SDK之前完成，运行时不可再次设置
+回捞标识不能为空，且长度不能超过128
+日志打点接口
+通过如下接口完成相关日志的记录：
+
+ULogManager.v("日志TAG", "日志内容");
+ULogManager.d("日志TAG", "日志内容");
+ULogManager.i("日志TAG", "日志内容");
+ULogManager.w("日志TAG", "日志内容");
+ULogManager.e("日志TAG", "日志内容");
+说明
+共提供五种日志等级，包括：v/d/i/w/e
+参数1为日志的TAG，不能为空或长度超过64，参数2位日志的内容，不能为空或长度超过1024
+用户细查
+如您使用错误细查功能，需要接入U-App并完成账号统计接口的接入，即可在稳定性中按照账号id方式查询发生崩溃的账号错误详情。接入文档
+
+自定义版本号
+警告 使用该功能，请务必U-APM SDK 在1.4.2及以上，且务必搭配Common SDK版本 9.4.2及以上
+概念
+如果您对版本号有特殊处理需求，可以使用自定义版本号API，使SDK所上报数据绑定您指定的App版本信息。
+
+方法
+自定义版本号API如下：
+
+/**
+* 参数1：App Version
+* 参数2：App subVersion
+* 参数3：App buildId
+*/
+UMCrash.setAppVersion(String version, String subVersion, String buildId)
+示例如下：
+
+UMCrash.setAppVersion("1.0.0", "release", "0001");
+集成测试
+具体测试操作请点击查看
+
+常见问题
+[SDK申请敏感权限相关问题]
+
+[混淆相关问题]
+
+[为什么会出现捕获不到/其他三方SDK捕获比UAPM多/接入UAPM后其他三方捕获变少？]
+
+更多集成问题可点我进入[常见问题]

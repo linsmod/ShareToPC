@@ -1,0 +1,102 @@
+新APP推荐使用 maven 线上接入 SDK，手动集成SDK点击查看文档
+
+1.在工程 build.gradle 配置脚本中 buildscript 和 allprojects 段中添加 sdk maven 仓库地址
+复制buildscript {
+  repositories {
+    google()
+    jcenter()
+    maven { url 'https://repo1.maven.org/maven2/' }
+  }
+  dependencies {
+    classpath 'com.android.tools.build:gradle:3.4.0'
+    // NOTE: Do not place your application dependencies here; they belong
+    // in the individual module build.gradle files
+  }
+}
+allprojects {
+  repositories {
+    google()
+    jcenter()
+    maven { url 'https://repo1.maven.org/maven2/' }
+  }
+}
+2.集成组件化各业务SDK
+maven可灵活配置所需SDK：
+
+复制dependencies {
+    implementation fileTree(include:['*.jar'], dir:'libs')
+
+// 下面各SDK根据宿主App是否使用相关业务按需引入。
+// 友盟统计SDK
+    implementation  'com.umeng.umsdk:common:9.4.7'// 必选
+    implementation  'com.umeng.umsdk:asms:1.4.0'// 必选
+    
+    implementation  'com.umeng.umsdk:abtest:1.0.0'//使用U-App中ABTest能力，可选
+}
+3.多架构平台适配
+如果您的项目工程需要适配armeabi以外的平台，如：armeabi-v7、x86等，点击查看适配方案。
+
+4.权限申请
+友盟+SDK需要宿主APP授予权限，否则会导致数据发送失败，点击查看权限列表。
+
+5.混淆添加
+如果您的应用使用了代码混淆，请添加配置。
+
+6.集成测试配置
+集成测试需要在manifest.xml文件中配置，您需要在其中找到响应android.intent.action.MAIN的activity（也就是应用可以被外部唤起的第一个Activity），加上如下代码，让应用能被指定连接scheme唤起。
+
+复制//1.唤起码默认为“um.该app对应的appkey”，不可改变
+//2.请使用单独intent-filter,和其他intent-filter并列，不要将上述代码填入其他intent-filter里；
+//3.该功能仅9.4.0及以上版本的SDK支持
+
+<activity
+ android:name=".MainActivity"
+ android:label="@string/app_name">
+
+ <intent-filter>
+  <action android:name="android.intent.action.VIEW" />
+  <category android:name="android.intent.category.DEFAULT" />
+  <category android:name="android.intent.category.BROWSABLE" />
+  <data android:scheme="um.该app对应的appkey" />
+ </intent-filter>
+
+</activity>
+
+1.预初始化
+您务必告知用户您选择友盟+SDK服务，请在《隐私政策》中增加如下参考条款：
+
+使用SDK名称：友盟SDK
+
+服务类型：请按SDK功能填写，如统计分析
+
+收集个人信息类型：设备信息（IMEI/MAC/Android ID/IDFA/OpenUDID/GUID/IP地址/SIM 卡 IMSI 信息等）
+
+隐私权政策链接：https://www.umeng.com/page/policy
+
+2. 在宿主App的Application.onCreate函数中调用基础组件库初始化函数。
+
+复制// SDK预初始化函数不会采集设备信息，也不会向友盟后台上报数据。
+// preInit预初始化函数耗时极少，不会影响App首次冷启动用户体验
+public static void preInit(Context context, String appkey, String channel)
+2.初始化
+确保App首次冷启动时，在用户阅读您的《隐私政策》并取得用户授权之后，才调用正式初始化函数UMConfigure.init()初始化统计SDK，此时SDK才会真正采集设备信息并上报数据。反之，如果用户不同意《隐私政策》授权，则不能调用UMConfigure.init()初始化函数。
+
+一旦App获取到《隐私政策》的用户授权，后续的App冷启动，开发者应该保证在Applicaiton.onCreate函数中调用预初始化函数UMConfigure.preInit()。正式初始化函数UMConfigure.init可以按需调用(可以在预初始化函数之后紧接着调用，也可以放到后台线程中延迟调用，但还是必须调用，不能遗漏)。
+
+复制/**
+* 注意: 即使您已经在AndroidManifest.xml中配置过appkey和channel值，也需要在App代码中调
+* 用初始化接口（如需要使用AndroidManifest.xml中配置好的appkey和channel值，
+* UMConfigure.init调用中appkey和channel参数请置为null）。
+*/
+UMConfigure.init(Context context, String appkey, String channel, int deviceType, String pushSecret);
+代码实例
+
+复制//初始化组件化基础库, 所有友盟业务SDK都必须调用此初始化接口。
+UMConfigure.init(this, "59892f08310c9307b60023d0", "Umeng", UMConfigure.DEVICE_TYPE_PHONE, "");
+如果您调用kill或者exit之类的方法杀死进程，或者双击back键会杀死进程，请务必在此之前调用onKillProcess方法，用来保存统计数据。
+
+复制public static void onKillProcess(Context context);
+3.集成校验
+如果初始化正确，那您已经完成了新增、活跃、启动、版本、渠道等基础数据的统计，在产品中的【实时】和【统计】除【功能使用】外都会有数据。为了帮助您判断初始化是否正确，为您提供测试工具集成测试。打开app后，页面显示如下表示集成成功20210811112417
+4.高级功能配置
+完成SDK初始化后，即可采集到基础数据（新增、启动、活跃等），若想使用更多功能（页面统计、事件统计、账号统计），可以点击查看U-App集成文档
