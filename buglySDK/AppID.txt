@@ -1,0 +1,4 @@
+产品名称：ShareToPC
+平台：Android
+APPID: c859d2328b
+APPKEY: e3f21c8c-bd13-4846-bd63-3f5dd5fdbc5f

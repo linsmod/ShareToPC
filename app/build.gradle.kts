@@ -41,6 +41,10 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+        }
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -67,6 +71,7 @@ dependencies {
     implementation(libs.work.runtime)
     implementation(libs.preference)
     implementation(libs.gson)
+    implementation(files("../buglySDK/crashreport-4.1.9.3.aar"))
     testImplementation(libs.junit)
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.ext.junit)
