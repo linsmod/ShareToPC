@@ -245,6 +245,7 @@ public class JobStore {
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, "");
         values.put(DBHelper.COL_PENDING_ACTION, pendingAction);
+        values.put(DBHelper.COL_UPDATE_MILLIS, System.currentTimeMillis());
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
     }

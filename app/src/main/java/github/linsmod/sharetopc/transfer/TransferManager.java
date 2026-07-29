@@ -310,6 +310,7 @@ public class TransferManager {
                 }
                 // 走到哪标记到哪
                 item.status = SendEntry.STATUS_SENDING;
+                job.updateMillis = System.currentTimeMillis();
                 jobStore.updateStatus(item.id, item.status, item.idleReason, item.pendingAction);
                 jobStore.updateProgress(item.id, 0, item.size);
                 lastProgressNotifyMs = 0;
