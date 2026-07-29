@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 6;
+    private static final int DB_VERSION = 7;
 
     // ---------- job entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -52,6 +52,7 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_JOB_DEVICE_PORT = "devicePort";
     public static final String COL_JOB_DEVICE_NAME = "deviceName";
     public static final String COL_JOB_TIME_MILLIS = "timeMillis";
+    public static final String COL_JOB_UPDATE_MILLIS = "updateMillis";
     public static final String COL_JOB_TOTAL_ENTRIES = "totalEntries";
     public static final String COL_JOB_COMPLETED_ENTRIES = "completedEntries";
 
@@ -101,6 +102,7 @@ public class DBHelper extends SQLiteOpenHelper {
                     COL_JOB_DEVICE_PORT + " INTEGER, " +
                     COL_JOB_DEVICE_NAME + " TEXT, " +
                     COL_JOB_TIME_MILLIS + " INTEGER, " +
+                    COL_JOB_UPDATE_MILLIS + " INTEGER DEFAULT 0, " +
                     COL_JOB_TOTAL_ENTRIES + " INTEGER, " +
                     COL_JOB_COMPLETED_ENTRIES + " INTEGER" +
                     ")";
@@ -132,6 +134,9 @@ public class DBHelper extends SQLiteOpenHelper {
         }
         if (oldVersion < 6) {
             db.execSQL("ALTER TABLE " + TABLE_JOB_ENTRY + " ADD COLUMN " + COL_UPDATE_MILLIS + " INTEGER DEFAULT 0");
+        }
+        if (oldVersion < 7) {
+            db.execSQL("ALTER TABLE " + TABLE_JOB + " ADD COLUMN " + COL_JOB_UPDATE_MILLIS + " INTEGER DEFAULT 0");
         }
     }
 }

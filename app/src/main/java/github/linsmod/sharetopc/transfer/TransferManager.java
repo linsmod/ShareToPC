@@ -45,7 +45,7 @@ public class TransferManager {
         public final String host;
         public final int port;
         public final String deviceId;
-        public final Long createMillis;
+        public Long createMillis;
         public Long updateMillis;
         private boolean isCancelRequested;
         private boolean isCancelled;

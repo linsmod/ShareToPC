@@ -171,6 +171,7 @@ public class JobStore {
         if (c == null) return;
 
         long maxTime = 0;
+        long maxUpdateMillis = 0;
         int totalEntries = 0;
         int completedEntries = 0;
         String host = null;
@@ -191,6 +192,8 @@ public class JobStore {
             if (st == SendEntry.STATUS_IDLE && ir == SendEntry.IDLE_REASON_SUCCESS) {
                 completedEntries++;
             }
+            long um = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_UPDATE_MILLIS));
+            if (um > maxUpdateMillis) maxUpdateMillis = um;
         }
         c.close();
 
@@ -205,6 +208,7 @@ public class JobStore {
         vals.put(DBHelper.COL_JOB_DEVICE_PORT, port);
         vals.put(DBHelper.COL_JOB_DEVICE_NAME, deviceName);
         vals.put(DBHelper.COL_JOB_TIME_MILLIS, maxTime);
+        vals.put(DBHelper.COL_JOB_UPDATE_MILLIS, maxUpdateMillis);
         vals.put(DBHelper.COL_JOB_TOTAL_ENTRIES, totalEntries);
         vals.put(DBHelper.COL_JOB_COMPLETED_ENTRIES, completedEntries);
         db.insertWithOnConflict(DBHelper.TABLE_JOB, null, vals, SQLiteDatabase.CONFLICT_REPLACE);
@@ -321,7 +325,8 @@ public class JobStore {
                                "j." + DBHelper.COL_JOB_DEVICE_HOST + ", " +
                                "j." + DBHelper.COL_JOB_DEVICE_PORT + ", " +
                                "j." + DBHelper.COL_JOB_DEVICE_NAME + ", " +
-                               "j." + DBHelper.COL_JOB_TIME_MILLIS +
+                               "j." + DBHelper.COL_JOB_TIME_MILLIS + ", " +
+                               "j." + DBHelper.COL_JOB_UPDATE_MILLIS +
                         " FROM " + DBHelper.TABLE_DEVICE + " d" +
                         " INNER JOIN " + DBHelper.TABLE_JOB + " j" +
                             " ON d." + DBHelper.COL_DEV_LAST_SEND_ID + " = j." + DBHelper.COL_JOB_ID_PK +
@@ -337,11 +342,13 @@ public class JobStore {
                 String host = cursor.getString(2);
                 int port = cursor.getInt(3);
                 String deviceName = cursor.getString(4);
-                // 时间可不用，但可获取
-                // long timeMillis = cursor.getLong(5);
+                long jobCreateMillis = cursor.getLong(5);
+                long jobUpdateMillis = cursor.getLong(6);
 
                 List<SendEntry> entries = entriesByJobId(jobId);
                 TransferManager.SendJob job = new TransferManager.SendJob(jobId,deviceId, entries, host, port);
+                job.createMillis = jobCreateMillis;
+                job.updateMillis = jobUpdateMillis;
                 result.put(deviceId, job);
             }
         } finally {

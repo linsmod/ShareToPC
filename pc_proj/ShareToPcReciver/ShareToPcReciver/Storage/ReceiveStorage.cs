@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -24,7 +25,7 @@ namespace ShareToPcReciver.Storage
             public string FileName { get; set; } = "";
         }
 
-        /// <summary>创建接收文件：返回最终文件路径，out 参数为写入用的 .part 临时路径（基于 transferId 命名）。</summary>
+        /// <summary>创建接收文件：返回预期最终文件路径，out 参数为写入用的 .part 临时路径（基于 transferId 命名）。</summary>
         public string CreateFile(string originalName, string transferId, out string partPath)
         {
             string safeName = SanitizeFileName(originalName);
@@ -36,36 +37,28 @@ namespace ShareToPcReciver.Storage
             {
                 if (!Directory.Exists(monthDir))
                     Directory.CreateDirectory(monthDir);
+
+                string finalPath = Path.Combine(monthDir, safeName);
+
+                // .part 用 transferId 命名，避免同名文件碰撞
+                string cleanId = SanitizeTransferId(transferId);
+                partPath = Path.Combine(monthDir, cleanId + ".part");
+
+                // 写入 .meta 记录预期路径和原始文件名（用于断点续传时恢复）
+                string metaPath = partPath + ".meta";
+                var meta = new PartMeta { FinalPath = finalPath, FileName = originalName };
+                File.WriteAllText(metaPath, JsonSerializer.Serialize(meta), Encoding.UTF8);
+
+                return finalPath;
             }
-
-            string finalName = safeName;
-            string finalPath = Path.Combine(monthDir, finalName);
-            lock (_lock)
-            {
-                if (File.Exists(finalPath))
-                {
-                    finalName = AddSuffix(safeName);
-                    finalPath = Path.Combine(monthDir, finalName);
-                }
-            }
-
-            // .part 用 transferId 命名，避免同名文件碰撞
-            string cleanId = SanitizeTransferId(transferId);
-            partPath = Path.Combine(monthDir, cleanId + ".part");
-
-            // 写入 .meta 记录最终路径和原始文件名（用于断点续传时恢复）
-            string metaPath = partPath + ".meta";
-            var meta = new PartMeta { FinalPath = finalPath, FileName = originalName };
-            File.WriteAllText(metaPath, JsonSerializer.Serialize(meta), Encoding.UTF8);
-
-            return finalPath;
         }
 
-        /// <summary>将 .part 重命名为最终文件，清理 .meta。</summary>
-        public void CompleteFile(string partPath)
+        /// <summary>将 .part 重命名为最终文件（如有冲突自动加 (n) 后缀），清理 .meta。返回实际最终路径。</summary>
+        public string CompleteFile(string partPath)
         {
             string metaPath = partPath + ".meta";
             string finalPath = null;
+            string originalName = "";
 
             if (File.Exists(metaPath))
             {
@@ -73,6 +66,7 @@ namespace ShareToPcReciver.Storage
                 {
                     var meta = JsonSerializer.Deserialize<PartMeta>(File.ReadAllText(metaPath, Encoding.UTF8));
                     finalPath = meta?.FinalPath;
+                    originalName = meta?.FileName;
                 }
                 catch { }
             }
@@ -82,12 +76,30 @@ namespace ShareToPcReciver.Storage
 
             if (File.Exists(partPath))
             {
-                if (File.Exists(finalPath))
-                    File.Delete(finalPath);
-                File.Move(partPath, finalPath);
+                // 下载完成时检查文件名冲突，有冲突则追加 (n) 后缀
+                string dir = Path.GetDirectoryName(finalPath);
+                string finalName = Path.GetFileName(finalPath);
+                lock (_lock)
+                {
+                    var takenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    if (Directory.Exists(dir))
+                    {
+                        foreach (var f in Directory.GetFiles(dir))
+                            takenNames.Add(Path.GetFileName(f));
+                    }
+                    string availableName = FindAvailableName(finalName, takenNames);
+                    if (availableName != finalName)
+                        finalPath = Path.Combine(dir, availableName);
+
+                    if (File.Exists(finalPath))
+                        File.Delete(finalPath);
+                    File.Move(partPath, finalPath);
+                }
             }
 
             try { if (File.Exists(metaPath)) File.Delete(metaPath); } catch { }
+
+            return finalPath;
         }
 
         /// <summary>
@@ -211,22 +223,24 @@ namespace ShareToPcReciver.Storage
             return name;
         }
 
-        private static string AddSuffix(string fileName)
+        /// <summary>在文件名冲突时追加（n）后缀，如 file（2）.txt、file（3）.txt，直到找到不冲突的名字。</summary>
+        private static string FindAvailableName(string baseName, HashSet<string> takenNames)
         {
-            string dir = Path.GetDirectoryName(fileName) ?? "";
-            string name = Path.GetFileNameWithoutExtension(fileName);
-            string ext = Path.GetExtension(fileName);
+            if (!takenNames.Contains(baseName))
+                return baseName;
 
-            Regex regex = new Regex(@"^(.*?) \((\d+)\)$");
-            var match = regex.Match(name);
-            int n = 1;
-            if (match.Success)
+            string nameWithoutExt = Path.GetFileNameWithoutExtension(baseName);
+            string ext = Path.GetExtension(baseName);
+
+            int n = 2;
+            string candidate;
+            do
             {
-                name = match.Groups[1].Value;
-                n = int.Parse(match.Groups[2].Value) + 1;
-            }
+                candidate = $"{nameWithoutExt} ({n}){ext}";
+                n++;
+            } while (takenNames.Contains(candidate));
 
-            return $"{name} ({n}){ext}";
+            return candidate;
         }
     }
 }

@@ -349,8 +349,9 @@ namespace ShareToPcReciver.Net
                     }
 
                     fs.Close();
-                    _storage.CompleteFile(partPath);
+                    filePath = _storage.CompleteFile(partPath);
                     received.FilePath = filePath;
+                    received.FileName = Path.GetFileName(filePath);
                     received.Progress = 100;
                     received.ReceivedBytes = size;
 
