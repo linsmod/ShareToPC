@@ -25,6 +25,7 @@ namespace ShareToPcReciver
         private readonly List<object> _history = new List<object>();
         private readonly object _historyLock = new object();
         private readonly HistoryStore _historyStore = new HistoryStore();
+        private readonly DeviceStore _deviceStore = new DeviceStore();
         private string _lastFilePath;
         private ListViewItem _activeRow;
         private const int ProgressColumnIndex = 6;
@@ -300,9 +301,10 @@ namespace ShareToPcReciver
 
         private void OnClientConnected(ClientInfo info)
         {
+            _deviceStore.SaveDevice(info);
             this.BeginInvoke(new Action(() =>
             {
-                Log.Info($"设备已连接: {info.Name} ({info.Address})");
+                Log.Info($"设备已连接: {info.Name} ({info.Address}) v{info.Version} proto{info.ProtoVersion} id:{info.DeviceId}");
             }));
         }
 

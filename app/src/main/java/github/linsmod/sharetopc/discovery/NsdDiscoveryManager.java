@@ -264,31 +264,52 @@ public class NsdDiscoveryManager {
         }
     }
 
-    /** 外部（心跳）标记设备在线，仅当状态变化时才通知 UI。 */
-    public void markOnline(String host, int port) {
+    /** HELLO 握手完成时更新 PC 端身份信息（版本、协议版本、设备 ID），持久化并通知 UI。 */
+    public void updateDeviceInfo(String host, int port, String version, int protoVersion, String deviceId) {
+        DiscoveredDevice device;
         String key = host + ":" + port;
         synchronized (this) {
-            DiscoveredDevice device = devices.get(key);
+            device = devices.get(key);
+            if (device == null) {
+                return;
+            }
+            device.version = version;
+            device.protoVersion = String.valueOf(protoVersion);
+            device.deviceId = deviceId;
+        }
+        deviceStore.saveDevice(device);
+        notifyChanged();
+    }
+
+    /** 外部（心跳）标记设备在线，持久化到数据库并通知 UI。 */
+    public void markOnline(String host, int port) {
+        DiscoveredDevice device;
+        String key = host + ":" + port;
+        synchronized (this) {
+            device = devices.get(key);
             if (device != null && !device.isOnline) {
                 device.isOnline = true;
             } else {
                 return; // 未变化，不通知
             }
         }
+        deviceStore.saveDevice(device);
         notifyChanged();
     }
 
-    /** 外部（心跳）标记设备离线，仅当状态变化时才通知 UI。 */
+    /** 外部（心跳）标记设备离线，持久化到数据库并通知 UI。 */
     public void markOffline(String host, int port) {
+        DiscoveredDevice device;
         String key = host + ":" + port;
         synchronized (this) {
-            DiscoveredDevice device = devices.get(key);
+            device = devices.get(key);
             if (device != null && device.isOnline) {
                 device.isOnline = false;
             } else {
                 return; // 未变化，不通知
             }
         }
+        deviceStore.saveDevice(device);
         notifyChanged();
     }
 

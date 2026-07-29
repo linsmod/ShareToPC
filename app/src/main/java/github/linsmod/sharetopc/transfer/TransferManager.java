@@ -193,6 +193,14 @@ public class TransferManager {
         worker.execute(this::consumeLoop);
     }
 
+    /** HELLO 握手完成后，将 PC 端身份信息同步到设备管理器。 */
+    private void onHandshakeComplete(TransferClient client, String host, int port) {
+        if (client.pcVersion != null) {
+            App.get().discoveryManager.updateDeviceInfo(host, port,
+                    client.pcVersion, client.pcProto, client.pcDeviceId);
+        }
+    }
+
     /** 当前正在处理的任务，无任务时返回 null。 */
     @Nullable
     public SendJob getCurrentJob() {
@@ -401,6 +409,7 @@ public class TransferManager {
 
     private void sendItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
         client.connect();
+        onHandshakeComplete(client, job.host, job.port);
         if (item.isText()) {
             client.sendText(item.text, job.id);
         } else {

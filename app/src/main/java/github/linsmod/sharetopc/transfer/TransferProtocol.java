@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 
 import github.linsmod.sharetopc.BuildConfig;
 import github.linsmod.sharetopc.util.FileUtils;
+import github.linsmod.sharetopc.util.LogX;
 
 /**
  * 帧协议编解码（与电脑端共同约定 v1）：
@@ -47,6 +48,7 @@ public final class TransferProtocol {
     public static void writeFrame(DataOutputStream out, JsonObject header) throws IOException {
         writeHeader(out, header);
         out.flush();
+        logSend(header);
     }
 
     /** 写带文件 payload 的帧（FILE），每个 chunk 都带帧头，chunk 之间允许插入 CANCEL 等控制帧。 */
@@ -54,6 +56,7 @@ public final class TransferProtocol {
                                       File file, Progress progress,
                                       Cancellable cancellable) throws IOException {
         writeHeader(out, header);
+        logSend(header, file.length());
         long total = file.length();
         long sent = 0;
         byte[] buf = new byte[FileUtils.BUFFER_SIZE];
@@ -77,6 +80,7 @@ public final class TransferProtocol {
             }
         }
         out.flush();
+        LogX.d("Send: FILE done " + optString(header, "name") + " " + sent + "/" + total);
     }
 
     /** 向后兼容：不带 cancelChecker 的版本（内部调用等场景）。 */
@@ -91,6 +95,7 @@ public final class TransferProtocol {
                                       Progress progress,
                                       Cancellable cancellable) throws IOException {
         writeHeader(out, header);
+        logSend(header, total);
         long sent = 0;
         byte[] buf = new byte[FileUtils.BUFFER_SIZE];
         int n;
@@ -110,6 +115,7 @@ public final class TransferProtocol {
             }
         }
         out.flush();
+        LogX.d("Send: FILE done " + optString(header, "name") + " " + sent + "/" + total);
     }
 
     /** 发送一个文件数据 chunk 帧：[headerLen][{"type":"CHUNK","len":L}][L bytes data]。 */
@@ -201,11 +207,14 @@ public final class TransferProtocol {
         byte[] bytes = new byte[len];
         in.readFully(bytes);
         String json = new String(bytes, StandardCharsets.UTF_8);
+        JsonObject header;
         try {
-            return JsonParser.parseString(json).getAsJsonObject();
+            header = JsonParser.parseString(json).getAsJsonObject();
         } catch (Exception e) {
             throw new IOException("bad header json", e);
         }
+        logRecv(header);
+        return header;
     }
 
     public static boolean isAckOk(JsonObject header) {
@@ -245,5 +254,40 @@ public final class TransferProtocol {
         JsonObject header = new JsonObject();
         header.addProperty("type", "CANCEL");
         return header;
+    }
+
+    // ---- 日志辅助 ----
+
+    private static void logSend(JsonObject header) {
+        String type = optString(header, "type");
+        if (type == null) return;
+        switch (type) {
+            case "FILE":
+            case "CANCEL":
+                // 由 writeFileFrame / cancel 流程单独记，避免重复
+                break;
+            default:
+                LogX.d("Send: " + type);
+                break;
+        }
+    }
+
+    private static void logSend(JsonObject header, long fileSize) {
+        String name = optString(header, "name");
+        LogX.d("Send: FILE " + name + " size=" + fileSize);
+    }
+
+    private static void logRecv(JsonObject header) {
+        String type = optString(header, "type");
+        if (type == null) return;
+        switch (type) {
+            case "CHUNK":
+            case "RESUME_CHUNK":
+                // chunk 太多，静默
+                break;
+            default:
+                LogX.d("Recv: " + type);
+                break;
+        }
     }
 }

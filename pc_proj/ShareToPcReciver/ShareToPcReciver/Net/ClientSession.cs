@@ -138,7 +138,15 @@ namespace ShareToPcReciver.Net
             string clientDeviceId = header.TryGetProperty("deviceId", out JsonElement did) ? did.GetString() ?? "" : "";
             DeviceName = device;
             Util.Log.Info($"HELLO from {device} (app: {clientVersion}, proto v{clientProto}, id: {clientDeviceId}, self: {Protocol.AppVersion} proto v{Protocol.ProtocolVersion})");
-            _server.OnClientConnected(new ClientInfo { Name = device, Address = ((IPEndPoint)_client.Client.RemoteEndPoint).Address.ToString(), DeviceId = clientDeviceId });
+            _server.OnClientConnected(new ClientInfo
+            {
+                Name = device,
+                Address = ((IPEndPoint)_client.Client.RemoteEndPoint).Address.ToString(),
+                DeviceId = clientDeviceId,
+                Version = clientVersion,
+                ProtoVersion = clientProto,
+                LastSeen = DateTime.UtcNow
+            });
             await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _ct);
         }
 

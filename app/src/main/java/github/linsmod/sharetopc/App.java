@@ -16,6 +16,7 @@ import github.linsmod.sharetopc.discovery.HeartbeatManager;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.transfer.TransferManager;
+import github.linsmod.sharetopc.util.LogX;
 
 /** Application：手动 ServiceLocator，持有全局单例。 */
 public class App extends Application {
@@ -39,6 +40,7 @@ public class App extends Application {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        LogX.init(this);
         CrashReport.initCrashReport(getApplicationContext(), "c859d2328b", false);
         ioExecutor = Executors.newFixedThreadPool(4);
         mainHandler = new Handler(Looper.getMainLooper());

@@ -17,7 +17,7 @@ import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.util.FileUtils;
 
-/** 单次 TCP 会话：HELLO → 连续发送 TEXT/FILE，每条阻塞等 ACK。 */
+/** 单次 TCP 会话：用于注册设备或发送 TEXT/FILE。 */
 public class TransferClient implements Closeable {
     public static final int CONNECT_TIMEOUT_MS = 5000;
     public static final int ACK_TIMEOUT_MS = 10000;
@@ -28,6 +28,11 @@ public class TransferClient implements Closeable {
     private DataOutputStream out;
     private DataInputStream in;
     private int state;
+
+    /** PC 端身份信息，在 hello() 握手完成后可用。 */
+    public String pcVersion;
+    public int pcProto;
+    public String pcDeviceId;
 
     public static final int DISCONNECTED = 0;
     public static final int CONNECTING = 1;
@@ -89,11 +94,11 @@ public class TransferClient implements Closeable {
             }
             throw new IOException("unexpected frame: " + ack);
         }
-        String pcVersion = ack.has("version") && !ack.get("version").isJsonNull()
+        pcVersion = ack.has("version") && !ack.get("version").isJsonNull()
                 ? ack.get("version").getAsString() : "unknown";
-        int pcProto = ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()
+        pcProto = ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()
                 ? ack.get("protoVersion").getAsInt() : 0;
-        String pcDeviceId = ack.has("deviceId") && !ack.get("deviceId").isJsonNull()
+        pcDeviceId = ack.has("deviceId") && !ack.get("deviceId").isJsonNull()
                 ? ack.get("deviceId").getAsString() : "";
         android.util.Log.d("TransferClient",
                 "HELLO handshake OK: PC " + pcVersion + " proto v" + pcProto + " id=" + pcDeviceId

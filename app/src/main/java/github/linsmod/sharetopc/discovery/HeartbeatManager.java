@@ -125,6 +125,23 @@ public class HeartbeatManager {
             DataInputStream in = new DataInputStream(socket.getInputStream());
 
             LogX.d("Hb-" + device.address() + ": connected");
+
+            // 先发 HELLO 握手，让 PC 注册此设备并回复 ACK
+            JsonObject hello = new JsonObject();
+            hello.addProperty("type", "HELLO");
+            hello.addProperty("device", android.os.Build.MODEL != null ? android.os.Build.MODEL : "Android");
+            hello.addProperty("version", TransferProtocol.APP_VERSION);
+            hello.addProperty("protoVersion", TransferProtocol.PROTOCOL_VERSION);
+            hello.addProperty("deviceId", github.linsmod.sharetopc.App.get().settingsStore.getDeviceId());
+            TransferProtocol.writeFrame(out, hello);
+            JsonObject ack = TransferProtocol.readHeader(in);
+            if (!"ACK".equals(TransferProtocol.optString(ack, "type"))
+                    || !"OK".equals(TransferProtocol.optString(ack, "status"))) {
+                LogX.e("Hb-" + device.address() + ": HELLO handshake failed");
+                return;
+            }
+            LogX.d("Hb-" + device.address() + ": HELLO OK, online now");
+
             discoveryManager.markOnline(device.host, device.port);
 
             while (running) {

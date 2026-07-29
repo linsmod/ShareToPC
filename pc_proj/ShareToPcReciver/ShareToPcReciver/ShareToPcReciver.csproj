@@ -73,6 +73,7 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Storage\HistoryStore.cs" />
+    <Compile Include="Storage\DeviceStore.cs" />
     <Compile Include="Storage\ReceiveStorage.cs" />
     <Compile Include="Util\Log.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">
