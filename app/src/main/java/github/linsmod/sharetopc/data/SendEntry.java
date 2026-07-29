@@ -38,7 +38,7 @@ public class SendEntry {
     public String host;
     public int port;
     public String targetName;
-    public String policy;        // CleanupPolicy name
+    public String pairKey;        // CleanupPolicy name
     public long updateMillis;
 
     /** 状态读取（兼容旧数据：无 status 字段时按 success 推导）。 */

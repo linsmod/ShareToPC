@@ -363,22 +363,11 @@ public class MainViewModel extends AndroidViewModel {
         return app.transferManager.hasPfd(transferId);
     }
 
-    /** 批量删除历史记录。 */
-    public void deleteRecords(java.util.Collection<String> ids) {
-        app.jobStore.removeByIds(ids);
-        refreshHistory();
-    }
-
     /** 删除整个任务分组：先取消传输 + 清理队列，再删除数据库记录。 */
     public void deleteGroup(TaskGroup group) {
         // 1. 取消正在传输的任务 + 清理等待队列
         app.transferManager.cancelJob(group.jobId);
-        // 2. 从数据库删除
-        java.util.List<String> ids = new java.util.ArrayList<>();
-        for (SendEntry r : group.entries) {
-            if (r.id != null) ids.add(r.id);
-        }
-        app.jobStore.removeByIds(ids);
+        app.jobStore.deleteEntriesByJobId(group.jobId);
         // 3. 刷新 UI
         refreshHistory();
     }

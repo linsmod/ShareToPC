@@ -257,6 +257,8 @@ public class TransferManager {
                     if(item.pendingAction==SendEntry.PENDING_ACTION_END_RESUME){
                         item.status = SendEntry.STATUS_SENDING;
                         item.pendingAction = SendEntry.PENDING_ACTION_NONE;
+                        item.updateMillis = System.currentTimeMillis();
+                        job.updateMillis = System.currentTimeMillis();
                         App.get().jobStore.updateStatus(item.id,item.status,item.idleReason, item.pendingAction);
                     }
                 }
@@ -310,6 +312,7 @@ public class TransferManager {
                 }
                 // 走到哪标记到哪
                 item.status = SendEntry.STATUS_SENDING;
+                item.updateMillis = System.currentTimeMillis();
                 job.updateMillis = System.currentTimeMillis();
                 jobStore.updateStatus(item.id, item.status, item.idleReason, item.pendingAction);
                 jobStore.updateProgress(item.id, 0, item.size);
@@ -460,9 +463,11 @@ public class TransferManager {
 
     /** 更新历史记录状态（发送成功后 / 取消 / 失败）。targetName 不覆盖，提交时已正确设置。 */
     private void updateJob(SendJob job, SendEntry item) {
-        job.updateMillis = System.currentTimeMillis();
+        long now = System.currentTimeMillis();
+        item.updateMillis = now;
+        job.updateMillis = now;
         jobStore.updateJobEntry(item.id, job.host, job.port,
-                null, item.status, item.idleReason, item.errorMsg, item.pendingAction, job.updateMillis);
+                null, item.status, item.idleReason, item.errorMsg, item.pendingAction, now);
     }
 
     private void onProgress(SendEntry entry) {

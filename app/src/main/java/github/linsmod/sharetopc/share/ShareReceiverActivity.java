@@ -233,6 +233,7 @@ public class ShareReceiverActivity extends AppCompatActivity {
             if(pfd!=null)
                 App.get().transferManager.registerPfdIfNeeded(item.name,item.id,pfd);
         }
+        App.get().jobStore.trimJobsIfNeeded();
         if(jobId==null)
             throw new RuntimeException("Null of jobId");
         App.get().transferManager.enqueue(jobId,target.deviceId, pendingItems,

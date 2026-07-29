@@ -6,12 +6,9 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import github.linsmod.sharetopc.transfer.TransferManager;
@@ -53,8 +50,7 @@ public class JobStore {
         values.put(DBHelper.COL_HOST, r.host);
         values.put(DBHelper.COL_PORT, r.port);
         values.put(DBHelper.COL_TARGET_NAME, r.targetName);
-        values.put(DBHelper.COL_POLICY, r.policy);
-        values.put(DBHelper.COL_PENDING_ACTION, r.pendingAction);
+        values.put(DBHelper.COL_PAIR_KEY, r.pairKey);
         values.put(DBHelper.COL_UPDATE_MILLIS, r.updateMillis);
         return values;
     }
@@ -80,15 +76,14 @@ public class JobStore {
         r.host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_HOST));
         r.port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PORT));
         r.targetName = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_TARGET_NAME));
-        r.policy = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_POLICY));
-        r.pendingAction = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PENDING_ACTION));
+        r.pairKey = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_PAIR_KEY));
         r.updateMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_UPDATE_MILLIS));
         return r;
     }
 
     // ---------- 内部方法：按 jobId 分组，超出上限时删除最旧的任务 ----------
 
-    private synchronized void trimJobsIfNeeded() {
+    public synchronized void trimJobsIfNeeded() {
         Cursor countCursor = db.rawQuery(
                 "SELECT COUNT(DISTINCT " + DBHelper.COL_JOB_ID
                 + ") FROM " + DBHelper.TABLE_JOB_ENTRY, null);
@@ -155,73 +150,12 @@ public class JobStore {
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_STATUS + "=? AND " + DBHelper.COL_IDLE_REASON + "!=?",
                 new String[]{String.valueOf(SendEntry.STATUS_IDLE), String.valueOf(SendEntry.IDLE_REASON_SUCCESS)});
-
-        // 同步受影响的 job 聚合信息
-        for (String jid : affectedJobIds) {
-            syncJobFromEntries(jid);
-        }
-    }
-
-    /** 根据 job_entry 重新计算 job 聚合并 upsert 到 job 表。 */
-    private void syncJobFromEntries(String jobId) {
-        if (jobId == null) return;
-        Cursor c = db.query(DBHelper.TABLE_JOB_ENTRY, null,
-                DBHelper.COL_JOB_ID + "=?", new String[]{jobId},
-                null, null, null);
-        if (c == null) return;
-
-        long maxTime = 0;
-        long maxUpdateMillis = 0;
-        int totalEntries = 0;
-        int completedEntries = 0;
-        String host = null;
-        int port = 0;
-        String deviceName = null;
-
-        while (c.moveToNext()) {
-            totalEntries++;
-            long t = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_TIME_MILLIS));
-            if (t > maxTime) {
-                maxTime = t;
-                host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_HOST));
-                port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PORT));
-                deviceName = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_TARGET_NAME));
-            }
-            int st = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_STATUS));
-            int ir = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_IDLE_REASON));
-            if (st == SendEntry.STATUS_IDLE && ir == SendEntry.IDLE_REASON_SUCCESS) {
-                completedEntries++;
-            }
-            long um = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_UPDATE_MILLIS));
-            if (um > maxUpdateMillis) maxUpdateMillis = um;
-        }
-        c.close();
-
-        if (totalEntries == 0) {
-            db.delete(DBHelper.TABLE_JOB, DBHelper.COL_JOB_ID_PK + "=?", new String[]{jobId});
-            return;
-        }
-
-        ContentValues vals = new ContentValues();
-        vals.put(DBHelper.COL_JOB_ID_PK, jobId);
-        vals.put(DBHelper.COL_JOB_DEVICE_HOST, host);
-        vals.put(DBHelper.COL_JOB_DEVICE_PORT, port);
-        vals.put(DBHelper.COL_JOB_DEVICE_NAME, deviceName);
-        vals.put(DBHelper.COL_JOB_TIME_MILLIS, maxTime);
-        vals.put(DBHelper.COL_JOB_UPDATE_MILLIS, maxUpdateMillis);
-        vals.put(DBHelper.COL_JOB_TOTAL_ENTRIES, totalEntries);
-        vals.put(DBHelper.COL_JOB_COMPLETED_ENTRIES, completedEntries);
-        db.insertWithOnConflict(DBHelper.TABLE_JOB, null, vals, SQLiteDatabase.CONFLICT_REPLACE);
     }
 
     /** 插入记录，若任务数超过上限则删除最旧的任务（同 jobId 的条目整体删除）。 */
     public synchronized void addJobEntry(SendEntry record) {
         db.insertWithOnConflict(DBHelper.TABLE_JOB_ENTRY, null,
                 toValues(record), SQLiteDatabase.CONFLICT_REPLACE);
-        trimJobsIfNeeded();
-        if (record.jobId != null) {
-            syncJobFromEntries(record.jobId);
-        }
     }
 
     /** 按 id 更新主机、端口、目标名，并更新最终状态。 */
@@ -236,7 +170,6 @@ public class JobStore {
         values.put(DBHelper.COL_STATUS, status);
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, errorMsg);
-        values.put(DBHelper.COL_PENDING_ACTION, pendingAction);
         values.put(DBHelper.COL_UPDATE_MILLIS, updateMillis);
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
@@ -248,41 +181,16 @@ public class JobStore {
         values.put(DBHelper.COL_STATUS, status);
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, "");
-        values.put(DBHelper.COL_PENDING_ACTION, pendingAction);
         values.put(DBHelper.COL_UPDATE_MILLIS, System.currentTimeMillis());
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
     }
 
-    /** 按 id 删除记录。 */
-    public synchronized void removeById(String id) {
-        if (id == null) return;
-        SendEntry r = getSendEntry(id);
-        String jobId = r != null ? r.jobId : null;
+    /** 按 jobId 删除所有关联的 entry 记录。 */
+    public synchronized void deleteEntriesByJobId(String jobId) {
+        if (jobId == null) return;
         db.delete(DBHelper.TABLE_JOB_ENTRY,
-                DBHelper.COL_ID + "=?", new String[]{id});
-        if (jobId != null) {
-            syncJobFromEntries(jobId);
-        }
-    }
-
-    /** 批量删除记录。 */
-    public synchronized void removeByIds(Collection<String> ids) {
-        if (ids == null || ids.isEmpty()) return;
-        Set<String> affectedJobIds = new HashSet<>();
-        for (String id : ids) {
-            SendEntry r = getSendEntry(id);
-            if (r != null && r.jobId != null) {
-                affectedJobIds.add(r.jobId);
-            }
-        }
-        String placeholders = makePlaceholders(ids.size());
-        db.delete(DBHelper.TABLE_JOB_ENTRY,
-                DBHelper.COL_ID + " IN (" + placeholders + ")",
-                ids.toArray(new String[0]));
-        for (String jid : affectedJobIds) {
-            syncJobFromEntries(jid);
-        }
+                DBHelper.COL_JOB_ID + "=?", new String[]{jobId});
     }
 
     private String makePlaceholders(int count) {
@@ -302,7 +210,7 @@ public class JobStore {
                 DBHelper.COL_TIME_MILLIS + " DESC");
         if (c != null) {
             while (c.moveToNext()) {
-                result.add(copy(fromCursor(c)));
+                result.add(fromCursor(c));
             }
             c.close();
         }
@@ -376,33 +284,6 @@ public class JobStore {
         return entries;
     }
 
-    /** 拷贝方法，与原实现保持一致。 */
-    private static SendEntry copy(SendEntry src) {
-        SendEntry r = new SendEntry();
-        r.id = src.id;
-        r.jobId = src.jobId;
-        r.timeMillis = src.timeMillis;
-        r.contentType = src.contentType;
-        r.name = src.name;
-        r.size = src.size;
-        r.mime = src.mime;
-        r.status = src.status;
-        r.idleReason = src.idleReason;
-        r.sentBytes = src.sentBytes;
-        r.totalBytes = src.totalBytes;
-        r.errorMsg = src.errorMsg;
-        r.textContent = src.textContent;
-        r.localPath = src.localPath;
-        r.contentUri = src.contentUri;
-        r.host = src.host;
-        r.port = src.port;
-        r.targetName = src.targetName;
-        r.policy = src.policy;
-        r.pendingAction = src.pendingAction;
-        r.updateMillis = src.updateMillis;
-        return r;
-    }
-
     /** 清空所有记录。 */
     public synchronized void clear() {
         db.delete(DBHelper.TABLE_JOB_ENTRY, null, null);
@@ -433,38 +314,27 @@ public class JobStore {
     }
 
     /** 查询某个 job 的聚合信息。 */
-    public synchronized JobInfo getJob(String jobId) {
+    public synchronized TransferManager.SendJob getJob(String jobId) {
         if (jobId == null) return null;
+
         Cursor c = db.query(DBHelper.TABLE_JOB, null,
                 DBHelper.COL_JOB_ID_PK + "=?", new String[]{jobId},
                 null, null, null);
-        JobInfo info = null;
+        TransferManager.SendJob info = null;
         if (c.moveToFirst()) {
-            info = new JobInfo();
-            info.jobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_JOB_ID_PK));
-            info.deviceHost = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_JOB_DEVICE_HOST));
-            info.devicePort = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_JOB_DEVICE_PORT));
-            info.deviceName = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_JOB_DEVICE_NAME));
-            info.timeMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_JOB_TIME_MILLIS));
-            info.totalEntries = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_JOB_TOTAL_ENTRIES));
-            info.completedEntries = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_JOB_COMPLETED_ENTRIES));
+            String deviceId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_JOB_DEVICE_ID));
+            String host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_JOB_DEVICE_HOST));
+            int port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_JOB_DEVICE_PORT));
+            long createMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_JOB_TIME_MILLIS));
+            long updateMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_JOB_UPDATE_MILLIS));
+
+            List<SendEntry> entries = entriesByJobId(jobId);
+
+            info = new TransferManager.SendJob(jobId, deviceId, entries, host, port);
+            info.createMillis = createMillis;
+            info.updateMillis = updateMillis;
         }
         c.close();
         return info;
-    }
-
-    /** Job 聚合信息。 */
-    public static class JobInfo {
-        public String jobId;
-        public String deviceHost;
-        public int devicePort;
-        public String deviceName;
-        public long timeMillis;
-        public int totalEntries;
-        public int completedEntries;
-
-        public boolean isAllDone() {
-            return completedEntries >= totalEntries && totalEntries > 0;
-        }
     }
 }
