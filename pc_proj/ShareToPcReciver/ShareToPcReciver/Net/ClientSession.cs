@@ -195,21 +195,22 @@ namespace ShareToPcReciver.Net
             if (authResult == null || !authResult.IsAccepted)
             {
                 Util.Log.Warn($"FILE from {DeviceName} rejected due to no accepted job");
-                await Protocol.WriteAckAsync(stream, false, "BAD_PROTOCOL", _ct);
+                await Protocol.WriteBadProtocolAckAsync(stream, _ct);
                 return;
             }
             string name = header.TryGetProperty("name", out JsonElement n) ? n.GetString() ?? "file" : "file";
             long size = header.TryGetProperty("size", out JsonElement s) ? s.GetInt64() : 0;
+            string type = header.TryGetProperty("type", out JsonElement t) ? t.GetString() ?? "FILE" : "FILE";
             string mime = header.TryGetProperty("mime", out JsonElement m) ? m.GetString() ?? "" : "";
-            string key = header.TryGetProperty("key", out JsonElement k) ? m.GetString() ?? "" : "";
+            string key = header.TryGetProperty("key", out JsonElement k) ? k.GetString() ?? "" : "";
             long time = header.TryGetProperty("time", out JsonElement ts) ? ts.GetInt64() : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            string transferId = header.TryGetProperty("id", out JsonElement idProp) ? idProp.GetString() ?? "" : "";
+            string fileId = header.TryGetProperty("id", out JsonElement idProp) ? idProp.GetString() ?? "" : "";
             string jobId = header.TryGetProperty("jobId", out JsonElement jidProp) ? jidProp.GetString() ?? "" : "";
 
             if (key != authResult?.PairKey)
             {
                 Util.Log.Warn($"FILE from {DeviceName} rejected due to invalid key: {key}");
-                await Protocol.WriteAckAsync(stream, false, "BAD_PROTOCOL", _ct);
+                await Protocol.WriteBadProtocolAckAsync(stream, _ct);
                 return;
             }
 
@@ -219,9 +220,9 @@ namespace ShareToPcReciver.Net
             long resumeOffset = 0;
             bool isResume = false;
 
-            if (!string.IsNullOrEmpty(transferId))
+            if (!string.IsNullOrEmpty(fileId))
             {
-                isResume = _storage.FindPartFile(transferId, out partPath, out resumeOffset, out filePath, out string resumedName)
+                isResume = _storage.FindPartFile(fileId, out partPath, out resumeOffset, out filePath, out string resumedName)
                            && resumeOffset > 0;
                 if (isResume && !string.IsNullOrEmpty(resumedName))
                     name = resumedName;
@@ -234,18 +235,19 @@ namespace ShareToPcReciver.Net
 
             if (isResume)
             {
-                Util.Log.Info($"RESUME FILE from {DeviceName}: {name} (id={transferId}) at offset {resumeOffset}/{size} bytes");
+                Util.Log.Info($"RESUME FILE from {DeviceName}: {name} (id={fileId}) at offset {resumeOffset}/{size} bytes");
             }
             else
             {
-                filePath = _storage.CreateFile(name, transferId, out partPath);
-                Util.Log.Info($"FILE from {DeviceName}: {name} ({size} bytes, id={transferId})");
+                filePath = _storage.CreateFile(name, fileId, out partPath);
+                Util.Log.Info($"FILE from {DeviceName}: {name} ({size} bytes, id={fileId})");
             }
 
             ReceivedFile received = new ReceivedFile
             {
                 FileName = name,
                 FilePath = null,
+                Type = type,
                 Size = size,
                 DeviceName = DeviceName,
                 Time = time,
@@ -296,7 +298,7 @@ namespace ShareToPcReciver.Net
                             {
                                 FileName = name,
                                 DeviceName = DeviceName,
-                                TransferId = transferId,
+                                TransferId = fileId,
                                 JobId = jobId,
                                 Received = totalReceived,
                                 Total = size,
@@ -313,11 +315,11 @@ namespace ShareToPcReciver.Net
                                 throw new ProtocolViolationException(
                                     $"Expected RESUME_CHUNK for resume, got {frameType}");
 
-                            int chunkOffset = frame.TryGetProperty("offset", out JsonElement offProp)
+                            int seek = frame.TryGetProperty("seek", out JsonElement offProp)
                                 ? offProp.GetInt32() : -1;
-                            if (chunkOffset != resumeOffset)
+                            if (seek != resumeOffset)
                                 throw new ProtocolViolationException(
-                                    $"RESUME_CHUNK offset mismatch: expected {resumeOffset}, got {chunkOffset}");
+                                    $"RESUME_CHUNK seek mismatch: expected {resumeOffset}, got {seek}");
 
                             int chunkLen = frame.TryGetProperty("len", out JsonElement lenProp)
                                 ? lenProp.GetInt32() : 0;
@@ -342,7 +344,7 @@ namespace ShareToPcReciver.Net
                             {
                                 FileName = name,
                                 DeviceName = DeviceName,
-                                TransferId = transferId,
+                                TransferId = fileId,
                                 JobId = jobId,
                                 Received = totalReceived,
                                 Total = size
@@ -377,7 +379,7 @@ namespace ShareToPcReciver.Net
                                 {
                                     FileName = name,
                                     DeviceName = DeviceName,
-                                    TransferId = transferId,
+                                    TransferId = fileId,
                                     JobId = jobId,
                                     Received = totalReceived,
                                     Total = size
@@ -416,7 +418,7 @@ namespace ShareToPcReciver.Net
                 {
                     FileName = name,
                     DeviceName = DeviceName,
-                    TransferId = transferId,
+                    TransferId = fileId,
                     JobId = jobId,
                     Received = totalReceived,
                     Total = size,
@@ -432,7 +434,7 @@ namespace ShareToPcReciver.Net
                 {
                     FileName = name,
                     DeviceName = DeviceName,
-                    TransferId = transferId,
+                    TransferId = fileId,
                     JobId = jobId,
                     Received = totalReceived,
                     Total = size,
@@ -513,7 +515,16 @@ namespace ShareToPcReciver.Net
                 {
                     try
                     {
-                        await Task.Delay(1000, authCts.Token);
+                        for (var i = 0; i < 10; i++)
+                        {
+                            await Task.Delay(100, authCts.Token);
+                            if (tcs.Task.IsCompleted) {
+                                break;
+                            }
+                        }
+                        if (tcs.Task.IsCompleted) {
+                            break;
+                        }
                     }
                     catch (OperationCanceledException)
                     {
@@ -531,7 +542,8 @@ namespace ShareToPcReciver.Net
             // ACCEPTED 且需要生成新 key（首次配对或 credits 不是默认）
             if (authResult.Status == "ACCEPTED")
             {
-                _server.DecreaseCredits(deviceId);
+                var session =  _server.DecreaseCredits(deviceId);
+                authResult.PairKey = session.Key;
 
                 Util.Log.Info($"JOB_INFO accepted for {DeviceName}, credits={authResult.Credits}");
             }

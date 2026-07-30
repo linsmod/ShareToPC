@@ -396,20 +396,6 @@ public class MainViewModel extends AndroidViewModel {
         refreshHistory();
     }
 
-    /** 暂停当前传输：设置 pending action + cancel，等 CANCEL 帧发出后 process() 转为 PAUSED。 */
-    public void pauseTransfer(SendEntry record) {
-        TransferManager.SendJob job = app.transferManager.getCurrentJob();
-        if (job != null) {
-            for (SendEntry entry : job.items) {
-                if (entry.id != null && entry.id.equals(record.id) && entry.canRequestPause()) {
-                    app.transferManager.requestPause(entry);
-                    job.cancel();
-                    break;
-                }
-            }
-        }
-    }
-
     /** 暂停分组：对所有 canRequestPause() 的条目设置 pending pause + cancel。 */
     public void pauseGroup(TaskGroup group) {
         app.transferManager.cancelJob(group.jobId);

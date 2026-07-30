@@ -64,6 +64,7 @@ public class TransferStatusHelper {
                 else if(r.idleReason==SendEntry.IDLE_REASON_PAUSED){
                     return ctx.getColor(android.R.color.holo_blue_light);
                 }
+                return 0;
             case SendEntry.STATUS_SENDING:
                 return ctx.getColor(android.R.color.holo_blue_light);
             default:

@@ -90,10 +90,12 @@
     <string name="service_channel_desc">用于保持网络连接和文件传输在后台正常运行</string>
     <string name="service_monitoring">正在监听传输连接…</string>
     <string name="service_stop">停止</string>
+    <string name="TIP_STATUS_WAITING_REMOTE_APPROVAL">等待允准 · %s</string>
     <string name="TIP_STATUS_REMOTE_REJECTED">远程拒绝 · %s</string>
     <string name="TIP_STATUS_NET_ERROR">网络错误 · %s</string>
     <string name="TIP_STATUS_IO_ERR">读取出错 · %s</string>
     <string name="TIP_STATUS_SUCCESS">发送完成 · %s</string>
+    <string name="TIP_STATUS_SENDING">正在发送 · %s</string>
     <string name="TIP_STATUS_OUTDATE_PARITAL_SUCCESS">已过期 · 部分完成 · %s</string>
     <string name="TIP_STATUS_OUTDATE">已过期 · %s</string>
 </resources>

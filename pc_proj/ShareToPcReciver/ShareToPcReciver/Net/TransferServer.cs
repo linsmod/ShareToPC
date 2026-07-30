@@ -1,13 +1,14 @@
+using ShareToPcReciver.Config;
+using ShareToPcReciver.Models;
+using ShareToPcReciver.Storage;
 using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using ShareToPcReciver.Config;
-using ShareToPcReciver.Models;
-using ShareToPcReciver.Storage;
 using static ShareToPcReciver.Net.TransferServer;
+using static System.Collections.Specialized.BitVector32;
 
 namespace ShareToPcReciver.Net
 {
@@ -249,27 +250,6 @@ namespace ShareToPcReciver.Net
             _cts?.Dispose();
         }
 
-        public bool GetNoneBlocked(String deviceId, string pairKey, out PairStore.PairSession session)
-        {
-            session = null;
-
-            // 0. 拉黑检查：按 pairKey 或 deviceId 查找，已拉黑直接拒绝
-            if (PairStore?.IsBlocked(deviceId) == true)
-            {
-                return false;
-            }
-            // 1. 查 PairStore：已有有效授权则自动放行
-            if (!string.IsNullOrEmpty(pairKey))
-            {
-                session = PairStore?.GetByKey(pairKey);
-                if (session != null && !PairStore.IsExpired(session))
-                {
-                    return true;
-                }
-            }
-            return false;
-        }
-
         public PairStore.PairSession CreateNewSession(string deviceId, String deviceName, AuthResult result)
         {
             if (result.Credits != 0 && string.IsNullOrEmpty(result.PairKey))
@@ -291,11 +271,14 @@ namespace ShareToPcReciver.Net
             PairStore.Save(session);
             return session;
         }
-        internal void DecreaseCredits(String deviceId)
+        internal PairStore.PairSession DecreaseCredits(String deviceId)
         {
             PairStore.PairSession session = PairStore.GetByDeviceId(deviceId);
             session.Credits -= 1;
+            if(String.IsNullOrEmpty(session.Key))
+                session.Key = Guid.NewGuid().ToString();
             PairStore?.Save(session);
+            return session;
         }
     }
 }

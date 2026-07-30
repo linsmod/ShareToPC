@@ -228,7 +228,7 @@ public class ShareReceiverActivity extends AppCompatActivity {
             item.port = target.port;
             item.targetName = target.displayName();
             App.get().jobStore.updateJobEntry(item.id, target.host, target.port,
-                    target.displayName(), item.status, item.idleReason, item.errorMsg, item.pendingAction,
+                    target.displayName(), item.status, item.sentBytes, item.totalBytes, item.idleReason, item.errorMsg,
                     System.currentTimeMillis());
             var pfd = ShareParser.createPfd(getApplicationContext(), item);
             if(pfd!=null)

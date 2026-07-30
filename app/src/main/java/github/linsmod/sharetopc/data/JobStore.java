@@ -158,8 +158,8 @@ public class JobStore {
 
     /** 按 id 更新主机、端口、目标名，并更新最终状态。 */
     public synchronized void updateJobEntry(String id, String host, int port,
-                                            String targetName, int status, int idle_reason, String errorMsg,
-                                            int pendingAction, long updateMillis) {
+                                            String targetName, int status, long sentBytes, long totalBytes, int idle_reason, String errorMsg,
+                                            long updateMillis) {
         if (id == null) return;
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_HOST, host);
@@ -168,18 +168,9 @@ public class JobStore {
         values.put(DBHelper.COL_STATUS, status);
         values.put(DBHelper.COL_IDLE_REASON, idle_reason);
         values.put(DBHelper.COL_ERROR_MSG, errorMsg);
+        values.put(DBHelper.COL_SENT_BYTES, sentBytes);
+        values.put(DBHelper.COL_TOTAL_BYTES, totalBytes);
         values.put(DBHelper.COL_UPDATE_MILLIS, updateMillis);
-        db.update(DBHelper.TABLE_JOB_ENTRY, values,
-                DBHelper.COL_ID + "=?", new String[]{id});
-    }
-
-    public synchronized void updateStatus(String id, int status, int idle_reason, int pendingAction) {
-        if (id == null) return;
-        ContentValues values = new ContentValues();
-        values.put(DBHelper.COL_STATUS, status);
-        values.put(DBHelper.COL_IDLE_REASON, idle_reason);
-        values.put(DBHelper.COL_ERROR_MSG, "");
-        values.put(DBHelper.COL_UPDATE_MILLIS, System.currentTimeMillis());
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
     }
@@ -300,16 +291,6 @@ public class JobStore {
     public synchronized void clear() {
         db.delete(DBHelper.TABLE_JOB_ENTRY, null, null);
         db.delete(DBHelper.TABLE_JOB, null, null);
-    }
-
-    /** 更新传输进度。 */
-    public synchronized void updateProgress(String transferId, long sent, long total) {
-        if (transferId == null) return;
-        ContentValues values = new ContentValues();
-        values.put(DBHelper.COL_SENT_BYTES, sent);
-        values.put(DBHelper.COL_TOTAL_BYTES, total);
-        db.update(DBHelper.TABLE_JOB_ENTRY, values,
-                DBHelper.COL_TRANSFER_ID + "=?", new String[]{transferId});
     }
 
     public synchronized SendEntry getSendEntry(String id) {

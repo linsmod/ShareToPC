@@ -218,6 +218,7 @@ public class TransferItemView extends LinearLayout {
         }
         tvCheckMark.setVisibility(data.showCheckMark ? VISIBLE : GONE);
         vErrorDot.setVisibility(data.showErrorDot ? VISIBLE : GONE);
-        vOutdateDot.setVisibility(data.showOutdateDot ? VISIBLE : GONE);
+        // disabled in this version.
+//        vOutdateDot.setVisibility(data.showOutdateDot ? VISIBLE : GONE);
     }
 }

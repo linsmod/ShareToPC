@@ -12,13 +12,13 @@ public class SendEntry {
     public static final int IDLE_REASON_PAUSED=2;
     public static final int IDLE_REASON_NET_ERROR=3;
     public static final int IDLE_REASON_IO_ERROR=4;
-    public static final int IDLE_REASON_REMOTE_REJECTED=5; // pair progress not finished.
+    public static final int IDLE_REASON_REMOTE_REJECTED=5; // remote rejected by user or config.
+    public static final int IDLE_REASON_WAITING_REMOTE_APPROVAL = 6;
     public static final int IDLE_REASON_SUCCESS =100;
 
     public static final int PENDING_ACTION_NONE=0;
     public static final int PENDING_ACTION_END_PAUSE=1;
     public static final int PENDING_ACTION_END_RESUME=2;
-    public static final int PENDING_ACTION_END_PAIR = 3;
     public String id;
     public int idleReason;
     public int pendingAction;
@@ -61,6 +61,8 @@ public class SendEntry {
                 return "网络错误";
             case IDLE_REASON_PAUSED:
                 return "已暂停";
+            case IDLE_REASON_WAITING_REMOTE_APPROVAL:
+                return "等待允准";
             case IDLE_REASON_REMOTE_REJECTED:
                 return "远程拒绝";
             case IDLE_REASON_SUCCESS:
@@ -105,9 +107,11 @@ public class SendEntry {
 
     //暂停、网络错误、远程拒绝时允许重试
     public boolean canResume() {
-        return this.pendingAction==0 &&  status==SendEntry.STATUS_IDLE &&
-                (
-                        idleReason==SendEntry.IDLE_REASON_PAUSED || idleReason==IDLE_REASON_NET_ERROR || idleReason==IDLE_REASON_REMOTE_REJECTED || idleReason==IDLE_REASON_CREATED);
+        if(this.pendingAction>0) return false;
+        if(this.status== STATUS_SENDING) return false;
+        if(this.idleReason==IDLE_REASON_IO_ERROR) return false;
+        if(this.idleReason==IDLE_REASON_OUTDATE) return false;
+        return this.idleReason != IDLE_REASON_SUCCESS;
     }
 
     public String deviceAddress() {

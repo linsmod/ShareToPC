@@ -117,9 +117,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             if(current!=null && current.isSending()){
                 vh.pbProgress.setProgress(current.percent());
             }
+            Context context = vh.itemView.getContext();
             if(current!=null){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
-                vh.tvEntryName.setText(current.name);
+                vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_SENDING,current.name));
                 if (current.totalBytes > 0) {
                     vh.tvEntrySize.setVisibility(View.VISIBLE);
                     vh.tvEntrySize.setTextColor(vh.tvEntryName.getTextColors().getDefaultColor());
@@ -129,7 +130,6 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                     vh.tvEntrySize.setVisibility(View.GONE);
                 }
             }
-            Context context = vh.itemView.getContext();
             if(latestJob.countIdle(SendEntry.IDLE_REASON_OUTDATE)>0){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
                 if(latestJob.countIdle(SendEntry.IDLE_REASON_SUCCESS)>0){
@@ -145,9 +145,15 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_NET_ERROR,TaskAdapter.friendlyTime(latestJob.updateMillis)));
                 vh.tvEntrySize.setVisibility(View.GONE);
             }
+
             else if(latestJob.countIdle(SendEntry.IDLE_REASON_IO_ERROR)>0){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
                 vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_IO_ERR,TaskAdapter.friendlyTime(latestJob.updateMillis)));
+                vh.tvEntrySize.setVisibility(View.GONE);
+            }
+            else if(latestJob.countIdle(SendEntry.IDLE_REASON_WAITING_REMOTE_APPROVAL)>0){
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_WAITING_REMOTE_APPROVAL,TaskAdapter.friendlyTime(latestJob.updateMillis)));
                 vh.tvEntrySize.setVisibility(View.GONE);
             }
             else if(latestJob.countIdle(SendEntry.IDLE_REASON_REMOTE_REJECTED)>0){
@@ -163,6 +169,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 vh.tvEntrySize.setTextColor(0xFF4CAF50);
                 vh.tvEntrySize.setTypeface(null, android.graphics.Typeface.BOLD);
                 vh.pbProgress.setProgress(100);
+            }
+            else if(!latestJob.isSending()){
+                System.out.println("?");
             }
         }
 

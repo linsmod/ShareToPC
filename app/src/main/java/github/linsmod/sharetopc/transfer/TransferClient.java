@@ -28,10 +28,6 @@ public class TransferClient implements Closeable {
     private DataOutputStream out;
     private DataInputStream in;
     private int state;
-
-    /** PC 端身份信息，在 hello() 握手完成后可用。 */
-    public String pcVersion;
-    public int pcProto;
     public String pcDeviceId;
 
     public static final int DISCONNECTED = 0;
@@ -40,7 +36,8 @@ public class TransferClient implements Closeable {
     public static final int CONNECTION_LOST = 3;
     boolean isBadProtocolDetected;
 
-    public TransferClient(String host, int port) {
+    public TransferClient(String remoteDeviceId, String host, int port) {
+        this.pcDeviceId = remoteDeviceId;
         this.host = host;
         this.port = port;
     }
@@ -78,33 +75,6 @@ public class TransferClient implements Closeable {
         }
     }
 
-    void hello() throws IOException {
-        JsonObject header = new JsonObject();
-        header.addProperty("type", "HELLO");
-        header.addProperty("device", Build.MODEL != null ? Build.MODEL : "Android");
-        header.addProperty("version", TransferProtocol.APP_VERSION);
-        header.addProperty("protoVersion", TransferProtocol.PROTOCOL_VERSION);
-        header.addProperty("deviceId", App.get().settingsStore.getDeviceId());
-        TransferProtocol.writeFrame(out, header);
-        // 读 PC 的 HELLO ACK，其中携带 PC 程序版本、协议版本、设备 ID
-        JsonObject ack = TransferProtocol.readHeader(in);
-        if (!TransferProtocol.isAckOk(ack)) {
-            if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
-                throw new IOException("peer error: " + TransferProtocol.ackError(ack));
-            }
-            throw new IOException("unexpected frame: " + ack);
-        }
-        pcVersion = ack.has("version") && !ack.get("version").isJsonNull()
-                ? ack.get("version").getAsString() : "unknown";
-        pcProto = ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()
-                ? ack.get("protoVersion").getAsInt() : 0;
-        pcDeviceId = ack.has("deviceId") && !ack.get("deviceId").isJsonNull()
-                ? ack.get("deviceId").getAsString() : "";
-        android.util.Log.d("TransferClient",
-                "HELLO handshake OK: PC " + pcVersion + " proto v" + pcProto + " id=" + pcDeviceId
-                + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
-    }
-
     public void sendText(String text, String jobId,String key) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "TEXT");
@@ -121,19 +91,9 @@ public class TransferClient implements Closeable {
     /** 从 File 读文件发送（历史兼容：本地 inbox 仍有副本时使用）。 */
     public void sendFile(TransferManager.SendJob job, SendEntry entry, File file,String pairKey,
                          TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(entry.name, entry.mime, file.length(), entry.id, job.id,pairKey);
-        long resumeOffset = expectAckForFile();
         try (java.io.FileInputStream fin = new java.io.FileInputStream(file)) {
-            skipExactly(fin, resumeOffset);
-            if (resumeOffset > 0) {
-                TransferProtocol.writeFileContentWithResume(out, fin, file.length(),
-                        resumeOffset, progress, job);
-            } else {
-                TransferProtocol.writeFileContent(out, fin, file.length(), progress,
-                        job);
-            }
+            sendFileFromStream(job,entry,fin,pairKey,progress);
         }
-        expectAck();
     }
 
     /** 从 InputStream 读文件发送（新路径：直接从 content:// URI 读流，无需本地文件）。 */
@@ -141,23 +101,18 @@ public class TransferClient implements Closeable {
                                    InputStream contentStream,
                                    String pairKey,
                                    TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(entry.name, entry.mime, entry.size, entry.id, job.id,pairKey);
+        sendFileHeader(entry.name, entry.mime,entry.contentType, entry.size, entry.id, job.id,pairKey);
         long resumeOffset = expectAckForFile();
         skipExactly(contentStream, resumeOffset);
-        if (resumeOffset > 0) {
-            TransferProtocol.writeFileContentWithResume(out, contentStream, entry.size,
-                    resumeOffset, progress,job);
-        } else {
-            TransferProtocol.writeFileContent(out, contentStream, entry.size, progress,
-                    job);
-        }
+        TransferProtocol.writeFileContent(out, contentStream, entry.size, progress,resumeOffset,
+                    job,entry);
         expectAck();
     }
 
     /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */
-    private void sendFileHeader(String fileName, String mime, long size, String transferId, String jobId,String pairKey) throws IOException {
+    private void sendFileHeader(String fileName, String mime,int type, long size, String transferId, String jobId,String pairKey) throws IOException {
         JsonObject header = new JsonObject();
-        header.addProperty("type", "FILE");
+        header.addProperty("type", type);
         header.addProperty("name", FileUtils.sanitizeFileName(fileName));
         header.addProperty("size", size);
         header.addProperty("key",pairKey);

@@ -16,6 +16,8 @@ namespace ShareToPcReciver.Models
         public string TransferId { get; set; } = "";       // 传输标识，用于定位 .part 文件
         public string JobId { get; set; } = "";            // Android 端发送批次标识
         public DateTime ReceivedAt => DateTimeOffset.FromUnixTimeMilliseconds(Time).LocalDateTime;
+
+        public string Type { get; internal set; }
     }
 
     public class FileProgressInfo

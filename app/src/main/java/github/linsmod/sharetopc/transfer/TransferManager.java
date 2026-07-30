@@ -1,7 +1,6 @@
 package github.linsmod.sharetopc.transfer;
 
 import android.content.Context;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
@@ -9,6 +8,7 @@ import android.os.ParcelFileDescriptor;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FilterInputStream;
@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,7 +41,7 @@ import github.linsmod.sharetopc.util.LogX;
  * 发送队列 + 状态机。单线程串行消费，避免并发抢连接。
  * 连接失败自动重试 1 次（间隔 2s）。
  */
-public class TransferManager {
+public class TransferManager implements TransferProtocol.Progress {
     public static class SendJob implements TransferProtocol.Cancellable {
         public final String id;
         public final List<SendEntry> items;
@@ -50,17 +51,20 @@ public class TransferManager {
         public Long createMillis;
         public Long updateMillis;
         private boolean isCancelRequested;
-        private boolean isCancelled;
-        /** 本连接是否已发送过 JOB_INFO */
-        public TransferClient.JobInfoResult jobInfoResult;
+        /**
+         * 本连接是否已发送过 JOB_INFO
+         */
+        public TransferClient.JobInfoResult authResult;
         @Nullable
         public SendEntry sendingItem;
         @Nullable
         public DiscoveredDevice device;
-        public String shortId(){
-            return this.id.length()>8?id.substring(0,8):id;
+
+        public String shortId() {
+            return this.id.length() > 8 ? id.substring(0, 8) : id;
         }
-        public SendJob(String id,String deviceId, List<SendEntry> items, String host, int port) {
+
+        public SendJob(String id, String deviceId, List<SendEntry> items, String host, int port) {
             this.id = id;
             this.deviceId = deviceId;
             this.items = items;
@@ -83,21 +87,12 @@ public class TransferManager {
         }
 
         @Override
-        public void onCancelled() {
-            this.isCancelled= true;
-        }
-
-        @Override
         public void cancel() {
             this.isCancelRequested = true;
         }
 
-        public boolean isCancelled(){
-            return this.isCancelled;
-        }
-
         public String deviceAddress() {
-            return this.host+":"+this.port;
+            return this.host + ":" + this.port;
         }
 
         public boolean isAllSuccess() {
@@ -109,12 +104,13 @@ public class TransferManager {
             }
             return true;
         }
-        public int countIdle(int reason){
+
+        public int countIdle(int reason) {
             int n = 0;
             for (var item :
                     items) {
-                if (item.status==SendEntry.STATUS_IDLE) {
-                    if( item.idleReason==reason){
+                if (item.status == SendEntry.STATUS_IDLE) {
+                    if (item.idleReason == reason) {
                         n++;
                     }
                 }
@@ -127,7 +123,7 @@ public class TransferManager {
         }
 
         public boolean isSending() {
-            return false;
+            return items.stream().anyMatch(x -> x.status == SendEntry.STATUS_SENDING);
         }
     }
 
@@ -143,55 +139,79 @@ public class TransferManager {
     private final PairStore pairStore;
     private final Context appContext;
 
-    /** 队列变更监听器：入队/出队/取消时回调，供 UI 响应式更新。 */
+    /**
+     * 队列变更监听器：入队/出队/取消时回调，供 UI 响应式更新。
+     */
     public interface QueueListener {
         void onQueueChanged(@NonNull List<SendJob> queue);
     }
 
-    /** 传输进度监听器：当前 job 的某个 entry 进度更新时回调。 */
+    /**
+     * 传输进度监听器：当前 job 的某个 entry 进度更新时回调。
+     */
     public interface JobProgressListener {
-        /** @param job 当前正在传输的 job（含更新后的 entry 进度） */
+        /**
+         * @param job 当前正在传输的 job（含更新后的 entry 进度）
+         */
         void onProgress(@NonNull SendJob job);
-        /** 某个 job 开始处理 */
+
+        /**
+         * 某个 job 开始处理
+         */
         void onJobStarted(@NonNull SendJob job);
-        /** 某个 job 处理完毕 */
+
+        /**
+         * 某个 job 处理完毕
+         */
         void onJobFinished(@NonNull SendJob job);
     }
 
     private final List<QueueListener> queueListeners = new CopyOnWriteArrayList<>();
     private final List<JobProgressListener> progressListeners = new CopyOnWriteArrayList<>();
 
-    /** 注册队列变更监听器。 */
+    /**
+     * 注册队列变更监听器。
+     */
     public void addQueueListener(@NonNull QueueListener listener) {
         queueListeners.add(listener);
     }
 
-    /** 取消注册队列变更监听器。 */
+    /**
+     * 取消注册队列变更监听器。
+     */
     public void removeQueueListener(@NonNull QueueListener listener) {
         queueListeners.remove(listener);
     }
 
-    /** 注册进度监听器。 */
+    /**
+     * 注册进度监听器。
+     */
     public void addProgressListener(@NonNull JobProgressListener listener) {
         progressListeners.add(listener);
     }
 
-    /** 取消注册进度监听器。 */
+    /**
+     * 取消注册进度监听器。
+     */
     public void removeProgressListener(@NonNull JobProgressListener listener) {
         progressListeners.remove(listener);
     }
 
-    /** 获取当前队列快照（线程安全）。 */
+    /**
+     * 获取当前队列快照（线程安全）。
+     */
     @NonNull
     public List<SendJob> getQueueSnapshot() {
         return new ArrayList<>(queue);
     }
 
-    /** PFD 注册表：transferId → FileChannel，供重试/继续时复用内核文件句柄。 */
+    /**
+     * PFD 注册表：transferId → FileChannel，供重试/继续时复用内核文件句柄。
+     */
     private final Map<String, PfdHandle> pfdHandles = new ConcurrentHashMap<>();
 
     private volatile SendJob currentJob;
-    private volatile Map<String,SendJob> recentJobs = new HashMap<>();
+    private final Map<String, SendJob> recentJobs = new HashMap<>();
     private volatile long lastProgressNotifyMs;
 
     public TransferManager(Context context, JobStore jobStore, DeviceStore deviceStore) {
@@ -202,28 +222,36 @@ public class TransferManager {
         worker.execute(this::consumeLoop);
     }
 
-    /** 当前正在处理的任务，无任务时返回 null。 */
+    /**
+     * 当前正在处理的任务，无任务时返回 null。
+     */
     @Nullable
     public SendJob getCurrentJob() {
         return currentJob;
     }
 
-    /** 取消当前正在执行的任务并从等待队列中移除同 jobId 的任务（用于删除分组）。 */
+    /**
+     * 取消当前正在执行的任务并从等待队列中移除同 jobId 的任务（用于删除分组）。
+     */
     public void cancelJob(String jobId) {
         SendJob cur = currentJob;
         if (cur != null && cur.id.equals(jobId)) {
             cur.cancel();
             for (SendEntry entry : cur.items) {
                 if (entry.canRequestPause()) {
-                    requestPause(entry);
+                    // Mark pendingAction only. it is a flying action.
+                    entry.pendingAction = SendEntry.PENDING_ACTION_END_PAUSE;
+                    updateJob(cur,entry);
                 }
             }
-            if(queue.remove(cur))
-                recentJobs.put(cur.id,cur);
+            if (queue.remove(cur))
+                recentJobs.put(cur.id, cur);
         }
     }
 
-    /** 拍快照并通过监听器回调到主线程（入队/出队/取消后调用）。 */
+    /**
+     * 拍快照并通过监听器回调到主线程（入队/出队/取消后调用）。
+     */
     private void emitQueueChanged() {
         List<SendJob> snapshot = new ArrayList<>(queue);
         mainHandler.post(() -> {
@@ -233,50 +261,35 @@ public class TransferManager {
         });
     }
 
-    /**
-     * 请求暂停一条记录。设置 PENDING_ACTION_END_PAUSE 中间状态，
-     * 等待 TransferProtocol 实际发送 CANCEL 帧后在 process() 中转为 IDLE_REASON_PAUSED。
-     */
-    public void requestPause(SendEntry record) {
-        if (record instanceof SendEntry) {
-            SendEntry sendEntry = (SendEntry) record;
-            if (!sendEntry.canRequestPause()) return;
-            sendEntry.pendingAction = SendEntry.PENDING_ACTION_END_PAUSE;
-            App.get().jobStore.updateStatus(sendEntry.id, sendEntry.status, sendEntry.idleReason, sendEntry.pendingAction);
-        }
-    }
-
     public void enqueue(SendJob job) {
         queue.offer(job);
         emitQueueChanged();
         LogX.d("enqueue job: " + job.displayName() + " -> " + job.host + ":" + job.port);
     }
 
-    public boolean resumeJob(String jobId){
+    public boolean resumeJob(String jobId) {
         SendJob job = recentJobs.get(jobId);
-        if(job!=null){
+        if (job != null) {
             // reset states
             boolean canResumeJob = false;
             for (var item :
                     job.items) {
-                if(item.canResume()){
+                if (item.canResume()) {
                     canResumeJob = true;
                     // reset paused item state
-                    if(item.pendingAction==SendEntry.PENDING_ACTION_END_RESUME){
+                    if (item.pendingAction == SendEntry.PENDING_ACTION_END_RESUME) {
                         item.status = SendEntry.STATUS_SENDING;
                         item.pendingAction = SendEntry.PENDING_ACTION_NONE;
-                        item.updateMillis = System.currentTimeMillis();
-                        job.updateMillis = System.currentTimeMillis();
-                        App.get().jobStore.updateStatus(item.id,item.status,item.idleReason, item.pendingAction);
+                        updateJob(job,item);
                     }
                 }
             }
-            if(canResumeJob){
+            if (canResumeJob) {
                 // reset job state and enqueue
                 job.isCancelRequested = false;
                 queue.offer(job);
                 emitQueueChanged();
-                LogX.d("resume job: " + job.displayName() + " -> " + job.deviceAddress() );
+                LogX.d("resume job: " + job.displayName() + " -> " + job.deviceAddress());
                 return true;
             }
         }
@@ -302,6 +315,7 @@ public class TransferManager {
             }
         }
     }
+
     private void process(SendJob job) {
         currentJob = job;
         deviceStore.setLatestJobId(job.host, job.port, job.id);
@@ -309,7 +323,7 @@ public class TransferManager {
             for (JobProgressListener l : progressListeners) l.onJobStarted(job);
         });
 
-        TransferClient client = new TransferClient(job.host,job.port);
+        TransferClient client = new TransferClient(job.deviceId, job.host, job.port);
         try {
             for (SendEntry item : job.items) {
                 if (this.currentJob.isCancelRequested()) {
@@ -318,13 +332,6 @@ public class TransferManager {
                 if (!item.canResume()) {
                     continue;
                 }
-                // 走到哪标记到哪
-                item.status = SendEntry.STATUS_SENDING;
-                item.updateMillis = System.currentTimeMillis();
-                job.updateMillis = System.currentTimeMillis();
-                jobStore.updateStatus(item.id, item.status, item.idleReason, item.pendingAction);
-                jobStore.updateProgress(item.id, 0, item.size);
-                lastProgressNotifyMs = 0;
 
                 // 复用连接，断开时自动重连
                 for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -335,14 +342,18 @@ public class TransferManager {
                         if (this.currentJob.isCancelRequested()) {
                             break;
                         }
-                        job.sendingItem =item;
+                        job.sendingItem = item;
                         sendItem(client, job, item);
+                        if (item.isSuccess()) {
+                            releasePfd(item.id);
+                        }
+                        if(!item.isSuccess()){
+                            job.cancel(); // skip rest of all
+                        }
                         break;
                     } catch (Exception e) {
                         // 连接断开，关闭以便下次重连
-                        if (client != null) {
-                            client.close();
-                        }
+                        client.close();
                         if (this.currentJob.isCancelRequested()) {
                             break;
                         }
@@ -350,9 +361,7 @@ public class TransferManager {
                         LogX.e("transfer attempt " + attempt + " for " + item.name + " failed: " + errMsg, e);
                         if (attempt >= MAX_ATTEMPTS) {
                             item.status = SendEntry.STATUS_IDLE;
-                            if (item.idleReason != SendEntry.IDLE_REASON_IO_ERROR) {
-                                item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
-                            }
+                            item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
                             if (item.errorMsg == null) {
                                 item.errorMsg = errMsg;
                             }
@@ -368,36 +377,17 @@ public class TransferManager {
                         }
                     }
                 }
-                updateJob(job, item);
-                if (item.isSuccess()) {
-                    releasePfd(item.id);
-                }
             }
         } catch (Throwable t) {
             LogX.e("unexpected error in transfer for job: " + job.displayName(), t);
         } finally {
-            if (client != null) {
-                client.close();
-            }
+            client.close();
             // 处理取消后的 pending action 状态转换
             for (SendEntry item : job.items) {
-                if (item.pendingAction == SendEntry.PENDING_ACTION_END_PAUSE) {
-                    // CANCEL 帧已发送，转为暂停状态
-                    item.status = SendEntry.STATUS_IDLE;
-                    item.idleReason = SendEntry.IDLE_REASON_PAUSED;
-                    item.pendingAction = SendEntry.PENDING_ACTION_NONE;
-                    updateJob(job, item);
-                } else if (item.pendingAction == SendEntry.PENDING_ACTION_END_RESUME
-                        && job.isCancelRequested()) {
-                    // 恢复请求中途被取消，回退到暂停状态
-                    item.status = SendEntry.STATUS_IDLE;
-                    item.idleReason = SendEntry.IDLE_REASON_PAUSED;
-                    item.pendingAction = SendEntry.PENDING_ACTION_NONE;
-                    updateJob(job, item);
-                }
+                clearFlayingState(job, item);
             }
             SendJob finished = currentJob;
-            recentJobs.put(currentJob.id,currentJob);
+            recentJobs.put(currentJob.id, currentJob);
             currentJob.sendingItem = null;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
             mainHandler.post(() -> {
@@ -405,11 +395,24 @@ public class TransferManager {
             });
         }
     }
+    private void clearFlayingState(SendJob job, SendEntry item){
+        if (item.pendingAction == SendEntry.PENDING_ACTION_END_PAUSE) {
+            item.status = SendEntry.STATUS_IDLE;
+            item.idleReason = SendEntry.IDLE_REASON_PAUSED;
+            item.pendingAction = SendEntry.PENDING_ACTION_NONE;
+        } else if (item.pendingAction == SendEntry.PENDING_ACTION_END_RESUME
+                && job.isCancelRequested()) {
+            // 恢复请求中途被取消，回退到暂停状态
+            item.status = SendEntry.STATUS_IDLE;
+            item.idleReason = SendEntry.IDLE_REASON_PAUSED;
+            item.pendingAction = SendEntry.PENDING_ACTION_NONE;
+        }
+    }
 
     private void sendItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
         client.connect();
         // 本连接首次：发送 JOB_INFO 获取 PC 授权
-        if (job.jobInfoResult == null) {
+        if (job.authResult == null) {
             // 计算 job 级别汇总（含当前已在 SENDING 的 item）
             int itemCount = 0;
             long totalBytes = 0;
@@ -427,14 +430,18 @@ public class TransferManager {
                 existingKey = session.key;
             }
 
+            item.status = SendEntry.STATUS_IDLE;
+            item.idleReason = SendEntry.IDLE_REASON_WAITING_REMOTE_APPROVAL;
+            updateJob(job, item);
+
             TransferClient.JobInfoResult result = client.sendJobInfoAndWaitRemoteApproval(job,
                     App.get().settingsStore.getDeviceId(),
                     existingKey,
                     job.id,
                     itemCount,
                     totalBytes);
-            job.jobInfoResult = result;
-            if (result!=null && result.accepted) {
+            job.authResult = result;
+            if (result != null && result.accepted) {
                 // 存下 PC 返回的 pairKey（可能新的或已有的）
                 if (result.pairKey != null && !result.pairKey.isEmpty()) {
                     PairSession ps = session != null ? session : new PairSession();
@@ -450,28 +457,41 @@ public class TransferManager {
                         + " credits=" + result.credits
                         + " maxItems=" + result.maxItemsPerJob
                         + " maxBytes=" + result.maxBytesPerJob);
-            } else if(result!=null) {
+
+                // reset to sending from waiting approval
+                item.status = SendEntry.STATUS_SENDING;
+                item.idleReason = SendEntry.IDLE_REASON_CREATED;
+                updateJob(job, item);
+            } else if (result != null) {
                 // PC 拒绝：标记当前 entry，和网络错误一样 cancel 即可
                 LogX.d("JOB_INFO rejected by " + client.pcDeviceId);
                 item.status = SendEntry.STATUS_IDLE;
                 item.idleReason = SendEntry.IDLE_REASON_REMOTE_REJECTED;
-                item.updateMillis = System.currentTimeMillis();
                 updateJob(job, item);
                 job.cancel();
                 return;
-            }
-            else if(job.isCancelRequested()){
-                LogX.d("JOB_INFO is canceled from local. jobId="+job.shortId());
+            } else if (job.isCancelRequested()) {
+                LogX.d("JOB_INFO is canceled from local. jobId=" + job.shortId());
                 item.status = SendEntry.STATUS_IDLE;
                 item.idleReason = SendEntry.IDLE_REASON_PAUSED;
-                item.updateMillis = System.currentTimeMillis();
                 updateJob(job, item);
                 return;
             }
         }
 
+        item.status = SendEntry.STATUS_SENDING;
+        job.updateMillis = System.currentTimeMillis();
+        updateJob(job,item);
+
+        lastProgressNotifyMs = 0;
+
         if (item.isText()) {
-            client.sendText(item.text, job.id, job.jobInfoResult.pairKey);
+            try(var in = new ByteArrayInputStream(item.text.getBytes(StandardCharsets.UTF_8))){
+                client.sendFileFromStream(job, item, in, job.authResult.pairKey,this);
+                item.status = SendEntry.STATUS_IDLE;
+                item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
+                updateJob(job, item);
+            };
         } else {
             // 优先通过 PFD→FileChannel 读文件（内核文件句柄，skip/seek 可靠，支持断点续传）
             if (item.id != null) {
@@ -479,71 +499,70 @@ public class TransferManager {
                 if (handle != null) {
                     try {
                         InputStream in = handle.newInputStream();
-                    client.sendFileFromStream(job,item, in,job.jobInfoResult.pairKey,
-                            (sent, total) -> {
-                                item.sentBytes = sent;
-                                item.totalBytes = total;
-                                onProgress(item);
-                            });
-                    return;
-                } catch (Exception e) {
-                    LogX.e("PFD send failed for " + item.name + ", fallback to URI", e);
+                        client.sendFileFromStream(job, item, in, job.authResult.pairKey,this);
+                        item.status = SendEntry.STATUS_IDLE;
+                        item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
+                        updateJob(job, item);
+                        return;
+                    } catch (Exception e) {
+                        LogX.e("PFD send failed for " + item.name + ", fallback to URI", e);
+                    }
                 }
             }
-        }
-        // 次选：从 content:// URI 直接读流发送
-        if (item.contentUri != null) {
-            Uri uri = Uri.parse(item.contentUri);
-            try (InputStream in = appContext.getContentResolver().openInputStream(uri)) {
-                if (in == null) {
-                    item.idleReason = SendEntry.IDLE_REASON_IO_ERROR;
-                    item.errorMsg = "Pfd丢失，无法读取：" + item.name;
-                    throw new Exception(item.errorMsg);
-                }
-                client.sendFileFromStream(job,item, in, job.jobInfoResult.pairKey,
-                        (sent, total) -> {
-                            item.sentBytes = sent;
-                            item.totalBytes = total;
-                            onProgress(item);
-                        });
-                return;
-            }
-        }
-        // 历史兼容：从本地 inbox 文件发送
-        if (item.localPath != null) {
-            File file = new File(item.localPath);
-            if (file.exists()) {
-                client.sendFile(job,item, file,job.jobInfoResult.pairKey,
-                        (sent, total) -> {
-                            item.sentBytes = sent;
-                            item.totalBytes = total;
-                            onProgress(item);
-                        });
+            // 历史兼容：从本地 inbox 文件发送
+            if (item.localPath != null) {
+                File file = new File(item.localPath);
+                if (file.exists()) {
+                    client.sendFile(job, item, file, job.authResult.pairKey,this);
+                    item.status = SendEntry.STATUS_IDLE;
+                    item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
+                    updateJob(job, item);
                     return;
                 }
             }
-        // 所有源都不可用 → IO 错误
-        item.idleReason = SendEntry.IDLE_REASON_IO_ERROR;
-        item.errorMsg = "无可读取的源：" + item.name;
-        throw new Exception(item.errorMsg);
-    }
+            // 所有源都不可用 → IO 错误
+            item.idleReason = SendEntry.IDLE_REASON_IO_ERROR;
+            item.errorMsg = "无可读取的源：" + item.name;
+            updateJob(job,item);
+        }
     }
 
-    /** 更新历史记录状态（发送成功后 / 取消 / 失败）。targetName 不覆盖，提交时已正确设置。 */
+    /**
+     * 更新历史记录状态（发送成功后 / 取消 / 失败）。targetName 不覆盖，提交时已正确设置。
+     */
     private void updateJob(SendJob job, SendEntry item) {
         long now = System.currentTimeMillis();
         item.updateMillis = now;
         job.updateMillis = now;
         jobStore.updateJobEntry(item.id, job.host, job.port,
-                null, item.status, item.idleReason, item.errorMsg, item.pendingAction, now);
+                null, item.status,item.sentBytes,item.totalBytes, item.idleReason, item.errorMsg, now);
         jobStore.upsertJob(job);
     }
+    public void onCanceled(SendEntry entry,long sent,long total) {
+        entry.sentBytes=sent;
+        entry.totalBytes = total;
+        entry.status = SendEntry.STATUS_IDLE;
+        entry.idleReason = SendEntry.IDLE_REASON_PAUSED;
+        updateJob(currentJob,entry);
+        SendJob job = currentJob;
+        if (job != null) {
+            mainHandler.post(() -> {
+                for (JobProgressListener l : progressListeners) l.onProgress(job);
+            });
+        }
+    }
 
-    private void onProgress(SendEntry entry) {
+    public void onProgress(SendEntry entry,long sent,long total) {
         SendEntry old = jobStore.getSendEntry(entry.id);
-        jobStore.updateProgress(entry.id, entry.sentBytes, entry.totalBytes);
+
+        entry.sentBytes=sent;
+        entry.totalBytes = total;
+        entry.status = SendEntry.STATUS_SENDING;
+        entry.idleReason = SendEntry.IDLE_REASON_CREATED;
+        updateJob(currentJob,entry);
+
         long now = System.currentTimeMillis();
-        var progressed = old.percent() != entry.percent();
+        var progressed = old.sentBytes != entry.sentBytes;
         if (!progressed || now - lastProgressNotifyMs < PROGRESS_THROTTLE_MS) {
             return;
         }
@@ -557,14 +576,17 @@ public class TransferManager {
             });
         }
     }
-
     // ---- PFD 管理：内核文件句柄，支持可靠的 skip/seek 断点续传 ----
 
-    /** 持有 PFD 及其 FileChannel，每次发送前重置位置。 */
+    /**
+     * 持有 PFD 及其 FileChannel，每次发送前重置位置。
+     */
     private static class PfdHandle {
         final ParcelFileDescriptor pfd;
         final FileChannel channel;
-        /** 保持引用防止 GC finalizer 意外关闭 FileDescriptor。 */
+        /**
+         * 保持引用防止 GC finalizer 意外关闭 FileDescriptor。
+         */
         @SuppressWarnings("unused")
         private final FileInputStream fisGuard;
 
@@ -574,25 +596,39 @@ public class TransferManager {
             this.channel = fisGuard.getChannel();
         }
 
-        /** 重置文件位置到 0 并返回新的 InputStream（不关闭底层 channel）。 */
+        /**
+         * 重置文件位置到 0 并返回新的 InputStream（不关闭底层 channel）。
+         */
         InputStream newInputStream() throws IOException {
             channel.position(0);
             InputStream raw = Channels.newInputStream(channel);
             return new FilterInputStream(raw) {
-                @Override public void close() throws IOException {
+                @Override
+                public void close() throws IOException {
                     // 不关闭底层 channel/PFD
                 }
             };
         }
 
         void close() {
-            try { channel.close(); } catch (Exception ignored) {}
-            try { fisGuard.close(); } catch (Exception ignored) {}
-            try { pfd.close(); } catch (Exception ignored) {}
+            try {
+                channel.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                fisGuard.close();
+            } catch (Exception ignored) {
+            }
+            try {
+                pfd.close();
+            } catch (Exception ignored) {
+            }
         }
     }
 
-    /** 为 SendEntry 注册 PFD（如果尚未注册）。 */
+    /**
+     * 为 SendEntry 注册 PFD（如果尚未注册）。
+     */
     public void registerPfdIfNeeded(String name, String transferId, ParcelFileDescriptor pfd) {
         pfdHandles.computeIfAbsent(transferId, id -> {
             try {
@@ -604,7 +640,9 @@ public class TransferManager {
         });
     }
 
-    /** 释放指定 transferId 的 PFD。 */
+    /**
+     * 释放指定 transferId 的 PFD。
+     */
     private void releasePfd(String transferId) {
         PfdHandle handle = pfdHandles.remove(transferId);
         if (handle != null) {
@@ -612,7 +650,9 @@ public class TransferManager {
         }
     }
 
-    /** 查询指定 transferId 是否仍有 PFD 可用（用于 UI 判断是否允许重试/继续）。 */
+    /**
+     * 查询指定 transferId 是否仍有 PFD 可用（用于 UI 判断是否允许重试/继续）。
+     */
     public boolean hasPfd(String transferId) {
         return transferId != null && pfdHandles.containsKey(transferId);
     }
