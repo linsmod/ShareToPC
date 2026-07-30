@@ -44,7 +44,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
     private ArrayAdapter<DiscoveredDevice> deviceAdapter;
     private List<SendEntry> pendingItems;
     private String jobId;
-    private boolean startedDiscoveryHere = false;
     private volatile boolean destroyed = false;
 
     private final NsdDiscoveryManager.Listener discoveryListener = list -> {
@@ -172,9 +171,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
 
     private void startDiscovery() {
         App.get().discoveryManager.addListener(discoveryListener);
-        startedDiscoveryHere = !App.get().discoveryManager.isDiscovering();
-        App.get().discoveryManager.startDiscovery(
-                App.get().settingsStore.getScanTimeoutSec() * 1000L);
         refreshDevices();
     }
 
@@ -255,9 +251,6 @@ public class ShareReceiverActivity extends AppCompatActivity {
     protected void onDestroy() {
         destroyed = true;
         App.get().discoveryManager.removeListener(discoveryListener);
-        if (startedDiscoveryHere) {
-            App.get().discoveryManager.stopDiscovery();
-        }
         pendingItems = null;
         super.onDestroy();
     }

@@ -401,7 +401,7 @@ public class MainActivity extends AppCompatActivity {
         } else {
             startService(serviceIntent);
         }
-        viewModel.startDiscovery();
+        viewModel.refreshDevices();
     }
 
     @Override

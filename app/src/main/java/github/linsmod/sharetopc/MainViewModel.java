@@ -203,9 +203,7 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     public void startDiscovery() {
-        app.discoveryManager.stopDiscovery();
         refreshDevices();
-        app.discoveryManager.startDiscovery(app.settingsStore.getScanTimeoutSec() * 1000L);
     }
 
     // ── 设备进度 ──────────────────────────────────────────

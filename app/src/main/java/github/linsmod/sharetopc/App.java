@@ -4,6 +4,11 @@ import android.app.Application;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.lifecycle.Lifecycle;
+import androidx.lifecycle.LifecycleObserver;
+import androidx.lifecycle.OnLifecycleEvent;
+import androidx.lifecycle.ProcessLifecycleOwner;
+
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -69,5 +74,23 @@ public class App extends Application {
         });
         // 创建前台服务通知渠道
         ShareForegroundService.createNotificationChannel(this);
+        // 前后台自动管理持续发现：前台启，后台停
+        bindLifecycleDiscovery();
+    }
+
+    private void bindLifecycleDiscovery() {
+        ProcessLifecycleOwner.get().getLifecycle().addObserver(new LifecycleObserver() {
+            @OnLifecycleEvent(Lifecycle.Event.ON_START)
+            void onForeground() {
+                LogX.d("App foreground → start NSD discovery");
+                discoveryManager.startDiscovery();
+            }
+
+            @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
+            void onBackground() {
+                LogX.d("App background → stop NSD discovery");
+                discoveryManager.stopDiscovery();
+            }
+        });
     }
 }

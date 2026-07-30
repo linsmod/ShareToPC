@@ -68,6 +68,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.lifecycle.viewmodel)
     implementation(libs.lifecycle.livedata)
+    implementation(libs.lifecycle.process)
     implementation(libs.work.runtime)
     implementation(libs.preference)
     implementation(libs.gson)

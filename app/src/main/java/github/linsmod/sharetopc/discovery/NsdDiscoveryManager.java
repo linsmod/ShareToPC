@@ -22,8 +22,6 @@ import github.linsmod.sharetopc.util.LogX;
 public class NsdDiscoveryManager {
 
     public static final String SERVICE_TYPE = "_mytransfer._tcp.";
-    /** 默认扫描窗口（兜底值；实际取设置项）。 */
-    public static final long DEFAULT_SCAN_TIMEOUT_MS = 30_000;
 
     public interface Listener {
         void onDevicesChanged(List<DiscoveredDevice> devices);
@@ -46,7 +44,6 @@ public class NsdDiscoveryManager {
 
     private NsdManager.DiscoveryListener discoveryListener;
     private boolean discovering = false;
-    private final Runnable timeoutStopTask = this::stopDiscovery;
 
     public NsdDiscoveryManager(Context context, DeviceStore deviceStore) {
         nsdManager = (NsdManager) context.getSystemService(Context.NSD_SERVICE);
@@ -102,12 +99,8 @@ public class NsdDiscoveryManager {
         return discovering;
     }
 
+    /** 开始持续扫描（前台长连接，由 App 层生命周期管理启停）。 */
     public synchronized void startDiscovery() {
-        startDiscovery(0);
-    }
-
-    /** 开始扫描；timeoutMs > 0 时到时自动停止。 */
-    public synchronized void startDiscovery(long timeoutMs) {
         if (discovering) {
             return;
         }
@@ -152,9 +145,6 @@ public class NsdDiscoveryManager {
         try {
             nsdManager.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, discoveryListener);
             notifyScanState(true);
-            if (timeoutMs > 0) {
-                mainHandler.postDelayed(timeoutStopTask, timeoutMs);
-            }
         } catch (Exception e) {
             discovering = false;
             LogX.e("discoverServices error", e);
@@ -167,7 +157,6 @@ public class NsdDiscoveryManager {
             return;
         }
         discovering = false;
-        mainHandler.removeCallbacks(timeoutStopTask);
         try {
             nsdManager.stopServiceDiscovery(discoveryListener);
         } catch (Exception e) {
