@@ -1,5 +1,7 @@
 package github.linsmod.sharetopc.ui;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -10,6 +12,7 @@ import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.FileProvider;
 
 import com.google.android.material.appbar.MaterialToolbar;
 
@@ -17,6 +20,12 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -48,6 +57,7 @@ public class LogViewerActivity extends AppCompatActivity implements LogX.OnLogLi
         tvLogs.setTypeface(getResources().getFont(R.font.jetbrains_mono));
         progressLog = findViewById(R.id.progressLog);
 
+        findViewById(R.id.btnShareLogs).setOnClickListener(v -> shareLogs());
         findViewById(R.id.btnClearLogs).setOnClickListener(v -> clearLogs());
 
         loadLogs();
@@ -113,6 +123,46 @@ public class LogViewerActivity extends AppCompatActivity implements LogX.OnLogLi
                 progressLog.setVisibility(View.GONE);
                 Toast.makeText(this, R.string.task_cleared, Toast.LENGTH_SHORT).show();
             });
+        });
+    }
+
+    private void shareLogs() {
+        progressLog.setVisibility(View.VISIBLE);
+        executor.execute(() -> {
+            try {
+                File src = getLogFile();
+                if (!src.exists() || src.length() == 0) {
+                    handler.post(() -> {
+                        progressLog.setVisibility(View.GONE);
+                        Toast.makeText(this, R.string.log_empty, Toast.LENGTH_SHORT).show();
+                    });
+                    return;
+                }
+                // 复制到缓存目录（FileProvider 只授权 cache-path）
+                String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+                File cacheDir = new File(getCacheDir(), "shared_logs");
+                cacheDir.mkdirs();
+                File dst = new File(cacheDir, "share_to_pc_" + ts + ".log");
+                Files.copy(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING);
+
+                Uri uri = FileProvider.getUriForFile(this,
+                        getPackageName() + ".fileprovider", dst);
+                Intent intent = new Intent(Intent.ACTION_SEND);
+                intent.setType("text/plain");
+                intent.putExtra(Intent.EXTRA_STREAM, uri);
+                intent.putExtra(Intent.EXTRA_SUBJECT, "ShareToPC 运行日志 " + ts);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+                handler.post(() -> {
+                    progressLog.setVisibility(View.GONE);
+                    startActivity(Intent.createChooser(intent, getString(R.string.log_share)));
+                });
+            } catch (IOException e) {
+                handler.post(() -> {
+                    progressLog.setVisibility(View.GONE);
+                    Toast.makeText(this, "分享失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
         });
     }
 

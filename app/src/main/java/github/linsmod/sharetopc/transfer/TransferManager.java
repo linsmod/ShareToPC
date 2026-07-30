@@ -280,10 +280,15 @@ public class TransferManager implements TransferProtocol.Progress {
     public boolean resumeJob(String jobId) {
         SendJob job = recentJobs.get(jobId);
         if (job != null) {
-            // reset states
             boolean canResumeJob = false;
-            for (var item :
-                    job.items) {
+            for (SendEntry item : job.items) {
+                // 飞行中的 PAUSE → RESUME 直接覆盖，取消暂停意向
+                if (item.pendingAction == SendEntry.PENDING_ACTION_END_PAUSE) {
+                    item.pendingAction = SendEntry.PENDING_ACTION_NONE;
+                    canResumeJob = true;
+                    updateJob(job, item);
+                    continue;
+                }
                 if (item.canResume()) {
                     canResumeJob = true;
                     // reset paused item state
@@ -295,9 +300,11 @@ public class TransferManager implements TransferProtocol.Progress {
                 }
             }
             if (canResumeJob) {
-                // reset job state and enqueue
+                // reset job state and enqueue（去重：已在队列中不再重复入队）
                 job.isCancelRequested = false;
-                queue.offer(job);
+                if (!queue.contains(job)) {
+                    queue.offer(job);
+                }
                 emitQueueChanged();
                 LogX.d("resume job: " + job.displayName() + " -> " + job.deviceAddress());
                 return true;

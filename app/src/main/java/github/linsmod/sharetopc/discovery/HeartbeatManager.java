@@ -214,16 +214,22 @@ public class HeartbeatManager {
                         String jobId = resp.has("jobId") && !resp.get("jobId").isJsonNull()
                                 ? resp.get("jobId").getAsString() : "";
                         LogX.d("Hb-" + device.address() + ": PAUSE job=" + jobId);
-                        if (messageListener != null)
-                            messageListener.onPause(device.host, device.port, jobId);
+                        MessageListener l = messageListener;
+                        if (l != null) {
+                            connectionPool.execute(() ->
+                                    l.onPause(device.host, device.port, jobId));
+                        }
                         continue;
                     }
                     if ("RESUME".equals(type)) {
                         String jobId = resp.has("jobId") && !resp.get("jobId").isJsonNull()
                                 ? resp.get("jobId").getAsString() : "";
                         LogX.d("Hb-" + device.address() + ": RESUME job=" + jobId);
-                        if (messageListener != null)
-                            messageListener.onResume(device.host, device.port, jobId);
+                        MessageListener l = messageListener;
+                        if (l != null) {
+                            connectionPool.execute(() ->
+                                    l.onResume(device.host, device.port, jobId));
+                        }
                         continue;
                     }
                     LogX.d("Hb-" + device.address() + ": unexpected type=" + type);
