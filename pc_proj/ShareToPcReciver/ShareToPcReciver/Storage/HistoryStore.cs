@@ -112,6 +112,28 @@ namespace ShareToPcReciver.Storage
             }
         }
 
+        /// <summary>检查 history 中是否已存在指定的 jobId。</summary>
+        public bool HasJobId(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId)) return false;
+            lock (_lock)
+            {
+                try
+                {
+                    if (!File.Exists(StorePath)) return false;
+                    string json = File.ReadAllText(StorePath);
+                    var entries = JsonSerializer.Deserialize<List<Entry>>(json);
+                    if (entries == null) return false;
+                    return entries.Any(e => e.JobId == jobId);
+                }
+                catch (Exception ex)
+                {
+                    Util.Log.Error("HistoryStore.HasJobId failed", ex);
+                    return false;
+                }
+            }
+        }
+
         private static Entry ToEntry(object item)
         {
             switch (item)

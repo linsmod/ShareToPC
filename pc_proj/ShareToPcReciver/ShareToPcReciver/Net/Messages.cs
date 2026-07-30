@@ -63,16 +63,16 @@ namespace ShareToPcReciver.Net
         public string Msg { get; set; } = "";
     }
 
-    public class PingMsg
+    public class PollMsg
     {
         [JsonPropertyName("type")]
-        public string Type => "PING";
+        public string Type => "POLL";
     }
 
-    public class PongMsg
+    public class BeatMsg
     {
         [JsonPropertyName("type")]
-        public string Type => "PONG";
+        public string Type => "BEAT";
     }
 
     public class CancelMsg

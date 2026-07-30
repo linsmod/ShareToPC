@@ -45,7 +45,7 @@ public final class TransferProtocol {
     private TransferProtocol() {
     }
 
-    /** 写无 payload 的帧（HELLO / TEXT / PING）。 */
+    /** 写无 payload 的帧（HELLO / TEXT / POLL）。 */
     public static void writeFrame(DataOutputStream out, JsonObject header) throws IOException {
         writeHeader(out, header);
         logSend(header);
@@ -126,7 +126,7 @@ public final class TransferProtocol {
         out.flush();
     }
 
-    /** 读一帧的 JSON 头（ACK / PONG 等无 payload 帧）。 */
+    /** 读一帧的 JSON 头（ACK / BEAT 等无 payload 帧）。 */
     public static JsonObject readHeader(DataInputStream in) throws IOException {
         int len = in.readInt();
         if (len <= 0 || len > MAX_HEADER_BYTES) {

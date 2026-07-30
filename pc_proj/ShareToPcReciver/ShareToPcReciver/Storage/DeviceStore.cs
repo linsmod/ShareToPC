@@ -39,6 +39,30 @@ namespace ShareToPcReciver.Storage
             }
         }
 
+        /// <summary>删除指定 deviceId 的设备记录。</summary>
+        public void DeleteDevice(string deviceId)
+        {
+            lock (_lock)
+            {
+                try
+                {
+                    var devices = LoadAll();
+                    devices.RemoveAll(d => d.DeviceId == deviceId || d.Address == deviceId);
+                    string json = JsonSerializer.Serialize(devices, new JsonSerializerOptions { WriteIndented = true });
+                    Directory.CreateDirectory(Path.GetDirectoryName(StorePath));
+                    string tmp = StorePath + ".tmp";
+                    File.WriteAllText(tmp, json);
+                    if (File.Exists(StorePath))
+                        File.Delete(StorePath);
+                    File.Move(tmp, StorePath);
+                }
+                catch (Exception ex)
+                {
+                    Util.Log.Error("Failed to delete device", ex);
+                }
+            }
+        }
+
         /// <summary>以 Address 为 key，保存或更新设备信息。</summary>
         public void SaveDevice(ClientInfo info)
         {

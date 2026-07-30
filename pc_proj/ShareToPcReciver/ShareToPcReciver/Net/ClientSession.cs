@@ -60,13 +60,12 @@ namespace ShareToPcReciver.Net
                         case "OBJECT":
                             await HandleObjectStream(stream, header, payloadLength);
                             break;
-                        case "PING":
-                            await HandlePing(stream);
+                        case "POLL":
+                            await HandlePoll(stream);
                             break;
                         case "JOB_INFO":
                             await HandleJobInfo(stream, header);
                             break;
-                            return;
                         default:
                             await Protocol.WriteAckAsync(stream, false, $"Unknown type: {type}", _ct);
                             return;
@@ -105,18 +104,19 @@ namespace ShareToPcReciver.Net
             }
         }
 
-        /// <summary>向客户端发送 OFFLINE 通知。</summary>
+        /// <summary>向客户端发送 OFFLINE 通知。通过 messages 队列投递，由 HandlePoll 统一发出，避免并发写 stream。</summary>
         public async Task SendOfflineAsync()
         {
             try
             {
-                var stream = _client.GetStream();
-                await Protocol.WriteOfflineAsync(stream, CancellationToken.None);
-                Util.Log.Info($"Sent OFFLINE to {clientDevice.DeviceName}");
+                var offline = new { type = "OFFLINE" };
+                string json = JsonSerializer.Serialize(offline);
+                messages.Enqueue(json);
+                Util.Log.Info($"Queued OFFLINE for {clientDevice.DeviceName}");
             }
             catch (Exception ex)
             {
-                Util.Log.Warn($"Failed to send OFFLINE to {clientDevice.DeviceName}: {ex.Message}");
+                Util.Log.Warn($"Failed to queue OFFLINE for {clientDevice.DeviceName}: {ex.Message}");
             }
         }
 
@@ -163,7 +163,7 @@ namespace ShareToPcReciver.Net
                 LastSeen = DateTime.UtcNow
             });
             if(!oneway)
-                await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _ct);
+                await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _config.HeartbeatIntervalMs, _ct);
         }
 
         private async Task HandleText(Stream stream, JsonElement header)
@@ -425,7 +425,8 @@ namespace ShareToPcReciver.Net
         private async Task HandleJobInfo(Stream stream, JsonElement header)
         {
             string deviceId = header.TryGetProperty("deviceId", out JsonElement did) ? did.GetString() ?? "" : "";
-            string device = header.TryGetProperty("device", out JsonElement div) ? div.GetString() ?? "" : "";
+            // 设备名直接用 HELLO 握手时的值，不需要 JOB_INFO 重复传
+            string device = this.clientDevice?.DeviceName ?? "";
             string pairKey = header.TryGetProperty("pairKey", out JsonElement pk) ? pk.GetString() ?? "" : "";
             string jobId = header.TryGetProperty("jobId", out JsonElement jid) ? jid.GetString() ?? "" : "";
             int itemCount = header.TryGetProperty("itemCount", out JsonElement ic) ? ic.GetInt32() : 0;
@@ -449,23 +450,27 @@ namespace ShareToPcReciver.Net
             if (reciverCanceled)
             {
                 Util.Log.Info($"JOB_INFO from {clientDevice.DeviceName} job={jobId} was canceled by receiver");
-                this.authResult = AuthResult.CreateRejected();
+                this.authResult = AuthResult.CreateCanceled();
             }
             else if (_server.PairStore.IsBlocked(deviceId))
             {
                 this.authResult = AuthResult.CreateRejected();
             }
+            else if (_server.HistoryStore.HasJobId(jobId)) {
+                this.authResult = AuthResult.CreateApproved();
+            }
             else
             {
                 PairStore.PairSession session = _server.PairStore.GetByDeviceId(deviceId);
-                if (session == null) {
-                    
+                if (session == null)
+                {
+
                     this.authResult = AuthResult.CreatePending(clientDevice.DeviceName, itemCount, totalBytes);
                     session = _server.CreateNewSession(deviceId, clientDevice.DeviceName, authResult);
                 }
                 else if (_server.PairStore.IsExpired(session))
                 {
-                    this.authResult = AuthResult.CreatePending(clientDevice.DeviceName,itemCount,totalBytes);
+                    this.authResult = AuthResult.CreatePending(clientDevice.DeviceName, itemCount, totalBytes);
                 }
                 else if (_server.PairStore.IsOutofCredits(session))
                 {
@@ -530,11 +535,24 @@ namespace ShareToPcReciver.Net
                     ? await tcs.Task
                     : AuthResult.CreateRejected();
             }
+            // 回复 JOB_ACK
+            // 本地判断是否新 Job：history 中不存在此 jobId 才是新 Job
+            bool isNewJob = !_server.HistoryStore.HasJobId(jobId);
+
             // ACCEPTED 且需要生成新 key（首次配对或 credits 不是默认）
             if (authResult.Status == "ACCEPTED")
             {
-                var session =  _server.DecreaseCredits(deviceId, authResult);
-                authResult.PairKey = session.Key;
+                if (isNewJob)
+                {
+                    var session = _server.DecreaseCredits(deviceId, authResult);
+                    authResult.PairKey = session.Key;
+                }
+                else
+                {
+                    Util.Log.Info($"JOB_INFO job={jobId} already exists in history, skip credits deduction");
+                    var session = _server.PairStore.GetByDeviceId(deviceId);
+                    authResult.PairKey = session?.Key ?? "";
+                }
 
                 Util.Log.Info($"JOB_INFO accepted for {clientDevice.DeviceName}, credits={authResult.Credits}");
             }
@@ -554,10 +572,19 @@ namespace ShareToPcReciver.Net
             }
         }
 
-
-        private async Task HandlePing(Stream stream)
+        AsyncBlockingQueue<String> messages = new AsyncBlockingQueue<String>();
+        /// <summary>收到 POLL 后进入心跳循环，定期推送 BEAT，或队列有消息时推送消息。</summary>
+        private async Task HandlePoll(Stream stream)
         {
-            await Protocol.WritePongAsync(stream, _ct);
+            var hbInterval = TimeSpan.FromMilliseconds(_config.HeartbeatIntervalMs);
+            while (true)
+            {
+                string msg = await messages.DequeueAsync(hbInterval, _ct);
+                if (string.IsNullOrEmpty(msg))
+                    await Protocol.WriteBeatAsync(stream, _ct);
+                else
+                    await Protocol.WriteSerializedMessageAsync(stream, msg, _ct);
+            }
         }
     }
 }

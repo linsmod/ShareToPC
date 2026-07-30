@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -25,20 +26,25 @@ import github.linsmod.sharetopc.transfer.TransferProtocol;
 import github.linsmod.sharetopc.util.LogX;
 
 /**
- * PING/PONG 心跳管理器：每个设备一条 TCP 长连接，用阻塞读代替 sleep 实现秒级断线感知。
+ * POLL/BEAT 心跳管理器：每个设备一条 TCP 长连接，用阻塞读接收服务端主动推送的 BEAT。
  * <p>
- * 检测机制：
+ * 机制：
  * <ul>
- *   <li>PING 后读 PONG（超时 10s）→ 无响应即离线</li>
- *   <li>PONG 后继续阻塞读（超时 = PING 间隔）→ 收到 OFFLINE 或连接断开即时感知</li>
- *   <li>每次收到 PONG 都 re-confirm 在线，修正 mDNS onServiceLost 等误标记</li>
+ *   <li>发 POLL 一次 → 服务端开始定期推 BEAT</li>
+ *   <li>阻塞读 BEAT → 收到即确认在线（修正 mDNS onServiceLost 误标记）</li>
+ *   <li>收到 OFFLINE 或读超时 → 判定离线</li>
  * </ul>
  */
 public class HeartbeatManager {
 
-    private static final long PING_INTERVAL_MS = 15_000;  // PING 间隔
-    private static final int CONNECT_TIMEOUT_MS = 5_000;   // TCP 建连超时
-    private static final int READ_TIMEOUT_MS = 10_000;     // PING 后等 PONG 的超时
+    private static final int CONNECT_TIMEOUT_MS = 5_000;      // TCP 建连超时
+    private static final int BEAT_TIMEOUT_MARGIN_MS = 5_000;  // 等 BEAT 比服务端心跳间隔多等 5 秒
+    private static final int DEFAULT_HB_INTERVAL_MS = 30_000; // 服务端未下发时的默认心跳间隔
+
+    // 指数退避重连：基础 2s，每次 ×2，上限 60s，加全抖动
+    private static final long BASE_DELAY_MS = 2_000;
+    private static final long MAX_DELAY_MS = 60_000;
+    private static final Random RANDOM = new Random();
 
     private final NsdDiscoveryManager discoveryManager;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -101,22 +107,31 @@ public class HeartbeatManager {
     // ---- 长连接循环 ----
 
     private void connectionLoop(DiscoveredDevice device) {
+        int attempt = 1;
         while (running) {
             try {
                 maintainConnection(device);
+                // 正常断开（OFFLINE / BEAT 超时）→ 重置计数，下次快速重连
+                attempt = 1;
             } catch (Exception e) {
+                // 连接异常 → 指数退避
                 LogX.d("Hb-" + device.address() + ": " + e.getMessage());
             }
             // maintainConnection 退出 = 断线，确保标记离线
             discoveryManager.markOffline(device.host, device.port);
-            // 稍等再重连
             if (running) {
-                try { Thread.sleep(PING_INTERVAL_MS); } catch (InterruptedException e) { break; }
+                long exponentialDelay = BASE_DELAY_MS * (1L << (attempt - 1)); // 2^(n-1)
+                int capped = (int) Math.min(MAX_DELAY_MS, exponentialDelay);
+                long jitter = (capped == 0) ? 0 : RANDOM.nextInt(capped + 1);
+                long delay = capped + jitter;
+                LogX.d("Hb-" + device.address() + ": reconnect #" + attempt + ", sleep " + delay + "ms");
+                try { Thread.sleep(delay); } catch (InterruptedException e) { break; }
+                attempt++;
             }
         }
     }
 
-    /** 建立并维护长连接。用阻塞读代替 sleep，即时感知 OFFLINE / 断线。 */
+    /** 建立并维护长连接：发 POLL 一次，阻塞读服务端推送的 BEAT。 */
     private void maintainConnection(DiscoveredDevice device) throws Exception {
         Socket socket = new Socket();
         try {
@@ -145,55 +160,49 @@ public class HeartbeatManager {
                 LogX.e("Hb-" + device.address() + ": HELLO handshake failed");
                 return;
             }
-            LogX.d("Hb-" + device.address() + ": HELLO OK, online now");
+            // 服务端下发心跳间隔，读 BEAT 超时 = hbInterval + 余量
+            long hbInterval = DEFAULT_HB_INTERVAL_MS;
+            if (ack.has("hbInterval") && !ack.get("hbInterval").isJsonNull()) {
+                hbInterval = ack.get("hbInterval").getAsLong();
+            }
+            int beatReadTimeout = (int) (hbInterval + BEAT_TIMEOUT_MARGIN_MS);
+            LogX.d("Hb-" + device.address() + ": HELLO OK, hbInterval=" + hbInterval + "ms");
 
             discoveryManager.markOnline(device.host, device.port);
 
+            // 发 POLL 一次，服务端收到后开始定期推送 BEAT
+            JsonObject poll = new JsonObject();
+            poll.addProperty("type", "POLL");
+            TransferProtocol.writeFrame(out, poll);
+
+            // 循环阻塞读 BEAT，直到断开或超时
             while (running) {
-                // ① 发 PING 等 PONG（超时 10s）
-                socket.setSoTimeout(READ_TIMEOUT_MS);
-                JsonObject ping = new JsonObject();
-                ping.addProperty("type", "PING");
-                TransferProtocol.writeFrame(out, ping);
-
-                JsonObject resp = TransferProtocol.readHeader(in);
-                String type = TransferProtocol.optString(resp, "type");
-
-                if ("OFFLINE".equals(type)) {
-                    LogX.d("Hb-" + device.address() + ": OFFLINE → server shutting down");
-                    discoveryManager.markOffline(device.host, device.port);
-                    return;
-                }
-                if (!"PONG".equals(type)) {
-                    LogX.d("Hb-" + device.address() + ": unexpected type=" + type);
-                    discoveryManager.markOffline(device.host, device.port);
-                    return;
-                }
-
-                // 收到 PONG → re-confirm 在线（修正 mDNS onServiceLost 误标记）
-                discoveryManager.markOnline(device.host, device.port);
-
-                // ② 阻塞等待下一个事件，超时 = PING 间隔
-                //     收到 OFFLINE → 立即处理
-                //     连接断开 → IOException → 外层 catch
-                //     超时 → 正常，该发下一个 PING 了
-                socket.setSoTimeout((int) PING_INTERVAL_MS);
+                socket.setSoTimeout(beatReadTimeout);
                 try {
-                    resp = TransferProtocol.readHeader(in);
-                    type = TransferProtocol.optString(resp, "type");
+                    JsonObject resp = TransferProtocol.readHeader(in);
+                    String type = TransferProtocol.optString(resp, "type");
+
                     if ("OFFLINE".equals(type)) {
-                        LogX.d("Hb-" + device.address() + ": OFFLINE (idle read)");
+                        LogX.d("Hb-" + device.address() + ": OFFLINE from server");
                         discoveryManager.markOffline(device.host, device.port);
                         return;
                     }
-                    LogX.d("Hb-" + device.address() + ": unsolicited type=" + type);
+                    if ("BEAT".equals(type)) {
+                        // 收到 BEAT → re-confirm 在线
+                        discoveryManager.markOnline(device.host, device.port);
+                        continue;
+                    }
+                    LogX.d("Hb-" + device.address() + ": unexpected type=" + type);
+                    discoveryManager.markOffline(device.host, device.port);
+                    return;
                 } catch (SocketTimeoutException e) {
-                    // 超时 = 空闲了 PING_INTERVAL_MS，该发下个 PING 了
+                    // 超时没收到 BEAT → 判定离线
+                    LogX.d("Hb-" + device.address() + ": BEAT timeout");
+                    return;
                 }
             }
         } catch (SocketTimeoutException e) {
-            // PING 后没等到 PONG
-            LogX.d("Hb-" + device.address() + ": PING timeout");
+            LogX.d("Hb-" + device.address() + ": BEAT timeout");
         } catch (IOException e) {
             LogX.d("Hb-" + device.address() + ": connection lost (" + e.getMessage() + ")");
         } finally {

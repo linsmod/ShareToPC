@@ -130,7 +130,7 @@ public class TransferManager implements TransferProtocol.Progress {
         }
 
         public boolean isAuthSuccess() {
-            return this.authResult != null && this.authResult.accepted;
+            return this.authResult != null && this.authResult.accepted();
         }
     }
 
@@ -271,9 +271,10 @@ public class TransferManager implements TransferProtocol.Progress {
     }
 
     public void enqueue(SendJob job) {
-        queue.offer(job);
-        emitQueueChanged();
-        LogX.d("enqueue job: " + job.displayName() + " -> " + job.host + ":" + job.port);
+        if(queue.offer(job)){
+            emitQueueChanged();
+            LogX.d("enqueue job: " + job.displayName() + " -> " + job.host + ":" + job.port);
+        }
     }
 
     public boolean resumeJob(String jobId) {
@@ -320,7 +321,7 @@ public class TransferManager implements TransferProtocol.Progress {
                 process(job);
             } catch (Throwable t) {
                 LogX.e("unhandled exception in consumeLoop, job="
-                        + (job != null ? job.displayName() : "null"), t);
+                        + job.displayName(), t);
             }
         }
     }
@@ -405,6 +406,7 @@ public class TransferManager implements TransferProtocol.Progress {
             }
             SendJob finished = currentJob;
             recentJobs.put(currentJob.id, currentJob);
+            currentJob.isCancelRequested = false;
             currentJob.sendingItem = null;
             currentJob.authResult = null;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
@@ -452,13 +454,12 @@ public class TransferManager implements TransferProtocol.Progress {
 
             TransferClient.JobInfoResult result = client.sendJobInfoAndWaitRemoteApproval(job,
                     App.get().settingsStore.getDeviceId(),
-                    App.get().settingsStore.getDeviceName(),
                     existingKey,
                     job.id,
                     itemCount,
                     totalBytes,this);
             job.authResult = result;
-            if (result != null && result.accepted) {
+            if (result != null && result.accepted()) {
                 // 存下 PC 返回的 pairKey（可能新的或已有的）
                 if (result.pairKey != null && !result.pairKey.isEmpty()) {
                     PairSession ps = session != null ? session : new PairSession();
@@ -479,16 +480,25 @@ public class TransferManager implements TransferProtocol.Progress {
                 item.status = SendEntry.STATUS_SENDING;
                 item.idleReason = SendEntry.IDLE_REASON_CREATED;
                 updateJob(job, item);
-            } else if (result != null) {
-                // PC 拒绝：标记当前 entry，和网络错误一样 cancel 即可
+            } else if (result != null && result.canceled()) {
+                // 对端用户取消传输
+                LogX.d("JOB_INFO canceled by remote device: " + client.pcDeviceId);
+                item.status = SendEntry.STATUS_IDLE;
+                item.idleReason = SendEntry.IDLE_REASON_PAUSED;
+                updateJob(job, item);
+                job.cancel(); // 取消后续，不影响用户重试/继续
+                return;
+            }
+            else if(result!=null){
+                // 对端拒绝
                 LogX.d("JOB_INFO rejected by " + client.pcDeviceId);
                 item.status = SendEntry.STATUS_IDLE;
                 item.idleReason = SendEntry.IDLE_REASON_REMOTE_REJECTED;
-                item.errorMsg = result.cancelJob? "Canceled by remote.":"Rejected by remote.";
                 updateJob(job, item);
                 job.cancel();
                 return;
-            } else if (job.isCancelRequested()) {
+            }
+            else if (job.isCancelRequested()) {
                 LogX.d("JOB_INFO is canceled from local. jobId=" + job.shortId());
                 item.status = SendEntry.STATUS_IDLE;
                 item.idleReason = SendEntry.IDLE_REASON_PAUSED;

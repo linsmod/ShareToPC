@@ -25,6 +25,7 @@ namespace ShareToPcReciver.Net
 
         public ReceiveStorage Storage { get; set; }
         public Storage.PairStore PairStore { get; set; }
+        public Storage.HistoryStore HistoryStore { get; set; }
         public AppConfig Config { get; }
 
         public event Action<ClientInfo> ClientConnected;
@@ -51,6 +52,15 @@ namespace ShareToPcReciver.Net
 
             internal AuthInfo authJobInfo { get; set; }
 
+            internal static AuthResult CreateApproved()
+            {
+                return new AuthResult
+                {
+                    Status = "ACCEPTED",
+                    PairKey = "",
+                };
+            }
+
             internal static AuthResult CreatePending(String deviceName,int itemCount,long totalBytes)
             {
                 return new AuthResult
@@ -64,7 +74,19 @@ namespace ShareToPcReciver.Net
                     TextAction = null
                 };
             }
-
+            internal static AuthResult CreateCanceled()
+            {
+                return new AuthResult
+                {
+                    Status = "CANCELED",
+                    PairKey = "",
+                    Credits = 0,
+                    MaxItemsPerJob = 0,
+                    MaxBytesPerJob = 0,
+                    ExpiresAt = 0,
+                    TextAction = null
+                };
+            }
             internal static AuthResult CreateRejected()
             {
                 return new AuthResult

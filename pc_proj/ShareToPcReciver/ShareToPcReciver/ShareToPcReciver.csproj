@@ -55,6 +55,8 @@
   <ItemGroup>
     <Compile Include="Config\AppConfig.cs" />
     <Compile Include="Net\AuthInfo.cs" />
+    <Compile Include="Net\AsyncBlockingQueue.cs" />
+    <Compile Include="Net\BlockingQueue.cs" />
     <Compile Include="Net\ClientSession.cs" />
     <Compile Include="Net\DeviceInfo.cs" />
     <Compile Include="Net\Messages.cs" />

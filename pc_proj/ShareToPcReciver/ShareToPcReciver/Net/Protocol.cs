@@ -56,10 +56,18 @@ namespace ShareToPcReciver.Net
             return (header, payloadLength,type);
         }
 
-        public static async Task WritePongAsync(Stream stream, CancellationToken ct)
+        public static async Task WriteBeatAsync(Stream stream, CancellationToken ct)
         {
-            var pong = new { type = "PONG" };
-            string json = JsonSerializer.Serialize(pong);
+            var beat = new { type = "BEAT" };
+            string json = JsonSerializer.Serialize(beat);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+        public static async Task WriteSerializedMessageAsync(Stream stream,String json, CancellationToken ct)
+        {
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
             await stream.WriteAsync(lenBytes, 0, 4, ct);
@@ -94,10 +102,10 @@ namespace ShareToPcReciver.Net
             await stream.FlushAsync(ct);
         }
 
-        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本、协议版本、设备 ID。</summary>
-        public static async Task WriteHelloAckAsync(Stream stream, string deviceId, CancellationToken ct)
+        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本、协议版本、设备 ID、心跳间隔。</summary>
+        public static async Task WriteHelloAckAsync(Stream stream, string deviceId, int hbIntervalMs, CancellationToken ct)
         {
-            var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion, deviceId }; 
+            var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion, deviceId, hbInterval = hbIntervalMs }; 
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

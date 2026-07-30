@@ -51,6 +51,7 @@ namespace ShareToPcReciver
             _storage = new ReceiveStorage(_config.SaveDir);
             _advertiser = new ServiceAdvertiser();
             _server = new TransferServer(_config, _storage, _pairStore);
+            _server.HistoryStore = _historyStore;
             _server.ClientConnected += OnClientConnected;
             _server.TextReceived += OnTextReceived;
             _server.FileReceived += OnFileReceived;
@@ -326,12 +327,13 @@ namespace ShareToPcReciver
                 using var dlg = new Form
                 {
                     Text = "文件传输请求",
-                    StartPosition = FormStartPosition.CenterParent,
+                    StartPosition = FormStartPosition.CenterScreen,
                     Size = new Size(440, 400),
                     FormBorderStyle = FormBorderStyle.FixedDialog,
                     MinimizeBox = false,
                     MaximizeBox = false,
-                    ShowInTaskbar = false
+                    ShowInTaskbar = false,
+                    TopMost = true
                 };
 
                 var label = new Label
@@ -449,7 +451,7 @@ namespace ShareToPcReciver
                 timer.Start();
                 dlg.Disposed += (s, ev) => { timer.Stop(); timer.Dispose(); };
 
-                var dr = dlg.ShowDialog(this);
+                var dr = dlg.ShowDialog();
                 timer.Stop();
 
                 if (dr == DialogResult.Abort)

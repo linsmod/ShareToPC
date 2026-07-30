@@ -182,21 +182,31 @@ public class TransferClient implements Closeable {
 
     /** JOB_INFO 交换结果。 */
     public static class JobInfoResult {
-        public final boolean accepted;
         public final String pairKey;
         public final int credits;
         public final int maxItemsPerJob;
         public final long maxBytesPerJob;
         public final boolean cancelJob;
+        private final String status;
 
-        public JobInfoResult(boolean accepted, String pairKey, int credits,
+        public JobInfoResult(String status, String pairKey, int credits,
                              int maxItemsPerJob, long maxBytesPerJob,boolean cancelJob) {
-            this.accepted = accepted;
+            this.status = status;
             this.pairKey = pairKey;
             this.credits = credits;
             this.maxItemsPerJob = maxItemsPerJob;
             this.maxBytesPerJob = maxBytesPerJob;
             this.cancelJob =cancelJob;
+        }
+        public final boolean accepted(){
+            return "ACCEPTED".equals(this.status);
+        }
+
+        /**
+         * @return is canceled by remote
+         */
+        public final boolean canceled(){
+            return "CANCELED".equals(this.status);
         }
     }
 
@@ -204,12 +214,11 @@ public class TransferClient implements Closeable {
      * 发送 JOB_INFO 帧，通知 PC 端本批次 job 的元信息，等待 PC 授权。
      * @return JobInfoResult，含 ACCEPTED/REJECTED 状态和 PC 返回的约束。
      */
-    public JobInfoResult sendJobInfoAndWaitRemoteApproval(TransferManager.SendJob job, String deviceId, String deviceName, String pairKey, String jobId,
+    public JobInfoResult sendJobInfoAndWaitRemoteApproval(TransferManager.SendJob job, String deviceId, String pairKey, String jobId,
                                                           int itemCount, long totalBytes, TransferProtocol.Progress progress) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "JOB_INFO");
         header.addProperty("deviceId", deviceId);
-        header.addProperty("device", deviceName);
         header.addProperty("pairKey", pairKey != null ? pairKey : "");
         header.addProperty("jobId", jobId != null ? jobId : "");
         header.addProperty("itemCount", itemCount);
@@ -284,10 +293,9 @@ public class TransferClient implements Closeable {
                 progress.onWaitingApproval(job.sendingItem);
             }
         }
-        if(job.isCancelRequested()){
+        if(ack == null || job.isCancelRequested()){
             return null;
         }
-        boolean accepted = "ACCEPTED".equals(status);
         String key = TransferProtocol.optString(ack, "pairKey");
         int credits = ack.has("credits") && !ack.get("credits").isJsonNull()
                 ? ack.get("credits").getAsInt() : 0;
@@ -296,7 +304,7 @@ public class TransferClient implements Closeable {
         boolean cancelJob = ack.has("cancelJob") && !ack.get("cancelJob").isJsonNull() && ack.get("cancelJob").getAsBoolean();
         long maxBytes = ack.has("maxBytesPerJob") && !ack.get("maxBytesPerJob").isJsonNull()
                 ? ack.get("maxBytesPerJob").getAsLong() : 0L;
-        return new JobInfoResult(accepted, key, credits, maxItems, maxBytes,cancelJob);
+        return new JobInfoResult(status, key, credits, maxItems, maxBytes,cancelJob);
     }
 
     @Override

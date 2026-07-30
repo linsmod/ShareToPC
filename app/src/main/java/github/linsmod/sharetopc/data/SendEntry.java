@@ -13,7 +13,7 @@ public class SendEntry {
     public static final int IDLE_REASON_NET_ERROR=3;
     public static final int IDLE_REASON_IO_ERROR=4;
     public static final int IDLE_REASON_REMOTE_REJECTED=5; // remote rejected by user or config.
-    public static final int IDLE_REASON_WAITING_REMOTE_APPROVAL = 6;
+    public static final int IDLE_REASON_WAITING_REMOTE_APPROVAL = 7;
     public static final int IDLE_REASON_SUCCESS =100;
 
     public static final int PENDING_ACTION_NONE=0;

@@ -40,6 +40,8 @@ namespace ShareToPcReciver.Config
         public ArrivalAction FileAction { get; set; } = ArrivalAction.None;
         public bool ShowBalloon { get; set; } = true;
         public bool RunAtStartup { get; set; } = false;
+        /// <summary>心跳间隔（毫秒），服务端据此发送 BEAT，并下发给客户端。默认 30000ms。</summary>
+        public int HeartbeatIntervalMs { get; set; } = 30000;
         /// <summary>本机设备唯一 ID，首次启动自动生成。</summary>
         public string DeviceId { get; set; } = Guid.NewGuid().ToString();
 

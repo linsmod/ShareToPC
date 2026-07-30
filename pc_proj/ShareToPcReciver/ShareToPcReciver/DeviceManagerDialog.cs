@@ -17,6 +17,7 @@ namespace ShareToPcReciver
         private Button btnEdit;
         private Button btnBlock;
         private Button btnDeleteAuth;
+        private Button btnDeleteDevice;
         private Button btnClose;
 
         /// <summary>
@@ -75,13 +76,6 @@ namespace ShareToPcReciver
                 HeaderText = "设备ID",
                 FillWeight = 20,
                 MinimumWidth = 100
-            });
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colAuth",
-                HeaderText = "授权类型",
-                FillWeight = 15,
-                MinimumWidth = 80
             });
             this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
             {
@@ -154,6 +148,18 @@ namespace ShareToPcReciver
             this.btnDeleteAuth.UseVisualStyleBackColor = true;
             this.btnDeleteAuth.Click += BtnDeleteAuth_Click;
 
+            // btnDeleteDevice
+            this.btnDeleteDevice = new Button
+            {
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+                Enabled = false,
+                Location = new Point(280, 342),
+                Size = new Size(100, 28),
+                Text = "删除设备",
+                UseVisualStyleBackColor = true
+            };
+            this.btnDeleteDevice.Click += BtnDeleteDevice_Click;
+
             // btnClose
             this.btnClose.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             this.btnClose.DialogResult = DialogResult.OK;
@@ -169,6 +175,7 @@ namespace ShareToPcReciver
             this.Controls.Add(this.btnEdit);
             this.Controls.Add(this.btnBlock);
             this.Controls.Add(this.btnDeleteAuth);
+            this.Controls.Add(this.btnDeleteDevice);
             this.Controls.Add(this.dgvDevices);
             this.AcceptButton = this.btnClose;
             this.CancelButton = this.btnClose;
@@ -228,7 +235,6 @@ namespace ShareToPcReciver
                 string name = nameMap.TryGetValue(deviceId, out var n) ? n : deviceId;
                 string lastSeen = deviceSeenMap.TryGetValue(deviceId, out var ls) ? FormatTime(ls) : "-";
 
-                string authType;
                 string credits;
                 string issuedAt;
                 string expiresAt;
@@ -240,19 +246,16 @@ namespace ShareToPcReciver
 
                     if (pair.Credits == -1)
                     {
-                        authType = expired ? "永久授权（已过期）" : "永久授权";
                         credits = expired ? "-" : "不限次数";
                         rowColor = expired ? Color.FromArgb(255, 230, 230) : Color.FromArgb(230, 255, 230);
                     }
                     else if (pair.Credits > 0)
                     {
-                        authType = "单次授权";
                         credits = pair.Credits.ToString();
                         rowColor = Color.FromArgb(255, 255, 230);
                     }
                     else
                     {
-                        authType = "已过期";
                         credits = "0";
                         rowColor = Color.FromArgb(255, 230, 230);
                     }
@@ -263,7 +266,6 @@ namespace ShareToPcReciver
                 }
                 else
                 {
-                    authType = "未授权";
                     credits = "-";
                     issuedAt = "-";
                     expiresAt = "-";
@@ -276,7 +278,7 @@ namespace ShareToPcReciver
                 if (isBlocked)
                     rowColor = Color.FromArgb(255, 200, 200); // 拉黑用红色背景
 
-                var rowIdx = dgvDevices.Rows.Add(name, deviceId, authType, credits, issuedAt, expiresAt, lastSeen, blockedText);
+                var rowIdx = dgvDevices.Rows.Add(name, deviceId, credits, issuedAt, expiresAt, lastSeen, blockedText);
                 dgvDevices.Rows[rowIdx].DefaultCellStyle.BackColor = rowColor;
                 dgvDevices.Rows[rowIdx].Tag = pair;
             }
@@ -287,7 +289,7 @@ namespace ShareToPcReciver
                 string name = d.Name.Length > 0 ? d.Name : d.Address;
                 string lastSeen = d.LastSeen != default ? FormatTime(d.LastSeen) : "-";
                 var isBlocked = _pairStore.IsBlocked(d.Address);
-                var rowIdx = dgvDevices.Rows.Add(name, d.Address, "未授权（旧版本）", "-", "-", "-", lastSeen, isBlocked ? "已拉黑" : "-");
+                var rowIdx = dgvDevices.Rows.Add(name, d.Address, "-", "-", "-", lastSeen, isBlocked ? "已拉黑" : "-");
                 dgvDevices.Rows[rowIdx].DefaultCellStyle.BackColor = isBlocked ? Color.FromArgb(255, 200, 200) : SystemColors.Control;
                 dgvDevices.Rows[rowIdx].Tag = null;
             }
@@ -522,6 +524,7 @@ namespace ShareToPcReciver
                 bool hasPair = tag is PairStore.PairSession;
                 btnEdit.Enabled = true; // 编辑始终可用
                 btnDeleteAuth.Enabled = hasPair;
+                btnDeleteDevice.Enabled = true; // 删除设备记录始终可用
                 btnBlock.Enabled = true; // 拉黑始终可用（设备级）
                 string deviceId = dgvDevices.SelectedRows[0].Cells["colDeviceId"].Value?.ToString() ?? "";
                 btnBlock.Text = _pairStore.IsBlocked(deviceId) ? "取消拉黑" : "拉黑";
@@ -530,6 +533,7 @@ namespace ShareToPcReciver
             {
                 btnEdit.Enabled = false;
                 btnDeleteAuth.Enabled = false;
+                btnDeleteDevice.Enabled = false;
                 btnBlock.Enabled = false;
             }
         }
@@ -568,6 +572,31 @@ namespace ShareToPcReciver
             if (result == DialogResult.OK)
             {
                 _pairStore.Delete(session.DeviceId);
+                LoadDevices();
+                dgvDevices.ClearSelection();
+                UpdateButtonState();
+            }
+        }
+
+        private void BtnDeleteDevice_Click(object sender, EventArgs e)
+        {
+            if (dgvDevices.SelectedRows.Count == 0)
+                return;
+
+            var row = dgvDevices.SelectedRows[0];
+            string deviceId = row.Cells["colDeviceId"].Value?.ToString() ?? "";
+            string deviceName = row.Cells["colName"].Value?.ToString() ?? deviceId;
+
+            var result = MessageBox.Show(
+                "确定要删除 \"" + deviceName + "\" 的设备记录吗？\n\n此操作将同时清除该设备的连接记录和授权信息。",
+                "删除设备记录", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning);
+
+            if (result == DialogResult.OK)
+            {
+                // 同时删除授权记录和设备记录
+                if (row.Tag is PairStore.PairSession session)
+                    _pairStore.Delete(session.DeviceId);
+                _deviceStore?.DeleteDevice(deviceId);
                 LoadDevices();
                 dgvDevices.ClearSelection();
                 UpdateButtonState();
