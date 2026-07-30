@@ -948,7 +948,7 @@ namespace ShareToPcReciver
             var result = new List<object>();
             foreach (ListViewItem item in lvHistory.SelectedItems)
             {
-                if (item.Tag is ReceivedFile || item.Tag is ReceivedText)
+                if (item.Tag is ReceivedFile || item.Tag is ReceivedText || item.Tag is FileProgressInfo)
                     result.Add(item.Tag);
             }
             return result;
@@ -1004,27 +1004,27 @@ namespace ShareToPcReciver
             bool singleSelect = selected.Count == 1;
             object record = selected[0];
             bool isFile = record is ReceivedFile;
-            bool isActiveTransfer = lvHistory.SelectedItems.Count > 0
-                && ReferenceEquals(lvHistory.SelectedItems[0], _activeRow);
+            bool isActiveTransfer = record is FileProgressInfo;
             bool fileExists = isFile
                 && !string.IsNullOrEmpty(((ReceivedFile)record).FilePath)
                 && File.Exists(((ReceivedFile)record).FilePath);
 
-            // 单条时显示操作类菜单
+            // 单条时显示操作类菜单（传输中不适用）
             menuOpenFile.Visible = singleSelect && isFile;
             menuOpenFile.Enabled = fileExists;
             menuOpenFolder.Visible = singleSelect && isFile;
             menuOpenFolder.Enabled = fileExists;
             menuCopyContent.Text = singleSelect && isFile ? "复制文件路径" : "复制文本";
-            menuCopyContent.Visible = singleSelect;
-            menuViewDetail.Visible = singleSelect && !isFile;
+            menuCopyContent.Visible = singleSelect && !isActiveTransfer;
+            menuViewDetail.Visible = singleSelect && !isFile && !isActiveTransfer;
 
-            // 取消传输菜单：仅对正在进行传输的行显示
-            menuCancelTransfer.Visible = singleSelect && isActiveTransfer;
-            menuSeparator2.Visible = menuCancelTransfer.Visible;
+            // 取消/继续传输菜单
+            bool isCancelledTransfer = isActiveTransfer && ((FileProgressInfo)record).Cancelled;
+            menuCancelTransfer.Visible = singleSelect && isActiveTransfer && !isCancelledTransfer;
+            menuContinueTransfer.Visible = singleSelect && isCancelledTransfer;
+            menuSeparator1.Visible = !isActiveTransfer || isCancelledTransfer;
 
             // 删除菜单始终可见
-            menuSeparator1.Visible = true;
             int n = selected.Count;
             menuDeleteRecord.Text = singleSelect ? "删除记录" : $"删除 {n} 条记录";
 
@@ -1074,8 +1074,21 @@ namespace ShareToPcReciver
 
         private void MenuCancelTransfer_Click(object sender, EventArgs e)
         {
+            // 从选中行提取 jobId 并标记为已取消，Android 重发时会收到 reciverCanceled=true
+            if (GetSelectedRecord() is FileProgressInfo pi && !string.IsNullOrEmpty(pi.JobId))
+                _server.MarkJobCanceled(pi.JobId);
+
             _server.DisconnectAllSessions();
             UpdateStatus("已取消当前传输", Color.Black);
+        }
+
+        private void MenuContinueTransfer_Click(object sender, EventArgs e)
+        {
+            // 清除取消标记，Android 重发 JOB_INFO 时不再返回 reciverCanceled=true
+            if (GetSelectedRecord() is FileProgressInfo pi && !string.IsNullOrEmpty(pi.JobId))
+                _server.ClearJobCanceled(pi.JobId);
+
+            UpdateStatus("已允许继续传输，请在手机上重试", Color.Black);
         }
 
         private void MenuDeleteRecord_Click(object sender, EventArgs e)

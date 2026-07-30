@@ -231,6 +231,33 @@ namespace ShareToPcReciver.Net
             FileProgressChanged?.Invoke(info);
         }
 
+        private readonly HashSet<string> _canceledJobs = new HashSet<string>();
+        private readonly object _canceledJobsLock = new object();
+
+        /// <summary>标记 job 已被接收方取消，Android 重发 JOB_INFO 时会收到 reciverCanceled=true。</summary>
+        public void MarkJobCanceled(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId)) return;
+            lock (_canceledJobsLock)
+                _canceledJobs.Add(jobId);
+        }
+
+        /// <summary>检查 job 是否已被接收方取消。</summary>
+        public bool IsJobCanceled(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId)) return false;
+            lock (_canceledJobsLock)
+                return _canceledJobs.Contains(jobId);
+        }
+
+        /// <summary>清除 job 的取消标记，允许 Android 重连后继续传输。</summary>
+        public void ClearJobCanceled(string jobId)
+        {
+            if (string.IsNullOrEmpty(jobId)) return;
+            lock (_canceledJobsLock)
+                _canceledJobs.Remove(jobId);
+        }
+
         /// <summary>断开所有活跃会话。</summary>
         public void DisconnectAllSessions()
         {

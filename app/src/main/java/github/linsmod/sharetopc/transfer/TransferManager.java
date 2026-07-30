@@ -138,7 +138,6 @@ public class TransferManager implements TransferProtocol.Progress {
     private static final long BASE_DELAY_MS = 2000;     // 基础间隔 2s
     private static final long MAX_DELAY_MS = 60000;     // 最大上限 60s（防止无限膨胀）
     private static final Random RANDOM = new Random();  // 用于抖动
-    private static final long RETRY_DELAY_MS = 2000;
     private static final long PROGRESS_THROTTLE_MS = 500; // 进度刷新最小间隔
 
     private final BlockingQueue<SendJob> queue = new LinkedBlockingQueue<>();
@@ -355,7 +354,7 @@ public class TransferManager implements TransferProtocol.Progress {
                         if (item.isSuccess()) {
                             releasePfd(item.id);
                         }
-                        if (!item.isSuccess()) {
+                        else{
                             job.cancel(); // skip rest of all
                         }
                         break;
@@ -379,7 +378,13 @@ public class TransferManager implements TransferProtocol.Progress {
                         }
                         if (attempt < MAX_ATTEMPTS) {
                             long exponentialDelay = BASE_DELAY_MS * (1L << (attempt - 1)); // 2^(n-1)
-                            long delay = Math.min(MAX_DELAY_MS, exponentialDelay);
+                            int capped = (int)Math.min(MAX_DELAY_MS, exponentialDelay);
+
+                            // 生成 [0, capped] 之间的随机毫秒数（全抖动）
+                            long delay = (capped == 0) ? 0 : RANDOM.nextInt(capped + 1);
+
+                            // 如果想保底至少 1s（避免重试太频繁），可以再加一层：
+                            // delay = Math.max(1000, delay);
                             LogX.e("Sleep "+delay+"ms before next attempt");
                             try {
                                 Thread.sleep(delay);
@@ -445,17 +450,13 @@ public class TransferManager implements TransferProtocol.Progress {
                 existingKey = session.key;
             }
 
-            item.status = SendEntry.STATUS_IDLE;
-            item.idleReason = SendEntry.IDLE_REASON_WAITING_REMOTE_APPROVAL;
-            updateJob(job, item);
-
             TransferClient.JobInfoResult result = client.sendJobInfoAndWaitRemoteApproval(job,
                     App.get().settingsStore.getDeviceId(),
                     App.get().settingsStore.getDeviceName(),
                     existingKey,
                     job.id,
                     itemCount,
-                    totalBytes);
+                    totalBytes,this);
             job.authResult = result;
             if (result != null && result.accepted) {
                 // 存下 PC 返回的 pairKey（可能新的或已有的）
@@ -483,6 +484,7 @@ public class TransferManager implements TransferProtocol.Progress {
                 LogX.d("JOB_INFO rejected by " + client.pcDeviceId);
                 item.status = SendEntry.STATUS_IDLE;
                 item.idleReason = SendEntry.IDLE_REASON_REMOTE_REJECTED;
+                item.errorMsg = result.cancelJob? "Canceled by remote.":"Rejected by remote.";
                 updateJob(job, item);
                 job.cancel();
                 return;
@@ -577,6 +579,19 @@ public class TransferManager implements TransferProtocol.Progress {
         }
     }
 
+    @Override
+    public void onWaitingApproval(SendEntry entry) {
+        entry.status = SendEntry.STATUS_IDLE;
+        entry.idleReason = SendEntry.IDLE_REASON_WAITING_REMOTE_APPROVAL;
+        updateJob(currentJob, entry);
+        SendJob job = currentJob;
+        if (job != null) {
+            mainHandler.post(() -> {
+                for (JobProgressListener l : progressListeners) l.onProgress(job);
+            });
+        }
+    }
+
     public void onProgress(SendEntry entry, long sent, long total) {
         SendEntry old = jobStore.getSendEntry(entry.id);
 
@@ -587,7 +602,7 @@ public class TransferManager implements TransferProtocol.Progress {
         updateJob(currentJob, entry);
 
         long now = System.currentTimeMillis();
-        var progressed = old.sentBytes != entry.sentBytes;
+        var progressed = old.sentBytes != entry.sentBytes || old.status!=entry.status|| old.idleReason!=entry.idleReason;
         if (!progressed || now - lastProgressNotifyMs < PROGRESS_THROTTLE_MS) {
             return;
         }

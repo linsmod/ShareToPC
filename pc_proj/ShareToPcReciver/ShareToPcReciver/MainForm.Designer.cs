@@ -49,6 +49,7 @@ namespace ShareToPcReciver
             this.menuViewDetail = new System.Windows.Forms.ToolStripMenuItem();
             this.menuSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.menuCancelTransfer = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuContinueTransfer = new System.Windows.Forms.ToolStripMenuItem();
             this.menuSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.menuDeleteRecord = new System.Windows.Forms.ToolStripMenuItem();
             this.menuDeleteWithFile = new System.Windows.Forms.ToolStripMenuItem();
@@ -242,6 +243,7 @@ namespace ShareToPcReciver
             this.menuViewDetail,
             this.menuSeparator1,
             this.menuCancelTransfer,
+            this.menuContinueTransfer,
             this.menuSeparator2,
             this.menuDeleteRecord,
             this.menuDeleteWithFile});
@@ -288,6 +290,13 @@ namespace ShareToPcReciver
             this.menuCancelTransfer.Size = new System.Drawing.Size(180, 22);
             this.menuCancelTransfer.Text = "取消传输";
             this.menuCancelTransfer.Click += new System.EventHandler(this.MenuCancelTransfer_Click);
+            // 
+            // menuContinueTransfer
+            // 
+            this.menuContinueTransfer.Name = "menuContinueTransfer";
+            this.menuContinueTransfer.Size = new System.Drawing.Size(180, 22);
+            this.menuContinueTransfer.Text = "继续传输";
+            this.menuContinueTransfer.Click += new System.EventHandler(this.MenuContinueTransfer_Click);
             // 
             // menuSeparator2
             // 
@@ -361,6 +370,7 @@ namespace ShareToPcReciver
         private System.Windows.Forms.ToolStripMenuItem menuViewDetail;
         private System.Windows.Forms.ToolStripSeparator menuSeparator1;
         private System.Windows.Forms.ToolStripMenuItem menuCancelTransfer;
+        private System.Windows.Forms.ToolStripMenuItem menuContinueTransfer;
         private System.Windows.Forms.ToolStripSeparator menuSeparator2;
         private System.Windows.Forms.ToolStripMenuItem menuDeleteRecord;
         private System.Windows.Forms.ToolStripMenuItem menuDeleteWithFile;

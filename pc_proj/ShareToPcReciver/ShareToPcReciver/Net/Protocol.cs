@@ -119,13 +119,13 @@ namespace ShareToPcReciver.Net
         }
         public static async Task WriteJobAckAsync(Stream stream,AuthResult session, CancellationToken ct)
         { 
-            await WriteJobAckAsync(stream, session.Status, session.PairKey, session.Credits, session.MaxItemsPerJob, session.MaxBytesPerJob, ct);
+            await WriteJobAckAsync(stream, session.Status, session.PairKey, session.Credits, session.MaxItemsPerJob, session.MaxBytesPerJob, false, ct);
         }
         /// <summary>发送 JOB_ACK 响应，返回授权结果及约束。</summary>
         public static async Task WriteJobAckAsync(Stream stream, string status, string pairKey,
-            int credits, int maxItemsPerJob, long maxBytesPerJob, CancellationToken ct)
+            int credits, int maxItemsPerJob, long maxBytesPerJob, bool reciverCanceled, CancellationToken ct)
         {
-            var ack = new { type = "JOB_ACK", status, pairKey = pairKey ?? "", credits, maxItemsPerJob, maxBytesPerJob };
+            var ack = new { type = "JOB_ACK", status, pairKey = pairKey ?? "", credits, maxItemsPerJob, maxBytesPerJob, stopRetry=reciverCanceled };
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

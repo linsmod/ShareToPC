@@ -33,6 +33,7 @@ public final class TransferProtocol {
         void onCanceled(SendEntry entry, long sentBytes, long totalBytes);
 
         void onFinish(SendEntry entry, long sentBytes, long totalBytes);
+        void onWaitingApproval(SendEntry entry);
     }
 
     /** 供 writeFileFrame 在 chunk 间检查是否取消。 */
@@ -92,9 +93,6 @@ public final class TransferProtocol {
         boolean firstChunk = true;
         while ((n = contentStream.read(buf)) != -1) {
             if (cancellable != null && cancellable.isCancelRequested()) {
-                // 简化
-//                JsonObject cancel = createCancelHeader();
-//                writeFrame(out, cancel);
                 out.flush();
                 if (progress != null) {
                     progress.onCanceled(entry,startOffset + sent, total > 0 ? total : startOffset + sent);

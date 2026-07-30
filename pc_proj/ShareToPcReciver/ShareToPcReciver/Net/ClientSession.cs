@@ -444,7 +444,14 @@ namespace ShareToPcReciver.Net
             Util.Log.Info($"JOB_INFO raw JSON: {header.GetRawText()}");
             Util.Log.Info($"JOB_INFO from {clientDevice.DeviceName}: id={deviceId} key={pairKey} job={jobId} items={itemCount} bytes={totalBytes}");
 
-            if (_server.PairStore.IsBlocked(deviceId))
+            // 检查 PC 侧是否已取消此 job
+            bool reciverCanceled = _server.IsJobCanceled(jobId);
+            if (reciverCanceled)
+            {
+                Util.Log.Info($"JOB_INFO from {clientDevice.DeviceName} job={jobId} was canceled by receiver");
+                this.authResult = AuthResult.CreateRejected();
+            }
+            else if (_server.PairStore.IsBlocked(deviceId))
             {
                 this.authResult = AuthResult.CreateRejected();
             }
@@ -538,7 +545,7 @@ namespace ShareToPcReciver.Net
 
             // 回复 JOB_ACK
             await Protocol.WriteJobAckAsync(stream, authResult.Status, authResult.PairKey,
-                authResult.Credits, authResult.MaxItemsPerJob, authResult.MaxBytesPerJob, _ct);
+                authResult.Credits, authResult.MaxItemsPerJob, authResult.MaxBytesPerJob, reciverCanceled, _ct);
 
             // 拒绝后断开连接，Android 端收到 JOB_ACK(REJECTED) 后 cancel job
             if (authResult.Status != "ACCEPTED")
