@@ -90,8 +90,8 @@ public final class TransferProtocol {
         boolean firstChunk = true;
         while ((n = contentStream.read(buf)) != -1) {
             if (cancellable != null && cancellable.isCancelRequested()) {
-                JsonObject cancel = createCancelHeader();
-                writeFrame(out, cancel);
+//                JsonObject cancel = createCancelHeader();
+//                writeFrame(out, cancel);
                 out.flush();
                 if (progress != null) {
                     progress.onCanceled(entry,startOffset + sent, total > 0 ? total : startOffset + sent);

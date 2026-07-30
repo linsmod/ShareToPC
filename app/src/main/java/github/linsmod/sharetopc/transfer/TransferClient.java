@@ -31,7 +31,6 @@ public class TransferClient implements Closeable {
     public static final int CONNECTING = 1;
     public static final int CONNECTED = 2;
     public static final int CONNECTION_LOST = 3;
-    boolean isBadProtocolDetected;
 
     public TransferClient(String remoteDeviceId, String host, int port) {
         this.pcDeviceId = remoteDeviceId;
@@ -72,19 +71,6 @@ public class TransferClient implements Closeable {
         }
     }
 
-    public void sendText(String text, String jobId,String key) throws IOException {
-        JsonObject header = new JsonObject();
-        header.addProperty("type", "TEXT");
-        header.addProperty("text", text);
-        header.addProperty("key", key);
-        header.addProperty("time", System.currentTimeMillis());
-        if (jobId != null) {
-            header.addProperty("jobId", jobId);
-        }
-        TransferProtocol.writeFrame(out, header);
-        expectAck();
-    }
-
     /** 从 File 读文件发送（历史兼容：本地 inbox 仍有副本时使用）。 */
     public void sendFile(TransferManager.SendJob job, SendEntry entry, File file,String pairKey,
                          TransferProtocol.Progress progress) throws IOException {
@@ -99,11 +85,13 @@ public class TransferClient implements Closeable {
                                    String pairKey,
                                    TransferProtocol.Progress progress) throws IOException {
         sendFileHeader(entry.name, entry.mime,entry.objectType, entry.size, entry.id, job.id,pairKey);
-        long resumeOffset = expectAckForFile();
-        skipExactly(contentStream, resumeOffset);
-        TransferProtocol.writeFileContent(out, contentStream, entry.size, progress,resumeOffset,
-                    job,entry);
-        expectAck();
+        if(!job.isCancelRequested()){
+            long resumeOffset = expectAckForFile();
+            skipExactly(contentStream, resumeOffset);
+            TransferProtocol.writeFileContent(out, contentStream, entry.size, progress,resumeOffset,
+                        job,entry);
+            expectAck(job);
+        }
     }
 
     /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */
@@ -126,6 +114,12 @@ public class TransferClient implements Closeable {
         TransferProtocol.writeFrame(out, header);
     }
 
+    public static class BadProtoException extends RuntimeException{
+        public BadProtoException(String s) {
+            super(s);
+        }
+    }
+
     /** 读取 FILE 的 ACK：普通 ACK/OK → 返回 0；RESUME → 返回 offset；否则抛异常。 */
     private long expectAckForFile() throws IOException {
         JsonObject ack = TransferProtocol.readHeader(in);
@@ -136,12 +130,9 @@ public class TransferClient implements Closeable {
             return TransferProtocol.getAckOffset(ack);
         }
         if(TransferProtocol.isAckBadProtocol(ack)){
-            this.isBadProtocolDetected = true;
+            throw new BadProtoException("Server rejected communication with BadProtocol");
         }
-        if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
-            throw new IOException("peer error: " + TransferProtocol.ackError(ack));
-        }
-        throw new IOException("unexpected frame: " + ack);
+        throw new BadProtoException("unexpected frame: " + ack);
     }
 
     /** 跳过 InputStream 中指定字节数（兼容 skip() 返回 < bytesToSkip 的情况）。 */
@@ -162,7 +153,10 @@ public class TransferClient implements Closeable {
     }
 
     /** 阻塞等待 ACK；收到 ERROR 或异常类型时抛 IOException。 */
-    private void expectAck() throws IOException {
+    private void expectAck(TransferManager.SendJob job) throws IOException {
+        if(job.isCancelRequested()){
+            return;
+        }
         JsonObject ack = TransferProtocol.readHeader(in);
         if (TransferProtocol.isAckOk(ack)) {
             return;

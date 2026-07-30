@@ -14,6 +14,7 @@ import java.io.FileInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.SocketException;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
@@ -506,8 +507,19 @@ public class TransferManager implements TransferProtocol.Progress {
                         item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
                         updateJob(job, item);
                         return;
-                    } catch (Exception e) {
-                        LogX.e("PFD send failed for " + item.name + ", fallback to URI", e);
+                    }
+                    catch (SocketException ex){
+                        item.status = SendEntry.STATUS_IDLE;
+                        item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
+                        updateJob(job, item);
+                        LogX.e("PFD send failed for " + item.name, ex);
+                        return;
+                    }
+                    catch (IOException e) {
+                        item.status = SendEntry.STATUS_IDLE;
+                        item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
+                        updateJob(job, item);
+                        LogX.e("PFD send failed for " + item.name, e);
                     }
                 }
             }

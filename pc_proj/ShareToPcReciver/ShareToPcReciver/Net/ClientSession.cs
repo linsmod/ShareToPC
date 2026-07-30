@@ -61,7 +61,7 @@ namespace ShareToPcReciver.Net
                             await HandleHello(stream, header);
                             break;
                         case "OBJECT":
-                            await HandleBytes(stream, header, payloadLength);
+                            await HandleObjectStream(stream, header, payloadLength);
                             break;
                         case "PING":
                             await HandlePing(stream);
@@ -189,7 +189,7 @@ namespace ShareToPcReciver.Net
 
         public static int TEXT_OBJECT = 1;
         public static int FILE_OBJECT = 2;
-        private async Task HandleBytes(Stream stream, JsonElement header, long payloadLength)
+        private async Task HandleObjectStream(Stream stream, JsonElement header, long payloadLength)
         {
             if (authResult == null || !authResult.IsAccepted)
             {
