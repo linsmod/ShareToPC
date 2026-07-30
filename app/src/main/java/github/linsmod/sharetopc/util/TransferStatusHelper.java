@@ -57,7 +57,8 @@ public class TransferStatusHelper {
                     return ctx.getColor(android.R.color.darker_gray);
                 }
                 else if(r.idleReason==SendEntry.IDLE_REASON_IO_ERROR||
-                r.idleReason==SendEntry.IDLE_REASON_NET_ERROR){
+                r.idleReason==SendEntry.IDLE_REASON_NET_ERROR||
+                r.idleReason==SendEntry.IDLE_REASON_REMOTE_REJECTED){
                     return ctx.getColor(android.R.color.holo_red_dark);
                 }
                 else if(r.idleReason==SendEntry.IDLE_REASON_PAUSED){

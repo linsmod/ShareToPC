@@ -150,6 +150,11 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
                 vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_IO_ERR,TaskAdapter.friendlyTime(latestJob.updateMillis)));
                 vh.tvEntrySize.setVisibility(View.GONE);
             }
+            else if(latestJob.countIdle(SendEntry.IDLE_REASON_REMOTE_REJECTED)>0){
+                vh.layoutEntryInfo.setVisibility(View.VISIBLE);
+                vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_REMOTE_REJECTED,TaskAdapter.friendlyTime(latestJob.updateMillis)));
+                vh.tvEntrySize.setVisibility(View.GONE);
+            }
             else if(latestJob.isAllSuccess()){
                 vh.layoutEntryInfo.setVisibility(View.VISIBLE);
                 vh.tvEntryName.setText(context.getString(R.string.TIP_STATUS_SUCCESS,TaskAdapter.friendlyTime(latestJob.updateMillis)));

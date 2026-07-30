@@ -38,6 +38,7 @@ public class TransferClient implements Closeable {
     public static final int CONNECTING = 1;
     public static final int CONNECTED = 2;
     public static final int CONNECTION_LOST = 3;
+    boolean isBadProtocolDetected;
 
     public TransferClient(String host, int port) {
         this.host = host;
@@ -69,7 +70,6 @@ public class TransferClient implements Closeable {
             socket.setKeepAlive(true);
             out = new DataOutputStream(socket.getOutputStream());
             in = new DataInputStream(socket.getInputStream());
-            hello();
             state = CONNECTED;
         } catch (IOException e) {
             // 连接失败时主动关闭 socket，避免资源泄漏
@@ -105,10 +105,11 @@ public class TransferClient implements Closeable {
                 + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
     }
 
-    public void sendText(String text, String jobId) throws IOException {
+    public void sendText(String text, String jobId,String key) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "TEXT");
         header.addProperty("text", text);
+        header.addProperty("key", key);
         header.addProperty("time", System.currentTimeMillis());
         if (jobId != null) {
             header.addProperty("jobId", jobId);
@@ -118,9 +119,9 @@ public class TransferClient implements Closeable {
     }
 
     /** 从 File 读文件发送（历史兼容：本地 inbox 仍有副本时使用）。 */
-    public void sendFile(TransferManager.SendJob job, SendEntry entry, File file,
+    public void sendFile(TransferManager.SendJob job, SendEntry entry, File file,String pairKey,
                          TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(entry.name, entry.mime, file.length(), entry.id, job.id);
+        sendFileHeader(entry.name, entry.mime, file.length(), entry.id, job.id,pairKey);
         long resumeOffset = expectAckForFile();
         try (java.io.FileInputStream fin = new java.io.FileInputStream(file)) {
             skipExactly(fin, resumeOffset);
@@ -138,8 +139,9 @@ public class TransferClient implements Closeable {
     /** 从 InputStream 读文件发送（新路径：直接从 content:// URI 读流，无需本地文件）。 */
     public void sendFileFromStream(TransferManager.SendJob job, SendEntry entry,
                                    InputStream contentStream,
+                                   String pairKey,
                                    TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(entry.name, entry.mime, entry.size, entry.id, job.id);
+        sendFileHeader(entry.name, entry.mime, entry.size, entry.id, job.id,pairKey);
         long resumeOffset = expectAckForFile();
         skipExactly(contentStream, resumeOffset);
         if (resumeOffset > 0) {
@@ -153,11 +155,12 @@ public class TransferClient implements Closeable {
     }
 
     /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */
-    private void sendFileHeader(String fileName, String mime, long size, String transferId, String jobId) throws IOException {
+    private void sendFileHeader(String fileName, String mime, long size, String transferId, String jobId,String pairKey) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "FILE");
         header.addProperty("name", FileUtils.sanitizeFileName(fileName));
         header.addProperty("size", size);
+        header.addProperty("key",pairKey);
         header.addProperty("mime", mime != null ? mime
                 : FileUtils.guessMimeType(fileName));
         header.addProperty("time", System.currentTimeMillis());
@@ -178,6 +181,9 @@ public class TransferClient implements Closeable {
         }
         if (TransferProtocol.isAckResume(ack)) {
             return TransferProtocol.getAckOffset(ack);
+        }
+        if(TransferProtocol.isAckBadProtocol(ack)){
+            this.isBadProtocolDetected = true;
         }
         if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
             throw new IOException("peer error: " + TransferProtocol.ackError(ack));
@@ -212,6 +218,75 @@ public class TransferClient implements Closeable {
             throw new IOException("peer error: " + TransferProtocol.ackError(ack));
         }
         throw new IOException("unexpected frame: " + ack);
+    }
+
+    /** JOB_INFO 交换结果。 */
+    public static class JobInfoResult {
+        public final boolean accepted;
+        public final String pairKey;
+        public final int credits;
+        public final int maxItemsPerJob;
+        public final long maxBytesPerJob;
+
+        public JobInfoResult(boolean accepted, String pairKey, int credits,
+                             int maxItemsPerJob, long maxBytesPerJob) {
+            this.accepted = accepted;
+            this.pairKey = pairKey;
+            this.credits = credits;
+            this.maxItemsPerJob = maxItemsPerJob;
+            this.maxBytesPerJob = maxBytesPerJob;
+        }
+    }
+
+    /**
+     * 发送 JOB_INFO 帧，通知 PC 端本批次 job 的元信息，等待 PC 授权。
+     * @return JobInfoResult，含 ACCEPTED/REJECTED 状态和 PC 返回的约束。
+     */
+    public JobInfoResult sendJobInfoAndWaitRemoteApproval(TransferManager.SendJob job, String deviceId, String pairKey, String jobId,
+                                                          int itemCount, long totalBytes) throws IOException {
+        JsonObject header = new JsonObject();
+        header.addProperty("type", "JOB_INFO");
+        header.addProperty("deviceId", deviceId);
+        header.addProperty("pairKey", pairKey != null ? pairKey : "");
+        header.addProperty("jobId", jobId != null ? jobId : "");
+        header.addProperty("itemCount", itemCount);
+        header.addProperty("totalBytes", totalBytes);
+        TransferProtocol.writeFrame(out, header);
+        return expectJobAck(job);
+    }
+
+    /** 读取 PC 返回的 JOB_ACK 帧，解析出授权结果。 */
+    private JobInfoResult expectJobAck(TransferManager.SendJob job) throws IOException {
+        long totalMillis = 0;
+        boolean still = true;
+        JsonObject ack = null;
+        String status = "STILL";
+        while (still && !job.isCancelRequested()){
+            long start = System.currentTimeMillis();
+            ack = TransferProtocol.readHeader(in);
+            String type = TransferProtocol.optString(ack, "type");
+            if (!"JOB_ACK".equals(type)) {
+                throw new IOException("expected JOB_ACK, got: " + type);
+            }
+            status = TransferProtocol.optString(ack, "status");
+            still="STILL".equals(status);
+            totalMillis+= (System.currentTimeMillis()-start);
+            if(still && totalMillis>30*1000){
+                return null;
+            }
+        }
+        if(job.isCancelRequested()){
+            return null;
+        }
+        boolean accepted = "ACCEPTED".equals(status);
+        String key = TransferProtocol.optString(ack, "pairKey");
+        int credits = ack.has("credits") && !ack.get("credits").isJsonNull()
+                ? ack.get("credits").getAsInt() : 0;
+        int maxItems = ack.has("maxItemsPerJob") && !ack.get("maxItemsPerJob").isJsonNull()
+                ? ack.get("maxItemsPerJob").getAsInt() : 0;
+        long maxBytes = ack.has("maxBytesPerJob") && !ack.get("maxBytesPerJob").isJsonNull()
+                ? ack.get("maxBytesPerJob").getAsLong() : 0L;
+        return new JobInfoResult(accepted, key, credits, maxItems, maxBytes);
     }
 
     @Override

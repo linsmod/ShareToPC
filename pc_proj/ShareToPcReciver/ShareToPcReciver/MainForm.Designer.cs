@@ -32,6 +32,7 @@ namespace ShareToPcReciver
             this.columnHeader4 = new System.Windows.Forms.ColumnHeader();
             this.columnHeader5 = new System.Windows.Forms.ColumnHeader();
             this.btnOpenDir = new System.Windows.Forms.Button();
+            this.btnDevices = new System.Windows.Forms.Button();
             this.btnSettings = new System.Windows.Forms.Button();
             this.btnMinimize = new System.Windows.Forms.Button();
             this.notifyIcon = new System.Windows.Forms.NotifyIcon(this.components);
@@ -141,6 +142,16 @@ namespace ShareToPcReciver
             this.btnOpenDir.UseVisualStyleBackColor = true;
             this.btnOpenDir.Click += new System.EventHandler(this.BtnOpenDir_Click);
             // 
+            // btnDevices
+            // 
+            this.btnDevices.Location = new System.Drawing.Point(215, 10);
+            this.btnDevices.Name = "btnDevices";
+            this.btnDevices.Size = new System.Drawing.Size(75, 25);
+            this.btnDevices.TabIndex = 3;
+            this.btnDevices.Text = "设备管理";
+            this.btnDevices.UseVisualStyleBackColor = true;
+            this.btnDevices.Click += new System.EventHandler(this.BtnDevices_Click);
+            // 
             // btnSettings
             // 
             this.btnSettings.Location = new System.Drawing.Point(140, 10);
@@ -157,7 +168,7 @@ namespace ShareToPcReciver
             this.btnMinimize.Location = new System.Drawing.Point(697, 10);
             this.btnMinimize.Name = "btnMinimize";
             this.btnMinimize.Size = new System.Drawing.Size(75, 25);
-            this.btnMinimize.TabIndex = 3;
+            this.btnMinimize.TabIndex = 4;
             this.btnMinimize.Text = "最小化";
             this.btnMinimize.UseVisualStyleBackColor = true;
             this.btnMinimize.Click += new System.EventHandler(this.BtnMinimize_Click);
@@ -305,6 +316,7 @@ namespace ShareToPcReciver
             this.Controls.Add(this.lvHistory);
             this.Controls.Add(this.btnOpenDir);
             this.Controls.Add(this.btnSettings);
+            this.Controls.Add(this.btnDevices);
             this.Controls.Add(this.btnMinimize);
             this.Controls.Add(this.statusStrip);
             this.MinimumSize = new System.Drawing.Size(400, 300);
@@ -332,6 +344,7 @@ namespace ShareToPcReciver
         private System.Windows.Forms.ColumnHeader columnHeader4;
         private System.Windows.Forms.ColumnHeader columnHeader5;
         private System.Windows.Forms.Button btnOpenDir;
+        private System.Windows.Forms.Button btnDevices;
         private System.Windows.Forms.Button btnSettings;
         private System.Windows.Forms.Button btnMinimize;
         private System.Windows.Forms.NotifyIcon notifyIcon;

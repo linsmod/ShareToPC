@@ -30,8 +30,10 @@ import java.util.concurrent.LinkedBlockingQueue;
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.JobStore;
+import github.linsmod.sharetopc.data.PairStore;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
+import github.linsmod.sharetopc.discovery.PairSession;
 import github.linsmod.sharetopc.util.LogX;
 
 /**
@@ -49,10 +51,15 @@ public class TransferManager {
         public Long updateMillis;
         private boolean isCancelRequested;
         private boolean isCancelled;
+        /** 本连接是否已发送过 JOB_INFO */
+        public TransferClient.JobInfoResult jobInfoResult;
         @Nullable
         public SendEntry sendingItem;
         @Nullable
         public DiscoveredDevice device;
+        public String shortId(){
+            return this.id.length()>8?id.substring(0,8):id;
+        }
         public SendJob(String id,String deviceId, List<SendEntry> items, String host, int port) {
             this.id = id;
             this.deviceId = deviceId;
@@ -133,6 +140,7 @@ public class TransferManager {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final JobStore jobStore;
     private final DeviceStore deviceStore;
+    private final PairStore pairStore;
     private final Context appContext;
 
     /** 队列变更监听器：入队/出队/取消时回调，供 UI 响应式更新。 */
@@ -190,15 +198,8 @@ public class TransferManager {
         this.appContext = context.getApplicationContext();
         this.jobStore = jobStore;
         this.deviceStore = deviceStore;
+        this.pairStore = new PairStore(context);
         worker.execute(this::consumeLoop);
-    }
-
-    /** HELLO 握手完成后，将 PC 端身份信息同步到设备管理器。 */
-    private void onHandshakeComplete(TransferClient client, String host, int port) {
-        if (client.pcVersion != null) {
-            App.get().discoveryManager.updateDeviceInfo(host, port,
-                    client.pcVersion, client.pcProto, client.pcDeviceId);
-        }
     }
 
     /** 当前正在处理的任务，无任务时返回 null。 */
@@ -336,8 +337,6 @@ public class TransferManager {
                         }
                         job.sendingItem =item;
                         sendItem(client, job, item);
-                        item.status = SendEntry.STATUS_IDLE;
-                        item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
                         break;
                     } catch (Exception e) {
                         // 连接断开，关闭以便下次重连
@@ -409,9 +408,70 @@ public class TransferManager {
 
     private void sendItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
         client.connect();
-        onHandshakeComplete(client, job.host, job.port);
+        // 本连接首次：发送 JOB_INFO 获取 PC 授权
+        if (job.jobInfoResult == null) {
+            // 计算 job 级别汇总（含当前已在 SENDING 的 item）
+            int itemCount = 0;
+            long totalBytes = 0;
+            for (SendEntry e : job.items) {
+                if (e.status == SendEntry.STATUS_SENDING || e.canResume()) {
+                    itemCount++;
+                    totalBytes += e.size;
+                }
+            }
+
+            // 查本地已有的 pairKey
+            String existingKey = "";
+            PairSession session = pairStore.getByDeviceId(client.pcDeviceId);
+            if (session != null && session.key != null) {
+                existingKey = session.key;
+            }
+
+            TransferClient.JobInfoResult result = client.sendJobInfoAndWaitRemoteApproval(job,
+                    App.get().settingsStore.getDeviceId(),
+                    existingKey,
+                    job.id,
+                    itemCount,
+                    totalBytes);
+            job.jobInfoResult = result;
+            if (result!=null && result.accepted) {
+                // 存下 PC 返回的 pairKey（可能新的或已有的）
+                if (result.pairKey != null && !result.pairKey.isEmpty()) {
+                    PairSession ps = session != null ? session : new PairSession();
+                    ps.deviceId = client.pcDeviceId;
+                    ps.key = result.pairKey;
+                    ps.credits = result.credits;
+                    ps.maxItemsPerJob = result.maxItemsPerJob;
+                    ps.maxBytesPerJob = result.maxBytesPerJob;
+                    ps.issuedAt = System.currentTimeMillis();
+                    pairStore.save(ps);
+                }
+                LogX.d("JOB_INFO accepted by " + client.pcDeviceId
+                        + " credits=" + result.credits
+                        + " maxItems=" + result.maxItemsPerJob
+                        + " maxBytes=" + result.maxBytesPerJob);
+            } else if(result!=null) {
+                // PC 拒绝：标记当前 entry，和网络错误一样 cancel 即可
+                LogX.d("JOB_INFO rejected by " + client.pcDeviceId);
+                item.status = SendEntry.STATUS_IDLE;
+                item.idleReason = SendEntry.IDLE_REASON_REMOTE_REJECTED;
+                item.updateMillis = System.currentTimeMillis();
+                updateJob(job, item);
+                job.cancel();
+                return;
+            }
+            else if(job.isCancelRequested()){
+                LogX.d("JOB_INFO is canceled from local. jobId="+job.shortId());
+                item.status = SendEntry.STATUS_IDLE;
+                item.idleReason = SendEntry.IDLE_REASON_PAUSED;
+                item.updateMillis = System.currentTimeMillis();
+                updateJob(job, item);
+                return;
+            }
+        }
+
         if (item.isText()) {
-            client.sendText(item.text, job.id);
+            client.sendText(item.text, job.id, job.jobInfoResult.pairKey);
         } else {
             // 优先通过 PFD→FileChannel 读文件（内核文件句柄，skip/seek 可靠，支持断点续传）
             if (item.id != null) {
@@ -419,7 +479,7 @@ public class TransferManager {
                 if (handle != null) {
                     try {
                         InputStream in = handle.newInputStream();
-                    client.sendFileFromStream(job,item, in,
+                    client.sendFileFromStream(job,item, in,job.jobInfoResult.pairKey,
                             (sent, total) -> {
                                 item.sentBytes = sent;
                                 item.totalBytes = total;
@@ -440,7 +500,7 @@ public class TransferManager {
                     item.errorMsg = "Pfd丢失，无法读取：" + item.name;
                     throw new Exception(item.errorMsg);
                 }
-                client.sendFileFromStream(job,item, in,
+                client.sendFileFromStream(job,item, in, job.jobInfoResult.pairKey,
                         (sent, total) -> {
                             item.sentBytes = sent;
                             item.totalBytes = total;
@@ -453,7 +513,7 @@ public class TransferManager {
         if (item.localPath != null) {
             File file = new File(item.localPath);
             if (file.exists()) {
-                client.sendFile(job,item, file,
+                client.sendFile(job,item, file,job.jobInfoResult.pairKey,
                         (sent, total) -> {
                             item.sentBytes = sent;
                             item.totalBytes = total;

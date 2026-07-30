@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 1;   // 新项目，从 1 开始
+    private static final int DB_VERSION = 1;
 
     // ---------- job_entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -30,7 +30,6 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_HOST = "host";
     public static final String COL_PORT = "port";
     public static final String COL_TARGET_NAME = "targetName";
-    public static final String COL_PAIR_KEY = "policy";
     public static final String COL_UPDATE_MILLIS = "updateMillis";   // 原 v6 添加
 
     // ---------- Device 表 ----------
@@ -43,6 +42,17 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_DEV_LAST_SEEN = "lastSeen";
     public static final String COL_DEV_VERSION = "version";          // 原 v4 添加
     public static final String COL_DEV_PROTO_VERSION = "protoVersion"; // 原 v5 添加
+
+    // ---------- PairSession 表 ----------
+    public static final String TABLE_PAIR_SESSION = "pair_session";
+    public static final String COL_PAIR_ID = "id";
+    public static final String COL_PAIR_DEVICE_ID = "deviceId";
+    public static final String COL_PAIR_KEY = "pairKey";
+    public static final String COL_PAIR_EXPIRES_AT = "expiresAt";
+    public static final String COL_PAIR_ISSUED_AT = "issuedAt";
+    public static final String COL_PAIR_CREDITS = "credits";
+    public static final String COL_PAIR_MAX_ITEMS = "maxItemsPerJob";
+    public static final String COL_PAIR_MAX_BYTES = "maxBytesPerJob";
 
     // ---------- Job 表 ----------
     public static final String TABLE_JOB = "job";
@@ -76,7 +86,6 @@ public class DBHelper extends SQLiteOpenHelper {
                     COL_HOST + " TEXT, " +
                     COL_PORT + " INTEGER, " +
                     COL_TARGET_NAME + " TEXT, " +
-                    COL_PAIR_KEY + " TEXT, " +
                     COL_UPDATE_MILLIS + " INTEGER DEFAULT 0" +
                     ")";
 
@@ -91,6 +100,18 @@ public class DBHelper extends SQLiteOpenHelper {
                     COL_DEV_VERSION + " TEXT, " +
                     COL_DEV_PROTO_VERSION + " TEXT, " +
                     "PRIMARY KEY (" + COL_DEV_HOST + ", " + COL_DEV_PORT + ")" +
+                    ")";
+
+    private static final String CREATE_PAIR_SESSION_TABLE =
+            "CREATE TABLE " + TABLE_PAIR_SESSION + " (" +
+                    COL_PAIR_ID + " INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    COL_PAIR_DEVICE_ID + " TEXT UNIQUE NOT NULL, " +
+                    COL_PAIR_KEY + " TEXT NOT NULL, " +
+                    COL_PAIR_EXPIRES_AT + " INTEGER DEFAULT 0, " +
+                    COL_PAIR_ISSUED_AT + " INTEGER DEFAULT 0, " +
+                    COL_PAIR_CREDITS + " INTEGER DEFAULT 0, " +
+                    COL_PAIR_MAX_ITEMS + " INTEGER DEFAULT 0, " +
+                    COL_PAIR_MAX_BYTES + " INTEGER DEFAULT 0" +
                     ")";
 
     private static final String CREATE_JOB_TABLE =
@@ -113,11 +134,11 @@ public class DBHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_JOB_ENTRY_TABLE);
         db.execSQL(CREATE_DEVICE_TABLE);
         db.execSQL(CREATE_JOB_TABLE);
+        db.execSQL(CREATE_PAIR_SESSION_TABLE);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // 新项目，未发版，无需升级逻辑；若需要可保留空实现
-        // 或者直接 drop 表重建（但通常不推荐，此处留空即可）
+        // 初始版本，无升级逻辑。后续升级在此填 ALTER。
     }
 }

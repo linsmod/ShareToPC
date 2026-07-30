@@ -54,7 +54,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config\AppConfig.cs" />
+    <Compile Include="Net\AuthInfo.cs" />
     <Compile Include="Net\ClientSession.cs" />
+    <Compile Include="Net\DeviceInfo.cs" />
     <Compile Include="Net\Messages.cs" />
     <Compile Include="Net\Protocol.cs" />
     <Compile Include="Net\ServiceAdvertiser.cs" />
@@ -72,10 +74,17 @@
     <Compile Include="SettingsDialog.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="DeviceManagerDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Storage\HistoryStore.cs" />
     <Compile Include="Storage\DeviceStore.cs" />
+    <Compile Include="Storage\PairStore.cs" />
     <Compile Include="Storage\ReceiveStorage.cs" />
     <Compile Include="Util\Log.cs" />
+    <EmbeddedResource Include="DeviceManagerDialog.resx">
+      <DependentUpon>DeviceManagerDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>

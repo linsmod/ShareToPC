@@ -50,7 +50,6 @@ public class JobStore {
         values.put(DBHelper.COL_HOST, r.host);
         values.put(DBHelper.COL_PORT, r.port);
         values.put(DBHelper.COL_TARGET_NAME, r.targetName);
-        values.put(DBHelper.COL_PAIR_KEY, r.pairKey);
         values.put(DBHelper.COL_UPDATE_MILLIS, r.updateMillis);
         return values;
     }
@@ -76,7 +75,6 @@ public class JobStore {
         r.host = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_HOST));
         r.port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PORT));
         r.targetName = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_TARGET_NAME));
-        r.pairKey = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_PAIR_KEY));
         r.updateMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_UPDATE_MILLIS));
         return r;
     }

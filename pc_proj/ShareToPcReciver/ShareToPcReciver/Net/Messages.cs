@@ -80,4 +80,46 @@ namespace ShareToPcReciver.Net
         [JsonPropertyName("type")]
         public string Type => "CANCEL";
     }
+
+    public class JobInfoMsg
+    {
+        [JsonPropertyName("type")]
+        public string Type => "JOB_INFO";
+
+        [JsonPropertyName("deviceId")]
+        public string DeviceId { get; set; } = "";
+
+        [JsonPropertyName("pairKey")]
+        public string PairKey { get; set; } = "";
+
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; } = "";
+
+        [JsonPropertyName("itemCount")]
+        public int ItemCount { get; set; }
+
+        [JsonPropertyName("totalBytes")]
+        public long TotalBytes { get; set; }
+    }
+
+    public class JobAckMsg
+    {
+        [JsonPropertyName("type")]
+        public string Type => "JOB_ACK";
+
+        [JsonPropertyName("status")]
+        public string Status { get; set; } = "";
+
+        [JsonPropertyName("pairKey")]
+        public string PairKey { get; set; } = "";
+
+        [JsonPropertyName("credits")]
+        public int Credits { get; set; }
+
+        [JsonPropertyName("maxItemsPerJob")]
+        public int MaxItemsPerJob { get; set; }
+
+        [JsonPropertyName("maxBytesPerJob")]
+        public long MaxBytesPerJob { get; set; }
+    }
 }

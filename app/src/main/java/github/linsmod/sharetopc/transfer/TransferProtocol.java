@@ -241,6 +241,12 @@ public final class TransferProtocol {
         return msg != null ? msg : "unknown";
     }
 
+    public static boolean isAckBadProtocol(JsonObject header) {
+        return header != null
+                && "ACK".equals(optString(header, "type"))
+                && "BAD_PROTOCOL".equals(optString(header, "mgs"));
+    }
+
     public static String optString(JsonObject obj, String key) {
         return obj.has(key) && !obj.get(key).isJsonNull() ? obj.get(key).getAsString() : null;
     }

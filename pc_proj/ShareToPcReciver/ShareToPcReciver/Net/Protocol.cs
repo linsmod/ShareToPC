@@ -1,3 +1,4 @@
+using ShareToPcReciver.Storage;
 using System;
 using System.IO;
 using System.Net;
@@ -6,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using static ShareToPcReciver.Net.TransferServer;
 
 namespace ShareToPcReciver.Net
 {
@@ -19,7 +21,7 @@ namespace ShareToPcReciver.Net
         public const int ProtocolVersion = 1;
         public static readonly string AppVersion = Assembly.GetExecutingAssembly().GetName().Name + "/" + Assembly.GetExecutingAssembly().GetName().Version.Major + "." + Assembly.GetExecutingAssembly().GetName().Version.Minor;
 
-        public static async Task<(string headerJson, long payloadLength)> ReadFrameAsync(Stream stream, CancellationToken ct)
+        public static async Task<(JsonElement header, long payloadLength,String type)> ReadFrameAsync(Stream stream, CancellationToken ct)
         {
             byte[] lenBuf = new byte[4];
             int read = 0;
@@ -51,7 +53,7 @@ namespace ShareToPcReciver.Net
             if (header.TryGetProperty("size", out JsonElement sizeProp))
                 payloadLength = sizeProp.GetInt64();
 
-            return (headerJson, payloadLength);
+            return (header, payloadLength,type);
         }
 
         public static async Task WritePongAsync(Stream stream, CancellationToken ct)
@@ -74,6 +76,11 @@ namespace ShareToPcReciver.Net
             await stream.WriteAsync(lenBytes, 0, 4, ct);
             await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
             await stream.FlushAsync(ct);
+        }
+
+        public static async Task WriteBadProtocolAckAsync(Stream stream, CancellationToken ct)
+        {
+            await WriteAckAsync(stream, false, "BAD_PROTOCOL", ct);
         }
 
         public static async Task WriteAckAsync(Stream stream, bool ok, string msg, CancellationToken ct)
@@ -103,6 +110,33 @@ namespace ShareToPcReciver.Net
         public static async Task WriteResumeAckAsync(Stream stream, long offset, CancellationToken ct)
         {
             var ack = new { type = "ACK", status = "RESUME", msg = "", offset };
+            string json = JsonSerializer.Serialize(ack);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+        public static async Task WriteJobAckAsync(Stream stream,AuthResult session, CancellationToken ct)
+        { 
+            await WriteJobAckAsync(stream, session.Status, session.PairKey, session.Credits, session.MaxItemsPerJob, session.MaxBytesPerJob, ct);
+        }
+        /// <summary>发送 JOB_ACK 响应，返回授权结果及约束。</summary>
+        public static async Task WriteJobAckAsync(Stream stream, string status, string pairKey,
+            int credits, int maxItemsPerJob, long maxBytesPerJob, CancellationToken ct)
+        {
+            var ack = new { type = "JOB_ACK", status, pairKey = pairKey ?? "", credits, maxItemsPerJob, maxBytesPerJob };
+            string json = JsonSerializer.Serialize(ack);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+
+        public static async Task WriteStillAckAsync(Stream stream, long elapsedMillis,long token, CancellationToken ct)
+        {
+            var ack = new { type = "JOB_ACK", status = "STILL", msg = "", elapsed= elapsedMillis, token=token };
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

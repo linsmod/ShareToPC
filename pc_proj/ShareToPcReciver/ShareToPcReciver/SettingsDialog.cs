@@ -43,6 +43,14 @@ namespace ShareToPcReciver
             new ActionOption(ArrivalAction.OpenDir, "打开所在文件夹"),
         };
 
+        /// <summary>
+        /// 无参构造函数：仅供 WinForms 设计器使用，不要在代码中直接调用
+        /// </summary>
+        public SettingsDialog()
+        {
+            InitializeComponent();
+        }
+
         public SettingsDialog(AppConfig config, int currentPort)
         {
             _currentPort = currentPort;
@@ -53,6 +61,12 @@ namespace ShareToPcReciver
             ShowBalloon = config.ShowBalloon;
             RunAtStartup = config.RunAtStartup;
             InitializeComponent();
+
+            // 将依赖外部数据的赋值放在 InitializeComponent 之后，避免设计器序列化错误
+            txtPort.Text = Port.ToString();
+            txtSaveDir.Text = SaveDir;
+            chkShowBalloon.Checked = ShowBalloon;
+            chkRunAtStartup.Checked = RunAtStartup;
 
             BindActionCombo(cmbTextAction, TextActionOptions, TextAction);
             BindActionCombo(cmbFileAction, FileActionOptions, FileAction);
@@ -89,7 +103,6 @@ namespace ShareToPcReciver
             this.lblPort.Location = new Point(12, 15);
             this.lblPort.AutoSize = true;
 
-            this.txtPort.Text = Port.ToString();
             this.txtPort.Location = new Point(80, 12);
             this.txtPort.Size = new Size(80, 23);
 
@@ -97,7 +110,6 @@ namespace ShareToPcReciver
             this.lblSaveDir.Location = new Point(12, 45);
             this.lblSaveDir.AutoSize = true;
 
-            this.txtSaveDir.Text = SaveDir;
             this.txtSaveDir.Location = new Point(80, 42);
             this.txtSaveDir.Size = new Size(280, 23);
 
@@ -108,11 +120,9 @@ namespace ShareToPcReciver
 
             this.chkShowBalloon.Text = "显示气泡通知";
             this.chkShowBalloon.Location = new Point(12, 75);
-            this.chkShowBalloon.Checked = ShowBalloon;
 
             this.chkRunAtStartup.Text = "开机自动启动";
             this.chkRunAtStartup.Location = new Point(12, 99);
-            this.chkRunAtStartup.Checked = RunAtStartup;
 
             this.lblTextAction.Text = "收到文本时:";
             this.lblTextAction.Location = new Point(12, 133);

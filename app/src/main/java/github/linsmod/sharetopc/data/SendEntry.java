@@ -40,7 +40,6 @@ public class SendEntry {
     public String host;
     public int port;
     public String targetName;
-    public String pairKey;        // CleanupPolicy name
     public long updateMillis;
 
     /** 状态读取（兼容旧数据：无 status 字段时按 success 推导）。 */
@@ -62,6 +61,8 @@ public class SendEntry {
                 return "网络错误";
             case IDLE_REASON_PAUSED:
                 return "已暂停";
+            case IDLE_REASON_REMOTE_REJECTED:
+                return "远程拒绝";
             case IDLE_REASON_SUCCESS:
                 return "发送完成";
         }
@@ -102,11 +103,11 @@ public class SendEntry {
         return this.pendingAction==0 && Objects.equals(status, SendEntry.STATUS_SENDING);
     }
 
-    //暂停状态或网络错误时允许重试
+    //暂停、网络错误、远程拒绝时允许重试
     public boolean canResume() {
         return this.pendingAction==0 &&  status==SendEntry.STATUS_IDLE &&
                 (
-                        idleReason==SendEntry.IDLE_REASON_PAUSED || idleReason==IDLE_REASON_NET_ERROR || idleReason==IDLE_REASON_CREATED);
+                        idleReason==SendEntry.IDLE_REASON_PAUSED || idleReason==IDLE_REASON_NET_ERROR || idleReason==IDLE_REASON_REMOTE_REJECTED || idleReason==IDLE_REASON_CREATED);
     }
 
     public String deviceAddress() {

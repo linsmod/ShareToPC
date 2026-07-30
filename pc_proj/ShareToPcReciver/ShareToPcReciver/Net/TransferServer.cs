@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using ShareToPcReciver.Config;
 using ShareToPcReciver.Models;
 using ShareToPcReciver.Storage;
+using static ShareToPcReciver.Net.TransferServer;
 
 namespace ShareToPcReciver.Net
 {
@@ -22,19 +23,97 @@ namespace ShareToPcReciver.Net
         public bool IsRunning => _listener?.Server != null && _listener.Server.IsBound;
 
         public ReceiveStorage Storage { get; set; }
+        public Storage.PairStore PairStore { get; set; }
         public AppConfig Config { get; }
 
         public event Action<ClientInfo> ClientConnected;
         public event Action<ReceivedText> TextReceived;
         public event Action<ReceivedFile> FileReceived;
         public event Action<FileProgressInfo> FileProgressChanged;
+        /// <summary>设备授权请求事件。MainForm 订阅后弹出对话框，完成时调用 callback。</summary>
+        public event Action<AuthResult, CancellationToken, TaskCompletionSource<AuthResult>> AskApprovoal;
+
+        public class AuthResult
+        {
+            public string Status { get; set; } = "";   // "ACCEPTED" / "REJECTED"
+            public string PairKey { get; set; } = "";
+            public int Credits { get; set; }
+            public int MaxItemsPerJob { get; set; }
+            public long MaxBytesPerJob { get; set; }
+            /// <summary>过期时间（Unix 毫秒），0 表示永不过期。</summary>
+            public long ExpiresAt { get; set; }
+            /// <summary>收到文本时的动作，null 表示跟随全局设定。</summary>
+            public ArrivalAction? TextAction { get; set; }
+
+            public bool IsPending => Status == "PENDING";
+            public bool IsAccepted => Status == "ACCEPTED";
+
+            internal AuthInfo authJobInfo { get; set; }
+
+            internal static AuthResult CreatePending(String deviceName,int itemCount,long totalBytes)
+            {
+                return new AuthResult
+                {
+                    Status = "PENDING",
+                    PairKey = "",
+                    Credits = 0,
+                    MaxItemsPerJob = 0,
+                    MaxBytesPerJob = 0,
+                    ExpiresAt = 0,
+                    TextAction = null
+                };
+            }
+
+            internal static AuthResult CreateRejected()
+            {
+                return new AuthResult
+                {
+                    Status = "REJECTED",
+                    PairKey = "",
+                    Credits = 0,
+                    MaxItemsPerJob = 0,
+                    MaxBytesPerJob = 0,
+                    ExpiresAt = 0,
+                    TextAction = null
+                };
+            }
+
+            internal static AuthResult FromApprovedSession(PairStore.PairSession session)
+            {
+                return new AuthResult
+                {
+                    Status = "ACCEPTED",
+                    PairKey = session.Key,
+                    Credits = session.Credits,
+                    MaxItemsPerJob = session.MaxItemsPerJob,
+                    MaxBytesPerJob = session.MaxBytesPerJob,
+                    ExpiresAt = session.ExpiresAt,
+                    TextAction = session.TextAction
+                };
+            }
+        }
+
+
+        /// <summary>请求设备发授权弹窗。</summary>
+        public void StartRequestApproval(AuthResult authResult, CancellationToken authTimeout, TaskCompletionSource<AuthResult> tcs)
+        {
+            if (AskApprovoal == null)
+            {
+                authResult.Status = "REJECTED";
+                tcs.SetResult(authResult); // 没有订阅事件，无法弹窗 → 直接拒绝
+                return;
+            }
+            var handler = AskApprovoal;
+            handler.BeginInvoke(authResult, authTimeout, tcs,null,null);
+        }
 
         public CancellationToken Cancellation => _cts?.Token ?? CancellationToken.None;
 
-        public TransferServer(AppConfig config, ReceiveStorage storage)
+        public TransferServer(AppConfig config, ReceiveStorage storage, Storage.PairStore pairStore = null)
         {
             Config = config;
             Storage = storage;
+            PairStore = pairStore ?? new Storage.PairStore();
         }
 
         public async Task StartAsync(int port)
@@ -168,6 +247,55 @@ namespace ShareToPcReciver.Net
         {
             Stop();
             _cts?.Dispose();
+        }
+
+        public bool GetNoneBlocked(String deviceId, string pairKey, out PairStore.PairSession session)
+        {
+            session = null;
+
+            // 0. 拉黑检查：按 pairKey 或 deviceId 查找，已拉黑直接拒绝
+            if (PairStore?.IsBlocked(deviceId) == true)
+            {
+                return false;
+            }
+            // 1. 查 PairStore：已有有效授权则自动放行
+            if (!string.IsNullOrEmpty(pairKey))
+            {
+                session = PairStore?.GetByKey(pairKey);
+                if (session != null && !PairStore.IsExpired(session))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public PairStore.PairSession CreateNewSession(string deviceId, String deviceName, AuthResult result)
+        {
+            if (result.Credits != 0 && string.IsNullOrEmpty(result.PairKey))
+            {
+                result.PairKey = Guid.NewGuid().ToString();
+            }
+            var session = new Storage.PairStore.PairSession
+            {
+                DeviceId = deviceId,
+                DeviceName = deviceName,
+                Key = result.PairKey,
+                Credits = result.Credits,
+                MaxItemsPerJob = result.MaxItemsPerJob,
+                MaxBytesPerJob = result.MaxBytesPerJob,
+                IssuedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                ExpiresAt = result.ExpiresAt,
+                TextAction = result.TextAction
+            };
+            PairStore.Save(session);
+            return session;
+        }
+        internal void DecreaseCredits(String deviceId)
+        {
+            PairStore.PairSession session = PairStore.GetByDeviceId(deviceId);
+            session.Credits -= 1;
+            PairStore?.Save(session);
         }
     }
 }
