@@ -90,20 +90,6 @@ public class MainViewModel extends AndroidViewModel {
         }
     };
 
-    private final android.os.Handler countdownHandler =
-            new android.os.Handler(android.os.Looper.getMainLooper());
-    private long scanEndAtMillis = 0L;
-    private final Runnable countdownTick = new Runnable() {
-        @Override
-        public void run() {
-            if (!scanning) {
-                return;
-            }
-            updateConnState();
-            countdownHandler.postDelayed(this, 1000);
-        }
-    };
-
     private void initListeners() {
         discoveryListener = new NsdDiscoveryManager.Listener() {
             @Override
@@ -115,12 +101,6 @@ public class MainViewModel extends AndroidViewModel {
             @Override
             public void onScanStateChanged(boolean isScanning) {
                 scanning = isScanning;
-                countdownHandler.removeCallbacks(countdownTick);
-                if (isScanning) {
-                    scanEndAtMillis = System.currentTimeMillis()
-                            + app.settingsStore.getScanTimeoutSec() * 1000L;
-                    countdownHandler.post(countdownTick);
-                }
                 updateConnState();
             }
         };
@@ -151,12 +131,7 @@ public class MainViewModel extends AndroidViewModel {
         String base = count > 0
                 ? app.getString(R.string.status_found, count)
                 : app.getString(R.string.status_not_found);
-        if (scanning) {
-            long remainingSec = Math.max(0, (scanEndAtMillis - System.currentTimeMillis() + 999) / 1000);
-            connState.setValue(base + "（" + remainingSec + "s）");
-        } else {
-            connState.setValue(base);
-        }
+        connState.setValue(scanning ? base + "（扫描中）" : base);
     }
 
     /** 注册任务变更监听器，注册时立即回调当前数据。 */
@@ -414,7 +389,6 @@ public class MainViewModel extends AndroidViewModel {
 
     @Override
     protected void onCleared() {
-        countdownHandler.removeCallbacks(countdownTick);
         app.discoveryManager.removeListener(discoveryListener);
         app.transferManager.removeQueueListener(queueListener);
         app.transferManager.removeProgressListener(progressListener);

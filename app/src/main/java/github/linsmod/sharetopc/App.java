@@ -78,18 +78,26 @@ public class App extends Application {
         bindLifecycleDiscovery();
     }
 
+    private final Runnable delayedStopDiscovery = () -> {
+        LogX.d("App background → stop NSD discovery (delayed)");
+        discoveryManager.stopDiscovery();
+    };
+
     private void bindLifecycleDiscovery() {
         ProcessLifecycleOwner.get().getLifecycle().addObserver(new LifecycleObserver() {
             @OnLifecycleEvent(Lifecycle.Event.ON_START)
             void onForeground() {
-                LogX.d("App foreground → start NSD discovery");
-                discoveryManager.startDiscovery();
+                mainHandler.removeCallbacks(delayedStopDiscovery);
+                if (!discoveryManager.isDiscovering()) {
+                    LogX.d("App foreground → start NSD discovery");
+                    discoveryManager.startDiscovery();
+                }
             }
 
             @OnLifecycleEvent(Lifecycle.Event.ON_STOP)
             void onBackground() {
-                LogX.d("App background → stop NSD discovery");
-                discoveryManager.stopDiscovery();
+                LogX.d("App background → schedule NSD stop in 10s");
+                mainHandler.postDelayed(delayedStopDiscovery, 10_000);
             }
         });
     }
