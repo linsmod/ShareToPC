@@ -20,6 +20,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.transfer.TransferProtocol;
 import github.linsmod.sharetopc.util.LogX;
 
@@ -129,10 +130,14 @@ public class HeartbeatManager {
             // 先发 HELLO 握手，让 PC 注册此设备并回复 ACK
             JsonObject hello = new JsonObject();
             hello.addProperty("type", "HELLO");
-            hello.addProperty("device", android.os.Build.MODEL != null ? android.os.Build.MODEL : "Android");
+            String deviceName = App.get().settingsStore.getDeviceName();
+            if (deviceName == null) {
+                deviceName = android.os.Build.MODEL != null ? android.os.Build.MODEL : "Android";
+            }
+            hello.addProperty("device", deviceName);
             hello.addProperty("version", TransferProtocol.APP_VERSION);
             hello.addProperty("protoVersion", TransferProtocol.PROTOCOL_VERSION);
-            hello.addProperty("deviceId", github.linsmod.sharetopc.App.get().settingsStore.getDeviceId());
+            hello.addProperty("deviceId", App.get().settingsStore.getDeviceId());
             TransferProtocol.writeFrame(out, hello);
             JsonObject ack = TransferProtocol.readHeader(in);
             if (!"ACK".equals(TransferProtocol.optString(ack, "type"))

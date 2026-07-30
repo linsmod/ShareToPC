@@ -48,17 +48,18 @@ namespace ShareToPcReciver.Storage
 
         public bool IsOutofCredits(PairSession session)
         {
-            return session.Credits <= 0;
+            // Credits == -1 表示永久授权（不限次数），不计为耗尽
+            return session.Credits == 0;
         }
 
         public bool IsItemCountExceeded(PairSession session, int itemCount)
         {
-            return itemCount > session.MaxItemsPerJob;
+            return session.MaxItemsPerJob>0 &&  itemCount > session.MaxItemsPerJob;
         }
 
         public bool IsByteCountExceeded(PairSession session, long byteCount)
         {
-            return byteCount > session.MaxBytesPerJob;
+            return session.MaxBytesPerJob > 0 && byteCount > session.MaxBytesPerJob;
         }
 
         public List<PairSession> LoadAll()

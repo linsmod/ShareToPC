@@ -1,6 +1,6 @@
 ﻿namespace ShareToPcReciver.Net
 {
-    internal class DeviceInfo
+    public class DeviceInfo
     {
         public string DeviceName { get; internal set; }
         public string DeviceId { get; internal set; }

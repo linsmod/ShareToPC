@@ -94,7 +94,7 @@ namespace ShareToPcReciver
                     {
                         string ext = GetFileExtension(file.FileName);
                         string sizeText;
-                        if ((file.Status == "failed" || file.Status == "cancelled") && file.ReceivedBytes > 0)
+                        if ((file.Status == "cancelled") && file.ReceivedBytes > 0)
                             sizeText = $"{FormatSize(file.ReceivedBytes)} / {FormatSize(file.Size)}";
                         else
                             sizeText = FormatSize(file.Size);
@@ -466,6 +466,15 @@ namespace ShareToPcReciver
                     int days = selected.Days;
                     if (days > 0)
                         result.ExpiresAt = DateTimeOffset.UtcNow.AddDays(days).ToUnixTimeMilliseconds();
+                    result.Credits = -1;                    // 永久授权
+                    result.MaxItemsPerJob = int.MaxValue;
+                    result.MaxBytesPerJob = long.MaxValue;
+                    result.TextAction = cmbTextAction.SelectedIndex switch
+                    {
+                        1 => ArrivalAction.None,
+                        2 => ArrivalAction.CopyText,
+                        _ => null
+                    };
                     result.Status = "ACCEPTED";
                     tcs.SetResult(result);
                 }
@@ -562,14 +571,14 @@ namespace ShareToPcReciver
                 return;
             this.Invoke(new Action(() =>
             {
-                if (p.Failed)
+                if (p.Cancelled)
                 {
                     if (_activeRow != null)
                     {
                         _activeRow.Tag = p;
                         RefreshRow(_activeRow);
                         // 写入历史，重启后可恢复
-                        var rf = MakeFailedRecord(p, "failed");
+                        var rf = MakeFailedRecord(p, "canceled");
                         lock (_historyLock) { ReplaceHistoryEntry(rf); }
                         SaveHistory();
                         _activeRow = null;
@@ -669,10 +678,8 @@ namespace ShareToPcReciver
             // 传输中：FileProgressInfo（实时进度条）
             if (e.Item.Tag is FileProgressInfo p)
             {
-                string label = p.Failed ? $"{p.Percent}% 失败"
-                             : p.Cancelled ? $"{p.Percent}% 暂停"
-                             : $"{p.Percent}%";
-                Color clr = p.Failed ? Color.DarkRed : p.Cancelled ? Color.Gray : SystemColors.ControlText;
+                string label = $"{p.Percent}%";
+                Color clr = SystemColors.ControlText;
                 DrawProgressCell(e, p.Percent, label, clr);
                 return;
             }
@@ -680,11 +687,11 @@ namespace ShareToPcReciver
             // 重启后加载的历史记录：ReceivedFile
             if (e.Item.Tag is ReceivedFile rf)
             {
-                if (rf.Status == "failed" || rf.Status == "cancelled")
+                if (rf.Status == "cancelled")
                 {
                     int pct = rf.TotalBytes > 0 ? (int)(rf.ReceivedBytes * 100 / rf.TotalBytes) : 0;
-                    Color clr = rf.Status == "failed" ? Color.DarkRed : Color.Gray;
-                    string label = $"{pct}% {(rf.Status == "failed" ? "失败" : "已取消")}";
+                    Color clr =  Color.Gray;
+                    string label = $"{pct}%";
                     DrawProgressCell(e, pct, label, clr);
                 }
                 else
@@ -1113,7 +1120,7 @@ namespace ShareToPcReciver
                     }
 
                     // 删除未完成/失败传输的 .part 临时文件
-                    if (rf.Status == "failed" || rf.Status == "cancelled")
+                    if (rf.Status == "cancelled")
                     {
                         if (!string.IsNullOrEmpty(rf.TransferId))
                         {

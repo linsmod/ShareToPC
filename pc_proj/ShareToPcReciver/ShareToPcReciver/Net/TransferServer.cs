@@ -161,7 +161,9 @@ namespace ShareToPcReciver.Net
                 }
                 catch (Exception ex)
                 {
-                    Util.Log.Warn($"Failed to send OFFLINE to {session.DeviceName}: {ex.Message}");
+                    if (session.clientDevice!=null) { 
+                        Util.Log.Warn($"Failed to send OFFLINE to {session.clientDevice.DeviceName}: {ex.Message}");
+                    }
                 }
             }
 
@@ -271,11 +273,20 @@ namespace ShareToPcReciver.Net
             PairStore.Save(session);
             return session;
         }
-        internal PairStore.PairSession DecreaseCredits(String deviceId)
+        internal PairStore.PairSession DecreaseCredits(String deviceId, AuthResult result)
         {
             PairStore.PairSession session = PairStore.GetByDeviceId(deviceId);
-            session.Credits -= 1;
-            if(String.IsNullOrEmpty(session.Key))
+            // 只有可计数的授权（Credits > 0）才递减；永久授权（Credits == -1）不递减
+            if (session.Credits > 0)
+                session.Credits -= 1;
+            else
+                session.Credits = result.Credits;
+            // 同步持久化过期时间、约束等（之前这些字段都没写入 PairStore）
+            session.ExpiresAt = result.ExpiresAt;
+            session.MaxItemsPerJob = result.MaxItemsPerJob;
+            session.MaxBytesPerJob = result.MaxBytesPerJob;
+            session.TextAction = result.TextAction;
+            if (string.IsNullOrEmpty(session.Key))
                 session.Key = Guid.NewGuid().ToString();
             PairStore?.Save(session);
             return session;

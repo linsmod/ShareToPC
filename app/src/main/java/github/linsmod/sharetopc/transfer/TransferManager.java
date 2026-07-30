@@ -1,6 +1,7 @@
 package github.linsmod.sharetopc.transfer;
 
 import android.content.Context;
+import android.net.http.NetworkException;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
@@ -22,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -128,11 +130,14 @@ public class TransferManager implements TransferProtocol.Progress {
         }
 
         public boolean isAuthSuccess() {
-            return this.authResult!=null && this.authResult.accepted;
+            return this.authResult != null && this.authResult.accepted;
         }
     }
 
-    private static final int MAX_ATTEMPTS = 2; // 首次 + 重试 1 次
+    private static final int MAX_ATTEMPTS = 6;          // 首次 + 5次重试
+    private static final long BASE_DELAY_MS = 2000;     // 基础间隔 2s
+    private static final long MAX_DELAY_MS = 60000;     // 最大上限 60s（防止无限膨胀）
+    private static final Random RANDOM = new Random();  // 用于抖动
     private static final long RETRY_DELAY_MS = 2000;
     private static final long PROGRESS_THROTTLE_MS = 500; // 进度刷新最小间隔
 
@@ -246,7 +251,7 @@ public class TransferManager implements TransferProtocol.Progress {
                 if (entry.canRequestPause()) {
                     // Mark pendingAction only. it is a flying action.
                     entry.pendingAction = SendEntry.PENDING_ACTION_END_PAUSE;
-                    updateJob(cur,entry);
+                    updateJob(cur, entry);
                 }
             }
             if (queue.remove(cur))
@@ -285,7 +290,7 @@ public class TransferManager implements TransferProtocol.Progress {
                     if (item.pendingAction == SendEntry.PENDING_ACTION_END_RESUME) {
                         item.status = SendEntry.STATUS_SENDING;
                         item.pendingAction = SendEntry.PENDING_ACTION_NONE;
-                        updateJob(job,item);
+                        updateJob(job, item);
                     }
                 }
             }
@@ -354,14 +359,16 @@ public class TransferManager implements TransferProtocol.Progress {
                             job.cancel(); // skip rest of all
                         }
                         break;
-                    } catch (Exception e) {
+                    }
+                    catch (Exception e) {
                         // 连接断开，关闭以便下次重连
                         client.close();
+                        job.authResult = null;
                         if (this.currentJob.isCancelRequested()) {
                             break;
                         }
                         String errMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                        LogX.e("transfer attempt " + attempt + " for " + item.name + " failed: " + errMsg, e);
+                        LogX.e("transfer attempt " + attempt + "/ " + MAX_ATTEMPTS + " for " + item.name + " failed: " + errMsg, e);
                         if (attempt >= MAX_ATTEMPTS) {
                             item.status = SendEntry.STATUS_IDLE;
                             item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
@@ -371,8 +378,11 @@ public class TransferManager implements TransferProtocol.Progress {
                             job.cancel(); // cancel to skip reset of items
                         }
                         if (attempt < MAX_ATTEMPTS) {
+                            long exponentialDelay = BASE_DELAY_MS * (1L << (attempt - 1)); // 2^(n-1)
+                            long delay = Math.min(MAX_DELAY_MS, exponentialDelay);
+                            LogX.e("Sleep "+delay+"ms before next attempt");
                             try {
-                                Thread.sleep(RETRY_DELAY_MS);
+                                Thread.sleep(delay);
                             } catch (InterruptedException ie) {
                                 Thread.currentThread().interrupt();
                                 break;
@@ -398,7 +408,8 @@ public class TransferManager implements TransferProtocol.Progress {
             });
         }
     }
-    private void clearFlayingState(SendJob job, SendEntry item){
+
+    private void clearFlayingState(SendJob job, SendEntry item) {
         if (item.pendingAction == SendEntry.PENDING_ACTION_END_PAUSE) {
             item.status = SendEntry.STATUS_IDLE;
             item.idleReason = SendEntry.IDLE_REASON_PAUSED;
@@ -414,6 +425,7 @@ public class TransferManager implements TransferProtocol.Progress {
 
     private void sendItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
         client.connect();
+        client.hello(job, true);
         // 本连接首次：发送 JOB_INFO 获取 PC 授权
         if (!job.isAuthSuccess()) {
             // 计算 job 级别汇总（含当前已在 SENDING 的 item）
@@ -439,12 +451,13 @@ public class TransferManager implements TransferProtocol.Progress {
 
             TransferClient.JobInfoResult result = client.sendJobInfoAndWaitRemoteApproval(job,
                     App.get().settingsStore.getDeviceId(),
+                    App.get().settingsStore.getDeviceName(),
                     existingKey,
                     job.id,
                     itemCount,
                     totalBytes);
             job.authResult = result;
-            if (result!= null && result.accepted) {
+            if (result != null && result.accepted) {
                 // 存下 PC 返回的 pairKey（可能新的或已有的）
                 if (result.pairKey != null && !result.pairKey.isEmpty()) {
                     PairSession ps = session != null ? session : new PairSession();
@@ -484,17 +497,14 @@ public class TransferManager implements TransferProtocol.Progress {
 
         item.status = SendEntry.STATUS_SENDING;
         job.updateMillis = System.currentTimeMillis();
-        updateJob(job,item);
+        updateJob(job, item);
 
         lastProgressNotifyMs = 0;
 
         if (item.isText()) {
-            try(var in = new ByteArrayInputStream(item.text.getBytes(StandardCharsets.UTF_8))){
-                client.sendFileFromStream(job, item, in, job.authResult.pairKey,this);
-                item.status = SendEntry.STATUS_IDLE;
-                item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
-                updateJob(job, item);
-            };
+            try (var in = new ByteArrayInputStream(item.text.getBytes(StandardCharsets.UTF_8))) {
+                client.sendFileFromStream(job, item, in, job.authResult.pairKey, this);
+            }
         } else {
             // 优先通过 PFD→FileChannel 读文件（内核文件句柄，skip/seek 可靠，支持断点续传）
             if (item.id != null) {
@@ -502,42 +512,27 @@ public class TransferManager implements TransferProtocol.Progress {
                 if (handle != null) {
                     try {
                         InputStream in = handle.newInputStream();
-                        client.sendFileFromStream(job, item, in, job.authResult.pairKey,this);
-                        item.status = SendEntry.STATUS_IDLE;
-                        item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
-                        updateJob(job, item);
+                        client.sendFileFromStream(job, item, in, job.authResult.pairKey, this);
+                        // No need update state here, cancelled/progress/finish are updated in progress listener
                         return;
                     }
-                    catch (SocketException ex){
+                    catch (SocketException ex) {
                         item.status = SendEntry.STATUS_IDLE;
-                        item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
+                        item.idleReason = SendEntry.IDLE_REASON_PAUSED; // pause when server restart or net error
                         updateJob(job, item);
-                        LogX.e("PFD send failed for " + item.name, ex);
-                        return;
-                    }
-                    catch (IOException e) {
+                        throw new TransferClient.NetworkError("PFD send failed for " + item.name, ex);
+                    } catch (IOException e) {
                         item.status = SendEntry.STATUS_IDLE;
-                        item.idleReason = SendEntry.IDLE_REASON_NET_ERROR;
+                        item.idleReason = SendEntry.IDLE_REASON_IO_ERROR;
                         updateJob(job, item);
-                        LogX.e("PFD send failed for " + item.name, e);
+                        throw new IOException("PFD send failed for " + item.name, e);
                     }
                 }
             }
-            // 历史兼容：从本地 inbox 文件发送
-            if (item.localPath != null) {
-                File file = new File(item.localPath);
-                if (file.exists()) {
-                    client.sendFile(job, item, file, job.authResult.pairKey,this);
-                    item.status = SendEntry.STATUS_IDLE;
-                    item.idleReason = SendEntry.IDLE_REASON_SUCCESS;
-                    updateJob(job, item);
-                    return;
-                }
-            }
-            // 所有源都不可用 → IO 错误
+            item.status = SendEntry.STATUS_IDLE;
             item.idleReason = SendEntry.IDLE_REASON_IO_ERROR;
-            item.errorMsg = "无可读取的源：" + item.name;
-            updateJob(job,item);
+            updateJob(job, item);
+            throw new IOException("Pfd Not available: " + item.name);
         }
     }
 
@@ -549,15 +544,16 @@ public class TransferManager implements TransferProtocol.Progress {
         item.updateMillis = now;
         job.updateMillis = now;
         jobStore.updateJobEntry(item.id, job.host, job.port,
-                null, item.status,item.sentBytes,item.totalBytes, item.idleReason, item.errorMsg, now);
+                null, item.status, item.sentBytes, item.totalBytes, item.idleReason, item.errorMsg, now);
         jobStore.upsertJob(job);
     }
-    public void onCanceled(SendEntry entry,long sent,long total) {
-        entry.sentBytes=sent;
+
+    public void onCanceled(SendEntry entry, long sent, long total) {
+        entry.sentBytes = sent;
         entry.totalBytes = total;
         entry.status = SendEntry.STATUS_IDLE;
         entry.idleReason = SendEntry.IDLE_REASON_PAUSED;
-        updateJob(currentJob,entry);
+        updateJob(currentJob, entry);
         SendJob job = currentJob;
         if (job != null) {
             mainHandler.post(() -> {
@@ -566,14 +562,29 @@ public class TransferManager implements TransferProtocol.Progress {
         }
     }
 
-    public void onProgress(SendEntry entry,long sent,long total) {
+    @Override
+    public void onFinish(SendEntry entry, long sentBytes, long totalBytes) {
+        entry.sentBytes = sentBytes;
+        entry.totalBytes = totalBytes;
+        entry.status = SendEntry.STATUS_IDLE;
+        entry.idleReason = SendEntry.IDLE_REASON_SUCCESS;
+        updateJob(currentJob, entry);
+        SendJob job = currentJob;
+        if (job != null) {
+            mainHandler.post(() -> {
+                for (JobProgressListener l : progressListeners) l.onProgress(job);
+            });
+        }
+    }
+
+    public void onProgress(SendEntry entry, long sent, long total) {
         SendEntry old = jobStore.getSendEntry(entry.id);
 
-        entry.sentBytes=sent;
+        entry.sentBytes = sent;
         entry.totalBytes = total;
         entry.status = SendEntry.STATUS_SENDING;
         entry.idleReason = SendEntry.IDLE_REASON_CREATED;
-        updateJob(currentJob,entry);
+        updateJob(currentJob, entry);
 
         long now = System.currentTimeMillis();
         var progressed = old.sentBytes != entry.sentBytes;

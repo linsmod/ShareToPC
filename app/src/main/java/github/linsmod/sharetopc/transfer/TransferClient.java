@@ -11,8 +11,10 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
+import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.util.FileUtils;
+import github.linsmod.sharetopc.util.LogX;
 
 /** 单次 TCP 会话：用于注册设备或发送 TEXT/FILE。 */
 public class TransferClient implements Closeable {
@@ -20,20 +22,21 @@ public class TransferClient implements Closeable {
     public static final int ACK_TIMEOUT_MS = 10000;
     private final String host;
     private final int port;
+    final String pcDeviceId;
 
     private Socket socket;
     private DataOutputStream out;
     private DataInputStream in;
     private int state;
-    public String pcDeviceId;
 
     public static final int DISCONNECTED = 0;
     public static final int CONNECTING = 1;
     public static final int CONNECTED = 2;
     public static final int CONNECTION_LOST = 3;
+    private RemoteDeviceInfo rdi;
 
-    public TransferClient(String remoteDeviceId, String host, int port) {
-        this.pcDeviceId = remoteDeviceId;
+    public TransferClient(String pcDeviceId, String host, int port) {
+        this.pcDeviceId = pcDeviceId;
         this.host = host;
         this.port = port;
     }
@@ -64,10 +67,10 @@ public class TransferClient implements Closeable {
             out = new DataOutputStream(socket.getOutputStream());
             in = new DataInputStream(socket.getInputStream());
             state = CONNECTED;
-        } catch (IOException e) {
+        } catch (Exception e) {
             // 连接失败时主动关闭 socket，避免资源泄漏
             close();
-            throw e;
+            throw new NetworkError("连接失败: "+host+":"+port,e);
         }
     }
 
@@ -113,10 +116,20 @@ public class TransferClient implements Closeable {
         }
         TransferProtocol.writeFrame(out, header);
     }
-
-    public static class BadProtoException extends RuntimeException{
-        public BadProtoException(String s) {
+    public static class NetworkError extends RuntimeException{
+        public NetworkError(String s) {
             super(s);
+        }
+        public NetworkError(String s,Exception inner) {
+            super(s,inner);
+        }
+    }
+    public static class BadProtocol extends RuntimeException{
+        public BadProtocol(String s) {
+            super(s);
+        }
+        public BadProtocol(String s,Exception inner) {
+            super(s,inner);
         }
     }
 
@@ -130,9 +143,9 @@ public class TransferClient implements Closeable {
             return TransferProtocol.getAckOffset(ack);
         }
         if(TransferProtocol.isAckBadProtocol(ack)){
-            throw new BadProtoException("Server rejected communication with BadProtocol");
+            throw new BadProtocol("Server rejected communication with BadProtocol");
         }
-        throw new BadProtoException("unexpected frame: " + ack);
+        throw new NetworkError("unexpected frame: " + ack);
     }
 
     /** 跳过 InputStream 中指定字节数（兼容 skip() 返回 < bytesToSkip 的情况）。 */
@@ -153,13 +166,13 @@ public class TransferClient implements Closeable {
     }
 
     /** 阻塞等待 ACK；收到 ERROR 或异常类型时抛 IOException。 */
-    private void expectAck(TransferManager.SendJob job) throws IOException {
+    private boolean expectAck(TransferManager.SendJob job) throws IOException {
         if(job.isCancelRequested()){
-            return;
+            return false;
         }
         JsonObject ack = TransferProtocol.readHeader(in);
         if (TransferProtocol.isAckOk(ack)) {
-            return;
+            return true;
         }
         if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
             throw new IOException("peer error: " + TransferProtocol.ackError(ack));
@@ -189,11 +202,12 @@ public class TransferClient implements Closeable {
      * 发送 JOB_INFO 帧，通知 PC 端本批次 job 的元信息，等待 PC 授权。
      * @return JobInfoResult，含 ACCEPTED/REJECTED 状态和 PC 返回的约束。
      */
-    public JobInfoResult sendJobInfoAndWaitRemoteApproval(TransferManager.SendJob job, String deviceId, String pairKey, String jobId,
+    public JobInfoResult sendJobInfoAndWaitRemoteApproval(TransferManager.SendJob job, String deviceId,String deviceName, String pairKey, String jobId,
                                                           int itemCount, long totalBytes) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "JOB_INFO");
         header.addProperty("deviceId", deviceId);
+        header.addProperty("device", deviceName);
         header.addProperty("pairKey", pairKey != null ? pairKey : "");
         header.addProperty("jobId", jobId != null ? jobId : "");
         header.addProperty("itemCount", itemCount);
@@ -201,7 +215,50 @@ public class TransferClient implements Closeable {
         TransferProtocol.writeFrame(out, header);
         return expectJobAck(job);
     }
+    void hello(TransferManager.SendJob job, boolean oneway) throws IOException {
+        JsonObject header = new JsonObject();
+        header.addProperty("type", "HELLO");
+        String deviceName = App.get().settingsStore.getDeviceName();
+            if (deviceName == null) {
+                deviceName = android.os.Build.MODEL != null ? android.os.Build.MODEL : "Android";
+            }
+        header.addProperty("device", deviceName);
+        header.addProperty("version", TransferProtocol.APP_VERSION);
+        header.addProperty("protoVersion", TransferProtocol.PROTOCOL_VERSION);
+        header.addProperty("deviceId", App.get().settingsStore.getDeviceId());
+        header.addProperty("oneway", oneway);
+        TransferProtocol.writeFrame(out, header);
 
+        if(oneway || job.isCancelRequested()){
+            return;
+        }
+        // 读 PC 的 HELLO ACK，其中携带 PC 程序版本、协议版本、设备 ID
+        JsonObject ack = TransferProtocol.readHeader(in);
+        if (!TransferProtocol.isAckOk(ack)) {
+            if ("ACK".equals(TransferProtocol.optString(ack, "type"))) {
+                throw new IOException("peer error: " + TransferProtocol.ackError(ack));
+            }
+            throw new IOException("unexpected frame: " + ack);
+        }
+        var deviceId = ack.has("deviceId") && !ack.get("deviceId").isJsonNull()
+                ? ack.get("deviceId").getAsString() : "";
+        if(!pcDeviceId.equals(deviceId)){
+            LogX.d("HELLO: Mismatched deviceId: desired:"+ pcDeviceId +", got "+deviceId);
+            return;
+        }
+        rdi.deviceName = ack.has("deviceName") && !ack.get("deviceName").isJsonNull()
+                ? ack.get("version").getAsString() : "unknown";
+        rdi.clientVersion = ack.has("version") && !ack.get("version").isJsonNull()
+                ? ack.get("version").getAsString() : "unknown";
+        rdi.protoVer = ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()
+                ? ack.get("protoVersion").getAsInt() : 0;
+        rdi.deviceId = ack.has("deviceId") && !ack.get("deviceId").isJsonNull()
+                ? ack.get("deviceId").getAsString() : "";
+        android.util.Log.d("TransferClient",
+                "HELLO OK: " + rdi.clientVersion + " proto v" + rdi.protoVer + " id=" + rdi.deviceId
+                + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
+        this.rdi = new RemoteDeviceInfo();
+    }
     /** 读取 PC 返回的 JOB_ACK 帧，解析出授权结果。 */
     private JobInfoResult expectJobAck(TransferManager.SendJob job) throws IOException {
         long totalMillis = 0;
@@ -256,6 +313,7 @@ public class TransferClient implements Closeable {
             } catch (IOException ignored) {
             }
         }
+        this.rdi = null; // need resend job info
         this.state= CONNECTION_LOST;
     }
 }

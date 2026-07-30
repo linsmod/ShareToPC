@@ -29,6 +29,8 @@
     <string name="ok">确定</string>
     <string name="task_cleared">任务已清空</string>
     <string name="pref_scan_timeout_title">扫描超时时长（秒）</string>
+    <string name="pref_device_name_title">本机设备名</string>
+    <string name="pref_device_name_summary">设置在电脑端显示的设备名称，留空则使用系统设备型号</string>
     <string name="pref_port_info_title">接收端口约定</string>
     <string name="pref_port_info_summary">电脑端默认监听 51234（两端需一致）</string>
     <string name="state_connecting">连接中…</string>

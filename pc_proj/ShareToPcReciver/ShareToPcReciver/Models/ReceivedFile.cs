@@ -28,7 +28,6 @@ namespace ShareToPcReciver.Models
         public string JobId { get; set; } = "";
         public long Received { get; set; }
         public long Total { get; set; }
-        public bool Failed { get; set; }
         public bool Cancelled { get; set; }
         public int Percent => Total > 0 ? (int)(Received * 100 / Total) : 0;
 

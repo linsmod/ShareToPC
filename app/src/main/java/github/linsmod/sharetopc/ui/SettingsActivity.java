@@ -2,13 +2,17 @@ package github.linsmod.sharetopc.ui;
 
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
+import androidx.preference.PreferenceManager;
 
 import com.google.android.material.appbar.MaterialToolbar;
 
@@ -36,6 +40,30 @@ public class SettingsActivity extends AppCompatActivity {
         @Override
         public void onCreatePreferences(@Nullable Bundle savedInstanceState, String rootKey) {
             setPreferencesFromResource(R.xml.preferences, rootKey);
+
+            // 本机设备名：未设置时用 Build.MODEL 作为 placeholder 显示
+            EditTextPreference deviceNamePref = findPreference("device_name");
+            if (deviceNamePref != null) {
+                String model = Build.MODEL != null ? Build.MODEL : "Android";
+                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+                String current = prefs.getString("device_name", null);
+                if (current != null && !current.trim().isEmpty()) {
+                    deviceNamePref.setSummary(current.trim());
+                } else {
+                    deviceNamePref.setSummary(model + "（系统默认）");
+                }
+                deviceNamePref.setOnPreferenceChangeListener((preference, newValue) -> {
+                    String val = newValue != null ? newValue.toString().trim() : "";
+                    if (val.isEmpty()) {
+                        deviceNamePref.setSummary(model + "（系统默认）");
+                        prefs.edit().remove("device_name").apply();
+                        return false; // 让 Preference 框架不要存空字符串
+                    } else {
+                        deviceNamePref.setSummary(val);
+                        return true;
+                    }
+                });
+            }
 
             Preference viewLogs = findPreference("view_logs");
             if (viewLogs != null) {

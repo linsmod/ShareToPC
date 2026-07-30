@@ -25,10 +25,7 @@ namespace ShareToPcReciver.Net
         private AuthResult authResult;
         private CancellationTokenSource authCts;
 
-        public string DeviceName { get; private set; } = "Unknown";
-        public string DeviceId { get; private set; } = "Unknown";
-
-        private DeviceInfo sender;
+        public DeviceInfo clientDevice;
         private AuthInfo currentJobAuth;
 
         /// <summary>会话断开时触发，用于 TransferServer 清理会话列表。</summary>
@@ -69,8 +66,6 @@ namespace ShareToPcReciver.Net
                         case "JOB_INFO":
                             await HandleJobInfo(stream, header);
                             break;
-                        case "CANCEL":
-                            HandleCancel(header);
                             return;
                         default:
                             await Protocol.WriteAckAsync(stream, false, $"Unknown type: {type}", _ct);
@@ -97,7 +92,7 @@ namespace ShareToPcReciver.Net
             }
             catch (Exception ex)
             {
-                Util.Log.Error($"Session error with {DeviceName}", ex);
+                Util.Log.Error($"Session error with {clientDevice.DeviceName}", ex);
             }
             finally
             {
@@ -117,11 +112,11 @@ namespace ShareToPcReciver.Net
             {
                 var stream = _client.GetStream();
                 await Protocol.WriteOfflineAsync(stream, CancellationToken.None);
-                Util.Log.Info($"Sent OFFLINE to {DeviceName}");
+                Util.Log.Info($"Sent OFFLINE to {clientDevice.DeviceName}");
             }
             catch (Exception ex)
             {
-                Util.Log.Warn($"Failed to send OFFLINE to {DeviceName}: {ex.Message}");
+                Util.Log.Warn($"Failed to send OFFLINE to {clientDevice.DeviceName}: {ex.Message}");
             }
         }
 
@@ -139,7 +134,7 @@ namespace ShareToPcReciver.Net
             }
             catch (Exception ex)
             {
-                Util.Log.Warn($"Failed to disconnect {DeviceName}: {ex.Message}");
+                Util.Log.Warn($"Failed to disconnect {clientDevice.DeviceName}: {ex.Message}");
             }
         }
 
@@ -148,10 +143,9 @@ namespace ShareToPcReciver.Net
             string device = header.TryGetProperty("device", out JsonElement d) ? d.GetString() ?? "Unknown" : "Unknown";
             string clientVersion = header.TryGetProperty("version", out JsonElement v) ? v.GetString() ?? "unknown" : "unknown";
             int clientProto = header.TryGetProperty("protoVersion", out JsonElement pv) ? pv.GetInt32() : 0;
+            bool oneway = header.TryGetProperty("oneway", out JsonElement ow) ? ow.GetBoolean() : false;
             string clientDeviceId = header.TryGetProperty("deviceId", out JsonElement did) ? did.GetString() ?? "" : "";
-            DeviceName = device;
-            DeviceId = clientDeviceId;
-            this.sender = new DeviceInfo
+            this.clientDevice = new DeviceInfo
             {
                 DeviceName = device,
                 DeviceId = clientDeviceId,
@@ -168,7 +162,8 @@ namespace ShareToPcReciver.Net
                 ProtoVersion = clientProto,
                 LastSeen = DateTime.UtcNow
             });
-            await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _ct);
+            if(!oneway)
+                await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _ct);
         }
 
         private async Task HandleText(Stream stream, JsonElement header)
@@ -176,10 +171,10 @@ namespace ShareToPcReciver.Net
             string text = header.TryGetProperty("text", out JsonElement t) ? t.GetString() ?? "" : "";
             long time = header.TryGetProperty("time", out JsonElement ts) ? ts.GetInt64() : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             string jobId = header.TryGetProperty("jobId", out JsonElement jid) ? jid.GetString() ?? "" : "";
-            Util.Log.Info($"TEXT from {DeviceName}: {text}");
+            Util.Log.Info($"TEXT from {clientDevice.DeviceName}: {text}");
             _server.OnTextReceived(new ReceivedText
             {
-                DeviceName = DeviceName,
+                DeviceName = clientDevice.DeviceName,
                 Text = text,
                 Time = time,
                 JobId = jobId
@@ -193,7 +188,7 @@ namespace ShareToPcReciver.Net
         {
             if (authResult == null || !authResult.IsAccepted)
             {
-                Util.Log.Warn($"FILE from {DeviceName} rejected due to no accepted job");
+                Util.Log.Warn($"FILE from {clientDevice.DeviceName} rejected due to no accepted job");
                 await Protocol.WriteBadProtocolAckAsync(stream, _ct);
                 return;
             }
@@ -208,7 +203,7 @@ namespace ShareToPcReciver.Net
 
             if (key != authResult?.PairKey)
             {
-                Util.Log.Warn($"FILE from {DeviceName} rejected due to invalid key: {key}");
+                Util.Log.Warn($"FILE from {clientDevice.DeviceName} rejected due to invalid key: {key}");
                 await Protocol.WriteBadProtocolAckAsync(stream, _ct);
                 return;
             }
@@ -234,12 +229,12 @@ namespace ShareToPcReciver.Net
 
             if (isResume)
             {
-                Util.Log.Info($"RESUME FILE from {DeviceName}: {name} (id={fileId}) at offset {resumeOffset}/{size} bytes");
+                Util.Log.Info($"RESUME FILE from {clientDevice.DeviceName}: {name} (id={fileId}) at offset {resumeOffset}/{size} bytes");
             }
             else
             {
                 filePath = _storage.CreateFile(name, fileId, out partPath);
-                Util.Log.Info($"FILE from {DeviceName}: {name} ({size} bytes, id={fileId})");
+                Util.Log.Info($"FILE from {clientDevice.DeviceName}: {name} ({size} bytes, id={fileId})");
             }
 
             ReceivedFile received = new ReceivedFile
@@ -248,7 +243,7 @@ namespace ShareToPcReciver.Net
                 FilePath = null,
                 ObjectType = objectType,
                 Size = size,
-                DeviceName = DeviceName,
+                DeviceName = clientDevice.DeviceName,
                 Time = time,
                 Progress = 0,
                 TotalBytes = size,
@@ -289,25 +284,6 @@ namespace ShareToPcReciver.Net
                     while (totalReceived < size && !_ct.IsCancellationRequested)
                     {
                         var (frame, framePayloadLength, frameType) = await Protocol.ReadFrameAsync(stream, _ct);
-                        if (frameType == "CANCEL")
-                        {
-                            Util.Log.Info($"Transfer cancelled from {DeviceName} for {name}");
-                            _storage.DiscardFile(partPath);
-                            _server.OnFileProgress(new FileProgressInfo
-                            {
-                                FileName = name,
-                                ObjectType = objectType,
-                                DeviceName = DeviceName,
-                                TransferId = fileId,
-                                JobId = jobId,
-                                Received = totalReceived,
-                                Total = size,
-                                Cancelled = true
-                            });
-                            _sessionCts.Cancel();
-                            return;
-                        }
-
                         // 断点续传首包必须是 RESUME_CHUNK
                         if (needResumeChunk)
                         {
@@ -344,7 +320,7 @@ namespace ShareToPcReciver.Net
                             {
                                 FileName = name,
                                 ObjectType = objectType,
-                                DeviceName = DeviceName,
+                                DeviceName = clientDevice.DeviceName,
                                 TransferId = fileId,
                                 JobId = jobId,
                                 Received = totalReceived,
@@ -380,7 +356,7 @@ namespace ShareToPcReciver.Net
                                 {
                                     FileName = name,
                                     ObjectType = objectType,
-                                    DeviceName = DeviceName,
+                                    DeviceName = clientDevice.DeviceName,
                                     TransferId = fileId,
                                     JobId = jobId,
                                     Received = totalReceived,
@@ -419,12 +395,12 @@ namespace ShareToPcReciver.Net
                 _server.OnFileProgress(new FileProgressInfo
                 {
                     FileName = name,
-                    DeviceName = DeviceName,
+                    DeviceName = clientDevice.DeviceName,
                     TransferId = fileId,
                     JobId = jobId,
                     Received = totalReceived,
                     Total = size,
-                    Failed = true
+                    Cancelled = true
                 });
                 try { await Protocol.WriteAckAsync(stream, false, ex.Message, _ct); } catch { }
             }
@@ -435,12 +411,12 @@ namespace ShareToPcReciver.Net
                 _server.OnFileProgress(new FileProgressInfo
                 {
                     FileName = name,
-                    DeviceName = DeviceName,
+                    DeviceName = clientDevice.DeviceName,
                     TransferId = fileId,
                     JobId = jobId,
                     Received = totalReceived,
                     Total = size,
-                    Failed = true
+                    Cancelled = true
                 });
                 try { await Protocol.WriteAckAsync(stream, false, ex.Message, _ct); } catch { }
             }
@@ -449,14 +425,15 @@ namespace ShareToPcReciver.Net
         private async Task HandleJobInfo(Stream stream, JsonElement header)
         {
             string deviceId = header.TryGetProperty("deviceId", out JsonElement did) ? did.GetString() ?? "" : "";
+            string device = header.TryGetProperty("device", out JsonElement div) ? div.GetString() ?? "" : "";
             string pairKey = header.TryGetProperty("pairKey", out JsonElement pk) ? pk.GetString() ?? "" : "";
             string jobId = header.TryGetProperty("jobId", out JsonElement jid) ? jid.GetString() ?? "" : "";
             int itemCount = header.TryGetProperty("itemCount", out JsonElement ic) ? ic.GetInt32() : 0;
             long totalBytes = header.TryGetProperty("totalBytes", out JsonElement tb) ? tb.GetInt64() : 0L;
-
+            
             this.currentJobAuth = new AuthInfo
             {
-                DeviceName = DeviceName,
+                DeviceName = device,
                 DeviceId = deviceId,
                 PairKey = pairKey,
                 JobId = jobId,
@@ -465,7 +442,7 @@ namespace ShareToPcReciver.Net
             };
 
             Util.Log.Info($"JOB_INFO raw JSON: {header.GetRawText()}");
-            Util.Log.Info($"JOB_INFO from {DeviceName}: id={deviceId} key={pairKey} job={jobId} items={itemCount} bytes={totalBytes}");
+            Util.Log.Info($"JOB_INFO from {clientDevice.DeviceName}: id={deviceId} key={pairKey} job={jobId} items={itemCount} bytes={totalBytes}");
 
             if (_server.PairStore.IsBlocked(deviceId))
             {
@@ -476,16 +453,16 @@ namespace ShareToPcReciver.Net
                 PairStore.PairSession session = _server.PairStore.GetByDeviceId(deviceId);
                 if (session == null) {
                     
-                    this.authResult = AuthResult.CreatePending(DeviceName, itemCount, totalBytes);
-                    session = _server.CreateNewSession(deviceId, DeviceName, authResult);
+                    this.authResult = AuthResult.CreatePending(clientDevice.DeviceName, itemCount, totalBytes);
+                    session = _server.CreateNewSession(deviceId, clientDevice.DeviceName, authResult);
                 }
                 else if (_server.PairStore.IsExpired(session))
                 {
-                    this.authResult = AuthResult.CreatePending(DeviceName,itemCount,totalBytes);
+                    this.authResult = AuthResult.CreatePending(clientDevice.DeviceName,itemCount,totalBytes);
                 }
                 else if (_server.PairStore.IsOutofCredits(session))
                 {
-                    this.authResult = AuthResult.CreatePending(DeviceName, itemCount, totalBytes);
+                    this.authResult = AuthResult.CreatePending(clientDevice.DeviceName, itemCount, totalBytes);
                 }
                 else if (_server.PairStore.IsItemCountExceeded(session, itemCount))
                 {
@@ -549,14 +526,14 @@ namespace ShareToPcReciver.Net
             // ACCEPTED 且需要生成新 key（首次配对或 credits 不是默认）
             if (authResult.Status == "ACCEPTED")
             {
-                var session =  _server.DecreaseCredits(deviceId);
+                var session =  _server.DecreaseCredits(deviceId, authResult);
                 authResult.PairKey = session.Key;
 
-                Util.Log.Info($"JOB_INFO accepted for {DeviceName}, credits={authResult.Credits}");
+                Util.Log.Info($"JOB_INFO accepted for {clientDevice.DeviceName}, credits={authResult.Credits}");
             }
             else
             {
-                Util.Log.Info($"JOB_INFO rejected for {DeviceName}");
+                Util.Log.Info($"JOB_INFO rejected for {clientDevice.DeviceName}");
             }
 
             // 回复 JOB_ACK
@@ -574,18 +551,6 @@ namespace ShareToPcReciver.Net
         private async Task HandlePing(Stream stream)
         {
             await Protocol.WritePongAsync(stream, _ct);
-        }
-
-        private void HandleCancel(JsonElement header)
-        {
-            Util.Log.Info($"CANCEL from {DeviceName}");
-            _server.OnFileProgress(new FileProgressInfo
-            {
-                FileName = "",
-                DeviceName = DeviceName,
-                Total = 0,
-                Cancelled = true
-            });
         }
     }
 }

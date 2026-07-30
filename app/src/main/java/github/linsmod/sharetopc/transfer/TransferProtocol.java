@@ -31,6 +31,8 @@ public final class TransferProtocol {
     public interface Progress {
         void onProgress(SendEntry entry, long sentBytes, long totalBytes);
         void onCanceled(SendEntry entry, long sentBytes, long totalBytes);
+
+        void onFinish(SendEntry entry, long sentBytes, long totalBytes);
     }
 
     /** 供 writeFileFrame 在 chunk 间检查是否取消。 */
@@ -90,6 +92,7 @@ public final class TransferProtocol {
         boolean firstChunk = true;
         while ((n = contentStream.read(buf)) != -1) {
             if (cancellable != null && cancellable.isCancelRequested()) {
+                // 简化
 //                JsonObject cancel = createCancelHeader();
 //                writeFrame(out, cancel);
                 out.flush();
@@ -110,6 +113,9 @@ public final class TransferProtocol {
             }
         }
         out.flush();
+        if (progress != null) {
+            progress.onFinish(entry,startOffset + sent, total > 0 ? total : startOffset + sent);
+        }
     }
 
     private static void writeHeader(DataOutputStream out, JsonObject header) throws IOException {
@@ -168,7 +174,7 @@ public final class TransferProtocol {
     public static boolean isAckBadProtocol(JsonObject header) {
         return header != null
                 && "ACK".equals(optString(header, "type"))
-                && "BAD_PROTOCOL".equals(optString(header, "mgs"));
+                && "BAD_PROTOCOL".equals(optString(header, "msg"));
     }
 
     public static String optString(JsonObject obj, String key) {

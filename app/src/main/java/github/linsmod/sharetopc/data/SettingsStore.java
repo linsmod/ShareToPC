@@ -17,6 +17,7 @@ import java.util.Map;
 public class SettingsStore {
 
     public static final String KEY_DEVICE_ID = "device_id";
+    public static final String KEY_DEVICE_NAME = "device_name";
     public static final String KEY_ALIASES = "device_aliases";
     public static final String KEY_SCAN_TIMEOUT = "scan_timeout";
     public static final String KEY_LAST_HOST = "last_device_host";
@@ -90,6 +91,17 @@ public class SettingsStore {
         } catch (Exception e) {
             return new HashMap<>();
         }
+    }
+
+    /** 用户在设置中配的本机设备名（如未设置返回 null）。 */
+    @androidx.annotation.Nullable
+    public String getDeviceName() {
+        String name = prefs.getString(KEY_DEVICE_NAME, null);
+        if (name != null) {
+            name = name.trim();
+            if (name.isEmpty()) return null;
+        }
+        return name;
     }
 
     /** 获取本机设备唯一 ID，首次启动时自动生成并持久化。 */
