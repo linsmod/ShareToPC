@@ -36,20 +36,21 @@ public class AsyncBlockingQueue<T> : IDisposable
     /// <summary>
     /// 异步出队，支持超时和取消。
     /// </summary>
-    /// <param name="timeout">最大等待时间，若超时则抛出 TimeoutException</param>
+    /// <param name="timeout">最大等待时间</param>
     /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>队列中的元素</returns>
-    /// <exception cref="TimeoutException">在指定时间内无元素且添加未完成</exception>
+    /// <returns>队列中的元素，超时时返回 default(T)</returns>
     /// <exception cref="InvalidOperationException">队列已标记完成且为空</exception>
     /// <exception cref="OperationCanceledException">取消请求触发</exception>
     public async Task<T> DequeueAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         if (_disposed) throw new ObjectDisposedException(nameof(AsyncBlockingQueue<T>));
 
-        // 使用 WaitAsync 支持超时和取消
+        // 超时不抛异常，返回 default 让调用方自行处理
         if (!await _semaphore.WaitAsync(timeout, cancellationToken))
         {
-            throw new TimeoutException($"在 {timeout} 内未能获取到元素。");
+            return (default(T) is null || Nullable.GetUnderlyingType(typeof(T)) != null)
+                ? default(T)
+                : throw new TimeoutException($"在 {timeout} 内未能获取到元素。");
         }
 
         lock (_queue)
