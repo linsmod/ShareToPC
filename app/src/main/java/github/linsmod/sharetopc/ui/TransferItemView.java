@@ -27,7 +27,7 @@ public class TransferItemView extends LinearLayout {
         data.id = record.id;
 
         // 文件名（带 [文本] 前缀）
-        String prefix = record.contentType == SendEntry.TYPE_TEXT
+        String prefix = record.objectType == SendEntry.TYPE_TEXT
                 ? "[" + ctx.getString(R.string.type_text) + "] " : "";
         data.name = prefix + (record.name != null ? record.name : "");
 

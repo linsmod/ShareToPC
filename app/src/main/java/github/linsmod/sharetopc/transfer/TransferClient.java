@@ -1,7 +1,5 @@
 package github.linsmod.sharetopc.transfer;
 
-import android.os.Build;
-
 import com.google.gson.JsonObject;
 
 import java.io.Closeable;
@@ -13,7 +11,6 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
-import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.util.FileUtils;
 
@@ -101,7 +98,7 @@ public class TransferClient implements Closeable {
                                    InputStream contentStream,
                                    String pairKey,
                                    TransferProtocol.Progress progress) throws IOException {
-        sendFileHeader(entry.name, entry.mime,entry.contentType, entry.size, entry.id, job.id,pairKey);
+        sendFileHeader(entry.name, entry.mime,entry.objectType, entry.size, entry.id, job.id,pairKey);
         long resumeOffset = expectAckForFile();
         skipExactly(contentStream, resumeOffset);
         TransferProtocol.writeFileContent(out, contentStream, entry.size, progress,resumeOffset,
@@ -110,17 +107,18 @@ public class TransferClient implements Closeable {
     }
 
     /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */
-    private void sendFileHeader(String fileName, String mime,int type, long size, String transferId, String jobId,String pairKey) throws IOException {
+    private void sendFileHeader(String fileName, String mime,int objectType, long size, String entryId, String jobId,String pairKey) throws IOException {
         JsonObject header = new JsonObject();
-        header.addProperty("type", type);
+        header.addProperty("type", "OBJECT");
+        header.addProperty("objectType", objectType);
         header.addProperty("name", FileUtils.sanitizeFileName(fileName));
         header.addProperty("size", size);
         header.addProperty("key",pairKey);
         header.addProperty("mime", mime != null ? mime
                 : FileUtils.guessMimeType(fileName));
         header.addProperty("time", System.currentTimeMillis());
-        if (transferId != null) {
-            header.addProperty("id", transferId);
+        if (entryId != null) {
+            header.addProperty("id", entryId);
         }
         if (jobId != null) {
             header.addProperty("jobId", jobId);

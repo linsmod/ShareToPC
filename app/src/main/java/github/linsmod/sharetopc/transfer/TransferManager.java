@@ -125,6 +125,10 @@ public class TransferManager implements TransferProtocol.Progress {
         public boolean isSending() {
             return items.stream().anyMatch(x -> x.status == SendEntry.STATUS_SENDING);
         }
+
+        public boolean isAuthSuccess() {
+            return this.authResult!=null && this.authResult.accepted;
+        }
     }
 
     private static final int MAX_ATTEMPTS = 2; // 首次 + 重试 1 次
@@ -322,9 +326,7 @@ public class TransferManager implements TransferProtocol.Progress {
         mainHandler.post(() -> {
             for (JobProgressListener l : progressListeners) l.onJobStarted(job);
         });
-
-        TransferClient client = new TransferClient(job.deviceId, job.host, job.port);
-        try {
+        try (TransferClient client = new TransferClient(job.deviceId, job.host, job.port)) {
             for (SendEntry item : job.items) {
                 if (this.currentJob.isCancelRequested()) {
                     break;
@@ -347,7 +349,7 @@ public class TransferManager implements TransferProtocol.Progress {
                         if (item.isSuccess()) {
                             releasePfd(item.id);
                         }
-                        if(!item.isSuccess()){
+                        if (!item.isSuccess()) {
                             job.cancel(); // skip rest of all
                         }
                         break;
@@ -381,7 +383,6 @@ public class TransferManager implements TransferProtocol.Progress {
         } catch (Throwable t) {
             LogX.e("unexpected error in transfer for job: " + job.displayName(), t);
         } finally {
-            client.close();
             // 处理取消后的 pending action 状态转换
             for (SendEntry item : job.items) {
                 clearFlayingState(job, item);
@@ -389,6 +390,7 @@ public class TransferManager implements TransferProtocol.Progress {
             SendJob finished = currentJob;
             recentJobs.put(currentJob.id, currentJob);
             currentJob.sendingItem = null;
+            currentJob.authResult = null;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
             mainHandler.post(() -> {
                 for (JobProgressListener l : progressListeners) l.onJobFinished(finished);
@@ -412,7 +414,7 @@ public class TransferManager implements TransferProtocol.Progress {
     private void sendItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
         client.connect();
         // 本连接首次：发送 JOB_INFO 获取 PC 授权
-        if (job.authResult == null) {
+        if (!job.isAuthSuccess()) {
             // 计算 job 级别汇总（含当前已在 SENDING 的 item）
             int itemCount = 0;
             long totalBytes = 0;
@@ -441,7 +443,7 @@ public class TransferManager implements TransferProtocol.Progress {
                     itemCount,
                     totalBytes);
             job.authResult = result;
-            if (result != null && result.accepted) {
+            if (result!= null && result.accepted) {
                 // 存下 PC 返回的 pairKey（可能新的或已有的）
                 if (result.pairKey != null && !result.pairKey.isEmpty()) {
                     PairSession ps = session != null ? session : new PairSession();

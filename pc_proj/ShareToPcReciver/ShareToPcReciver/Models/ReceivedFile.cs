@@ -17,7 +17,7 @@ namespace ShareToPcReciver.Models
         public string JobId { get; set; } = "";            // Android 端发送批次标识
         public DateTime ReceivedAt => DateTimeOffset.FromUnixTimeMilliseconds(Time).LocalDateTime;
 
-        public string Type { get; internal set; }
+        public int ObjectType { get; internal set; }
     }
 
     public class FileProgressInfo
@@ -31,5 +31,7 @@ namespace ShareToPcReciver.Models
         public bool Failed { get; set; }
         public bool Cancelled { get; set; }
         public int Percent => Total > 0 ? (int)(Received * 100 / Total) : 0;
+
+        public int ObjectType { get; internal set; }
     }
 }

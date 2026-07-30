@@ -34,7 +34,7 @@ public class JobStore {
         values.put(DBHelper.COL_ID, r.id);
         values.put(DBHelper.COL_JOB_ID, r.jobId);
         values.put(DBHelper.COL_TIME_MILLIS, r.timeMillis);
-        values.put(DBHelper.COL_CONTENT_TYPE, r.contentType);
+        values.put(DBHelper.COL_CONTENT_TYPE, r.objectType);
         values.put(DBHelper.COL_NAME, r.name);
         values.put(DBHelper.COL_SIZE, r.size);
         values.put(DBHelper.COL_MIME, r.mime);
@@ -59,7 +59,7 @@ public class JobStore {
         r.id = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_ID));
         r.jobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_JOB_ID));
         r.timeMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_TIME_MILLIS));
-        r.contentType = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_CONTENT_TYPE));
+        r.objectType = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_CONTENT_TYPE));
         r.name = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_NAME));
         r.size = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_SIZE));
         r.mime = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_MIME));

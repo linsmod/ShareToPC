@@ -24,7 +24,7 @@ public class SendEntry {
     public int pendingAction;
     public String jobId;
     public long timeMillis;
-    public int contentType;      // SendEntry.TYPE_TEXT / TYPE_FILE
+    public int objectType;      // SendEntry.TYPE_TEXT / TYPE_FILE
     public String name;          // 文件名或文本预览
     public long size;
     public String mime;
@@ -76,7 +76,7 @@ public class SendEntry {
 
     public SendEntry createSendEntry() {
         SendEntry c;
-        if (contentType == SendEntry.TYPE_TEXT) {
+        if (objectType == SendEntry.TYPE_TEXT) {
             c = SendEntry.ofText(textContent);
         } else if (contentUri != null) {
             // 优先用 contentUri（新路径 / 回退），其次用 localPath（历史兼容）
@@ -125,7 +125,7 @@ public class SendEntry {
     public static SendEntry ofText(String text) {
         SendEntry c = new SendEntry();
         c.id = UUID.randomUUID().toString();
-        c.contentType = TYPE_TEXT;
+        c.objectType = TYPE_TEXT;
         c.text = text;
         c.name = text.length() > 20 ? text.substring(0, 20) + "…" : text;
         c.size = text.getBytes().length;
@@ -142,7 +142,7 @@ public class SendEntry {
                                    String mime, String contentUri) {
         SendEntry c = new SendEntry();
         c.id = UUID.randomUUID().toString();
-        c.contentType = TYPE_FILE;
+        c.objectType = TYPE_FILE;
         c.localPath = localPath;
         c.name = name;
         c.size = size;
@@ -156,7 +156,7 @@ public class SendEntry {
     public static SendEntry ofFileFromUri(String contentUri, String name, long size, String mime) {
         SendEntry c = new SendEntry();
         c.id = UUID.randomUUID().toString();
-        c.contentType = TYPE_FILE;
+        c.objectType = TYPE_FILE;
         c.localPath = null;
         c.contentUri = contentUri;
         c.name = name;
@@ -173,7 +173,7 @@ public class SendEntry {
     }
 
     public boolean isText() {
-        return contentType == TYPE_TEXT;
+        return objectType == TYPE_TEXT;
     }
 
     public boolean isSending() {

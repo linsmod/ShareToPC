@@ -37,7 +37,7 @@ public class TransferStatusHelper {
      */
     public static boolean canResumeOrRetry(SendEntry record, @Nullable PfdChecker pfdChecker) {
         if (record == null) return false;
-        if (record.contentType == SendEntry.TYPE_TEXT) {
+        if (record.objectType == SendEntry.TYPE_TEXT) {
             return record.textContent != null;
         }
         return pfdChecker != null

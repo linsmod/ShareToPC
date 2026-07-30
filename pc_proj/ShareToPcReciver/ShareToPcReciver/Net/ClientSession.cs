@@ -60,11 +60,8 @@ namespace ShareToPcReciver.Net
                         case "HELLO":
                             await HandleHello(stream, header);
                             break;
-                        case "TEXT":
-                            await HandleText(stream, header);
-                            break;
-                        case "FILE":
-                            await HandleFile(stream, header, payloadLength);
+                        case "OBJECT":
+                            await HandleBytes(stream, header, payloadLength);
                             break;
                         case "PING":
                             await HandlePing(stream);
@@ -190,7 +187,9 @@ namespace ShareToPcReciver.Net
             await Protocol.WriteAckAsync(stream, true, "", _ct);
         }
 
-        private async Task HandleFile(Stream stream, JsonElement header, long payloadLength)
+        public static int TEXT_OBJECT = 1;
+        public static int FILE_OBJECT = 2;
+        private async Task HandleBytes(Stream stream, JsonElement header, long payloadLength)
         {
             if (authResult == null || !authResult.IsAccepted)
             {
@@ -200,7 +199,7 @@ namespace ShareToPcReciver.Net
             }
             string name = header.TryGetProperty("name", out JsonElement n) ? n.GetString() ?? "file" : "file";
             long size = header.TryGetProperty("size", out JsonElement s) ? s.GetInt64() : 0;
-            string type = header.TryGetProperty("type", out JsonElement t) ? t.GetString() ?? "FILE" : "FILE";
+            int objectType = header.TryGetProperty("objectType", out JsonElement t) ? t.GetInt32():1;
             string mime = header.TryGetProperty("mime", out JsonElement m) ? m.GetString() ?? "" : "";
             string key = header.TryGetProperty("key", out JsonElement k) ? k.GetString() ?? "" : "";
             long time = header.TryGetProperty("time", out JsonElement ts) ? ts.GetInt64() : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -247,7 +246,7 @@ namespace ShareToPcReciver.Net
             {
                 FileName = name,
                 FilePath = null,
-                Type = type,
+                ObjectType = objectType,
                 Size = size,
                 DeviceName = DeviceName,
                 Time = time,
@@ -297,6 +296,7 @@ namespace ShareToPcReciver.Net
                             _server.OnFileProgress(new FileProgressInfo
                             {
                                 FileName = name,
+                                ObjectType = objectType,
                                 DeviceName = DeviceName,
                                 TransferId = fileId,
                                 JobId = jobId,
@@ -343,6 +343,7 @@ namespace ShareToPcReciver.Net
                             _server.OnFileProgress(new FileProgressInfo
                             {
                                 FileName = name,
+                                ObjectType = objectType,
                                 DeviceName = DeviceName,
                                 TransferId = fileId,
                                 JobId = jobId,
@@ -378,6 +379,7 @@ namespace ShareToPcReciver.Net
                                 _server.OnFileProgress(new FileProgressInfo
                                 {
                                     FileName = name,
+                                    ObjectType = objectType,
                                     DeviceName = DeviceName,
                                     TransferId = fileId,
                                     JobId = jobId,
@@ -472,7 +474,12 @@ namespace ShareToPcReciver.Net
             else
             {
                 PairStore.PairSession session = _server.PairStore.GetByDeviceId(deviceId);
-                if (_server.PairStore.IsExpired(session))
+                if (session == null) {
+                    
+                    this.authResult = AuthResult.CreatePending(DeviceName, itemCount, totalBytes);
+                    session = _server.CreateNewSession(deviceId, DeviceName, authResult);
+                }
+                else if (_server.PairStore.IsExpired(session))
                 {
                     this.authResult = AuthResult.CreatePending(DeviceName,itemCount,totalBytes);
                 }
