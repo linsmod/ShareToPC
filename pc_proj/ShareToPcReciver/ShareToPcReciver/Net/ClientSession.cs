@@ -120,6 +120,38 @@ namespace ShareToPcReciver.Net
             }
         }
 
+        /// <summary>通过 HB 通道通知 Android 暂停传输指定 job。</summary>
+        public void SendPauseAsync(string jobId)
+        {
+            try
+            {
+                var pause = new { type = "PAUSE", jobId };
+                string json = JsonSerializer.Serialize(pause);
+                messages.Enqueue(json);
+                Util.Log.Info($"Queued PAUSE for {clientDevice?.DeviceName ?? "?"} job={jobId}");
+            }
+            catch (Exception ex)
+            {
+                Util.Log.Warn($"Failed to queue PAUSE: {ex.Message}");
+            }
+        }
+
+        /// <summary>通过 HB 通道通知 Android 恢复传输指定 job。</summary>
+        public void SendResumeAsync(string jobId)
+        {
+            try
+            {
+                var resume = new { type = "RESUME", jobId };
+                string json = JsonSerializer.Serialize(resume);
+                messages.Enqueue(json);
+                Util.Log.Info($"Queued RESUME for {clientDevice?.DeviceName ?? "?"} job={jobId}");
+            }
+            catch (Exception ex)
+            {
+                Util.Log.Warn($"Failed to queue RESUME: {ex.Message}");
+            }
+        }
+
         /// <summary>断开此会话连接。</summary>
         public void Disconnect()
         {

@@ -1076,21 +1076,24 @@ namespace ShareToPcReciver
 
         private void MenuCancelTransfer_Click(object sender, EventArgs e)
         {
-            // 从选中行提取 jobId 并标记为已取消，Android 重发时会收到 reciverCanceled=true
+            // 通过 HB 通道通知 Android 暂停传输，而非硬断连接
             if (GetSelectedRecord() is FileProgressInfo pi && !string.IsNullOrEmpty(pi.JobId))
+            {
                 _server.MarkJobCanceled(pi.JobId);
-
-            _server.DisconnectAllSessions();
-            UpdateStatus("已取消当前传输", Color.Black);
+                _server.PauseJob(pi.DeviceName, pi.JobId);
+            }
+            UpdateStatus("已暂停当前传输", Color.Black);
         }
 
         private void MenuContinueTransfer_Click(object sender, EventArgs e)
         {
-            // 清除取消标记，Android 重发 JOB_INFO 时不再返回 reciverCanceled=true
+            // 通过 HB 通道通知 Android 恢复传输
             if (GetSelectedRecord() is FileProgressInfo pi && !string.IsNullOrEmpty(pi.JobId))
+            {
                 _server.ClearJobCanceled(pi.JobId);
-
-            UpdateStatus("已允许继续传输，请在手机上重试", Color.Black);
+                _server.ResumeJob(pi.DeviceName, pi.JobId);
+            }
+            UpdateStatus("已发送恢复指令", Color.Black);
         }
 
         private void MenuDeleteRecord_Click(object sender, EventArgs e)

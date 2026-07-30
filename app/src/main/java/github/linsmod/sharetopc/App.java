@@ -54,6 +54,19 @@ public class App extends Application {
         heartbeatManager = new HeartbeatManager(discoveryManager);
         heartbeatManager.start();
         transferManager = new TransferManager(this, jobStore, deviceStore);
+        // HB 通道 PAUSE / RESUME 监听 → 委托 TransferManager 优雅暂停/恢复
+        heartbeatManager.setMessageListener(new HeartbeatManager.MessageListener() {
+            @Override
+            public void onPause(String host, int port, String jobId) {
+                LogX.d("Hb-PAUSE from PC: jobId=" + jobId);
+                transferManager.cancelJob(jobId);
+            }
+            @Override
+            public void onResume(String host, int port, String jobId) {
+                LogX.d("Hb-RESUME from PC: jobId=" + jobId);
+                transferManager.resumeJob(jobId);
+            }
+        });
         // 创建前台服务通知渠道
         ShareForegroundService.createNotificationChannel(this);
     }

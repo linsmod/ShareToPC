@@ -81,6 +81,24 @@ namespace ShareToPcReciver.Net
         public string Type => "CANCEL";
     }
 
+    public class PauseMsg
+    {
+        [JsonPropertyName("type")]
+        public string Type => "PAUSE";
+
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; } = "";
+    }
+
+    public class ResumeMsg
+    {
+        [JsonPropertyName("type")]
+        public string Type => "RESUME";
+
+        [JsonPropertyName("jobId")]
+        public string JobId { get; set; } = "";
+    }
+
     public class JobInfoMsg
     {
         [JsonPropertyName("type")]

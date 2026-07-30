@@ -37,6 +37,17 @@ import github.linsmod.sharetopc.util.LogX;
  */
 public class HeartbeatManager {
 
+    /**
+     * HB 通道中除 BEAT/OFFLINE 以外的控制消息监听器。
+     * 由 TransferManager 等上层注册，接收 PAUSE / RESUME 等指令。
+     */
+    public interface MessageListener {
+        /** PC 要求暂停传输。 */
+        void onPause(String host, int port, String jobId);
+        /** PC 要求恢复传输。 */
+        void onResume(String host, int port, String jobId);
+    }
+
     private static final int CONNECT_TIMEOUT_MS = 5_000;      // TCP 建连超时
     private static final int BEAT_TIMEOUT_MARGIN_MS = 5_000;  // 等 BEAT 比服务端心跳间隔多等 5 秒
     private static final int DEFAULT_HB_INTERVAL_MS = 30_000; // 服务端未下发时的默认心跳间隔
@@ -56,6 +67,8 @@ public class HeartbeatManager {
     private final ConcurrentHashMap<String, Future<?>> connections = new ConcurrentHashMap<>();
     private volatile boolean running = false;
 
+    private volatile MessageListener messageListener;
+
     public HeartbeatManager(NsdDiscoveryManager discoveryManager) {
         this.discoveryManager = discoveryManager;
     }
@@ -66,6 +79,11 @@ public class HeartbeatManager {
         running = true;
         LogX.d("Heartbeat started (persistent)");
         scheduler.scheduleWithFixedDelay(this::syncConnections, 0, 5, TimeUnit.SECONDS);
+    }
+
+    /** 注册 HB 控制消息监听器（PAUSE / RESUME 等）。 */
+    public void setMessageListener(MessageListener listener) {
+        this.messageListener = listener;
     }
 
     /** 停止所有心跳连接。 */
@@ -190,6 +208,22 @@ public class HeartbeatManager {
                     if ("BEAT".equals(type)) {
                         // 收到 BEAT → re-confirm 在线
                         discoveryManager.markOnline(device.host, device.port);
+                        continue;
+                    }
+                    if ("PAUSE".equals(type)) {
+                        String jobId = resp.has("jobId") && !resp.get("jobId").isJsonNull()
+                                ? resp.get("jobId").getAsString() : "";
+                        LogX.d("Hb-" + device.address() + ": PAUSE job=" + jobId);
+                        if (messageListener != null)
+                            messageListener.onPause(device.host, device.port, jobId);
+                        continue;
+                    }
+                    if ("RESUME".equals(type)) {
+                        String jobId = resp.has("jobId") && !resp.get("jobId").isJsonNull()
+                                ? resp.get("jobId").getAsString() : "";
+                        LogX.d("Hb-" + device.address() + ": RESUME job=" + jobId);
+                        if (messageListener != null)
+                            messageListener.onResume(device.host, device.port, jobId);
                         continue;
                     }
                     LogX.d("Hb-" + device.address() + ": unexpected type=" + type);

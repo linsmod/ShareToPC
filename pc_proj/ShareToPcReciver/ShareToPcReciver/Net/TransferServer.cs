@@ -280,6 +280,34 @@ namespace ShareToPcReciver.Net
                 _canceledJobs.Remove(jobId);
         }
 
+        /// <summary>通过 HB 通道通知指定设备的 Android 端暂停传输。</summary>
+        public void PauseJob(string deviceName, string jobId)
+        {
+            List<ClientSession> snapshot;
+            lock (_sessionsLock)
+                snapshot = new List<ClientSession>(_sessions);
+
+            foreach (var session in snapshot)
+            {
+                if (session.clientDevice?.DeviceName == deviceName)
+                    session.SendPauseAsync(jobId);
+            }
+        }
+
+        /// <summary>通过 HB 通道通知指定设备的 Android 端恢复传输。</summary>
+        public void ResumeJob(string deviceName, string jobId)
+        {
+            List<ClientSession> snapshot;
+            lock (_sessionsLock)
+                snapshot = new List<ClientSession>(_sessions);
+
+            foreach (var session in snapshot)
+            {
+                if (session.clientDevice?.DeviceName == deviceName)
+                    session.SendResumeAsync(jobId);
+            }
+        }
+
         /// <summary>断开所有活跃会话。</summary>
         public void DisconnectAllSessions()
         {
