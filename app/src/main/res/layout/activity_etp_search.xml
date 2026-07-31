@@ -112,15 +112,12 @@
                     android:layout_height="0dp"
                     android:layout_weight="1" />
 
-                <TextView
+                <Button
                     android:id="@+id/tvClearHistory"
+                    style="@style/Widget.Material3.Button.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:text="清空"
-                    android:textColor="?android:attr/textColorSecondary"
-                    android:textSize="12sp" />
+                    android:text="@string/etp_clear_history" />
             </LinearLayout>
 
             <com.google.android.material.chip.ChipGroup

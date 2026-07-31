@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -283,9 +284,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
             if (group.isEmpty()) continue;
 
             switch (type) {
-                case "common": addSectionHeader(R.string.path_preset_common); break;
-                case "drive": addSectionHeader(R.string.path_preset_drives); break;
-                case "custom_path": addSectionHeader(R.string.path_preset_custom); break;
+                case "common": addSectionHeader(R.string.path_preset_common, type); break;
+                case "drive": addSectionHeader(R.string.path_preset_drives, type); break;
+                case "custom_path": addSectionHeader(R.string.path_preset_custom, type); break;
             }
 
             for (PathEntry entry : group) {
@@ -294,10 +295,42 @@ public class EtpSettingsActivity extends AppCompatActivity {
         }
     }
 
-    private void addSectionHeader(int titleRes) {
-        TextView header = new TextView(this, null, 0, R.style.PathPresetSectionHeader);
-        header.setText(titleRes);
+    private void addSectionHeader(int titleRes, String type) {
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView title = new TextView(this, null, 0, R.style.PathPresetSectionHeader);
+        title.setText(titleRes);
+        title.setLayoutParams(new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        header.addView(title);
+
+        Button restore = new Button(this, null, 0,
+                com.google.android.material.R.style.Widget_Material3_Button_TextButton);
+        restore.setText(R.string.path_preset_restore_defaults);
+        restore.setAllCaps(false);
+        restore.setOnClickListener(v -> restoreGroupDefaults(type));
+        header.addView(restore);
+
         layoutPaths.addView(header);
+    }
+
+    /** 把指定分组的路径恢复为该组的默认预设。 */
+    private void restoreGroupDefaults(String type) {
+        List<PathEntry> defaults = PathPresets.defaults().paths;
+        List<PathEntry> restored = new ArrayList<>();
+        for (PathEntry entry : presets.paths) {
+            if (!type.equals(entry.type)) restored.add(entry);
+        }
+        for (PathEntry entry : defaults) {
+            if (type.equals(entry.type)) restored.add(entry);
+        }
+        presets.paths = restored;
+        rebuildPaths();
     }
 
     private void addPathCheckBox(PathEntry entry, int selectableItemBackground) {
