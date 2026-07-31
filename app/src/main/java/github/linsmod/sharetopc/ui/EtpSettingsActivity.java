@@ -47,6 +47,8 @@ public class EtpSettingsActivity extends AppCompatActivity {
         // 排序
         String sortName;     // null / "" 表示默认排序
         boolean sortAsc = true;
+        // 多字段独立排序状态持久化: fieldName -> 0=none, 1=asc, 2=desc
+        Map<String, Integer> sortFields = new LinkedHashMap<>();
 
         // 结果限制（0 = 不限）
         int maxResults;
@@ -63,6 +65,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
             p.drives.put("D:", false);
             p.drives.put("E:", false);
             p.drives.put("F:", false);
+            for (String f : new String[]{"name", "size", "path", "extension", "date_modified", "date_created"}) {
+                p.sortFields.put(f, 0);
+            }
             return p;
         }
     }

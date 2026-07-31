@@ -4,23 +4,22 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
 import android.os.Bundle;
-
-import androidx.activity.EdgeToEdge;
-import androidx.annotation.Nullable;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.util.TypedValue;
-import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -30,37 +29,27 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.divider.MaterialDividerItemDecoration;
 import com.google.android.material.textfield.TextInputEditText;
 
-import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
-import com.google.gson.Gson;
 
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.transfer.EtpClient;
 
 /**
- * ETP 远程文件搜索界面（精简版 — 从设备页入口，无连接信息/设备管理）。
+ * ETP 远程文件搜索界面（重构版）。
+ * View 层只负责渲染状态、处理用户交互，业务逻辑全在 ViewModel。
  */
 public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity {
 
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
 
-    private EtpClient client;
-    private boolean loggedIn;
-    private String deviceHost;
-    private int etpPort;
+    private EtpSearchViewModel viewModel;
 
-    // 搜索
+    // View 引用
     private TextInputEditText etSearch;
     private ChipGroup cgHistory;
     private ProgressBar progressSearch;
@@ -70,16 +59,11 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private TextView tvEmptyHint;
     private TextView tvResultCount;
 
-    private final ResultAdapter resultAdapter = new ResultAdapter();
+    private EtpResultAdapter resultAdapter;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private String debounceQuery = "";
-    private final Runnable debounceSearch = new Runnable() {
-        @Override
-        public void run() {
-            doSearch();
-        }
-    };
-    private final Set<String> searchHistory = new LinkedHashSet<>();
+    private Runnable debounceSearch;
+
+    // ==================== 生命周期 ====================
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -93,28 +77,45 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             return insets;
         });
 
-        // 读取设备信息
         Intent intent = getIntent();
         String deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
-        deviceHost = intent.getStringExtra(EXTRA_HOST);
-        etpPort = App.get().settingsStore.getEtpPort();
-        if (deviceHost == null || deviceHost.isEmpty()) {
+        String deviceHost = intent.getStringExtra(EXTRA_HOST);
+        int etpPort = App.get().settingsStore.getEtpPort();
+        if (TextUtils.isEmpty(deviceHost)) {
             Toast.makeText(this, "未指定设备", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
 
-        // Toolbar 标题
+        initViews(deviceName);
+        initDebounce();
+        initViewModel(deviceHost, etpPort);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        viewModel.removeObserver();
+        viewModel.disconnect();
+    }
+
+    // ==================== 初始化 ====================
+
+    private void initViews(String deviceName) {
         androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbarEtpSearch);
         toolbar.setTitle(getString(R.string.etp_search_title_format,
-                deviceName != null ? deviceName : deviceHost));
+                deviceName != null ? deviceName : ""));
         toolbar.setNavigationOnClickListener(v -> finish());
+        // 右上角设置按钮 → 完整设置页（端口管理等）
+        toolbar.inflateMenu(R.menu.etp_search_menu);
+        toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_etp_settings) {
+                startActivity(new Intent(this, EtpSettingsActivity.class));
+                return true;
+            }
+            return false;
+        });
 
-        // 筛选路径 FAB
-        findViewById(R.id.fabPathPreset).setOnClickListener(v ->
-                startActivity(new Intent(this, EtpSettingsActivity.class)));
-
-        // 搜索栏
         etSearch = findViewById(R.id.etSearch);
         cgHistory = findViewById(R.id.cgRecentSearches);
         progressSearch = findViewById(R.id.progressSearch);
@@ -127,400 +128,185 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         rvResults.setLayoutManager(new LinearLayoutManager(this));
         rvResults.addItemDecoration(new MaterialDividerItemDecoration(this,
                 MaterialDividerItemDecoration.VERTICAL));
+
+        resultAdapter = new EtpResultAdapter(this::showFilePropertiesDialog);
         rvResults.setAdapter(resultAdapter);
 
-        // 输入防抖搜索（300ms）
+        // 上拉加载更多
+        rvResults.addOnScrollListener(new RecyclerView.OnScrollListener() {
+            @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy > 0) {
+                    LinearLayoutManager lm = (LinearLayoutManager) recyclerView.getLayoutManager();
+                    if (lm != null && lm.findLastVisibleItemPosition()
+                            >= resultAdapter.getItemCount() - 3) {
+                        viewModel.loadMore();
+                    }
+                }
+            }
+        });
+
+        // 筛选 FAB → BottomSheet
+        findViewById(R.id.fabPathPreset).setOnClickListener(v -> showFilterSheet());
+    }
+
+    private void initDebounce() {
+        debounceSearch = () -> {
+            String query = etSearch.getText() != null
+                    ? etSearch.getText().toString().trim() : "";
+            if (!query.isEmpty()) viewModel.search(query);
+        };
+
         etSearch.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
             @Override
             public void afterTextChanged(android.text.Editable s) {
                 handler.removeCallbacks(debounceSearch);
-                String query = s.toString().trim();
-                if (query.isEmpty()) {
-                    resultAdapter.setResults(new ArrayList<>());
-                    showEmpty(getString(R.string.etp_empty_title));
+                String q = s.toString().trim();
+                if (q.isEmpty()) {
+                    renderResult(null); // 回退到空状态
                     return;
                 }
-                debounceQuery = query;
                 handler.postDelayed(debounceSearch, 300);
             }
         });
-
-        // 初始化
-        loadSearchHistory();
-        showEmpty(getString(R.string.etp_empty_title));
-        connectDevice();
     }
 
-    // ==================== 连接 ====================
+    private void initViewModel(String host, int port) {
+        viewModel = new ViewModelProvider(this).get(EtpSearchViewModel.class);
 
-    private void connectDevice() {
-        client = new EtpClient(deviceHost, etpPort);
-
-        App.get().ioExecutor.execute(() -> {
-            try {
-                client.connect();
-                // 尝试匿名登录
-                try {
-                    if (client.login("anonymous", "")) {
-                        loggedIn = true;
-                        App.get().settingsStore.setLastEtpHost(deviceHost);
-                        App.get().settingsStore.setLastEtpPort(etpPort);
-                        return;
-                    }
-                } catch (IOException ignored) {}
-                // 匿名失败，尝试无密码登录
-                try {
-                    if (client.login("anonymous", "")) {
-                        loggedIn = true;
-                        return;
-                    }
-                } catch (IOException ignored2) {}
-                handler.post(() -> {
-                    Toast.makeText(this,
-                            getString(R.string.etp_login_failed),
-                            Toast.LENGTH_SHORT).show();
-                });
-            } catch (IOException e) {
-                handler.post(() -> {
-                    Toast.makeText(this,
-                            getString(R.string.etp_connect_failed, e.getMessage()),
-                            Toast.LENGTH_SHORT).show();
-                });
+        viewModel.observe(state -> {
+            if (state instanceof SearchUiState.Connecting) {
+                renderConnecting();
+            } else if (state instanceof SearchUiState.Ready) {
+                renderReady();
+            } else if (state instanceof SearchUiState.Searching) {
+                renderSearching(((SearchUiState.Searching) state).query);
+            } else if (state instanceof SearchUiState.HasResults) {
+                renderResult((SearchUiState.HasResults) state);
+            } else if (state instanceof SearchUiState.Empty) {
+                renderEmpty(((SearchUiState.Empty) state).query);
+            } else if (state instanceof SearchUiState.Error) {
+                renderError(((SearchUiState.Error) state).message);
             }
         });
+
+        viewModel.connect(host, port);
     }
 
-    // ==================== 搜索 ====================
+    // ==================== 状态渲染 ====================
 
-    private void doSearch() {
-        String query = etSearch.getText() != null ? etSearch.getText().toString().trim() : "";
-        if (query.isEmpty()) return;
+    private void renderConnecting() {
+        progressSearch.setVisibility(View.VISIBLE);
+        rvResults.setVisibility(View.GONE);
+        layoutEmpty.setVisibility(View.VISIBLE);
+        tvResultCount.setVisibility(View.GONE);
+        tvEmptyTitle.setText("连接中…");
+        tvEmptyHint.setVisibility(View.GONE);
+        refreshHistoryChips();
+    }
 
-        addSearchHistory(query);
+    private void renderReady() {
+        progressSearch.setVisibility(View.GONE);
+        rvResults.setVisibility(View.GONE);
+        layoutEmpty.setVisibility(View.VISIBLE);
+        tvResultCount.setVisibility(View.GONE);
+        tvEmptyTitle.setText(getString(R.string.etp_empty_title));
+        tvEmptyHint.setVisibility(View.VISIBLE);
+        refreshHistoryChips();
+    }
 
-        if (loggedIn) {
-            executeSearch(query);
+    private void renderSearching(String query) {
+        progressSearch.setVisibility(View.VISIBLE);
+        rvResults.setVisibility(View.GONE);
+        layoutEmpty.setVisibility(View.GONE);
+        tvResultCount.setVisibility(View.VISIBLE);
+        tvResultCount.setText(getString(R.string.etp_searching));
+    }
+
+    private void renderResult(SearchUiState.HasResults r) {
+        progressSearch.setVisibility(View.GONE);
+        layoutEmpty.setVisibility(View.GONE);
+        rvResults.setVisibility(View.VISIBLE);
+        tvResultCount.setVisibility(View.VISIBLE);
+
+        if (r == null) {
+            // 空输入 → 回到 Ready
+            resultAdapter.submitList(null);
+            resultAdapter.setShowFooter(false);
+            renderReady();
             return;
         }
 
-        // 未登录 → 重连
-        progressSearch.setVisibility(View.VISIBLE);
-        App.get().ioExecutor.execute(() -> {
-            try {
-                if (client == null || !client.isConnected()) {
-                    client = new EtpClient(deviceHost, etpPort);
-                    client.connect();
-                }
-                if (client.login("anonymous", "")) {
-                    loggedIn = true;
-                    App.get().settingsStore.setLastEtpHost(deviceHost);
-                    App.get().settingsStore.setLastEtpPort(etpPort);
-                    handler.post(() -> executeSearch(query));
-                } else {
-                    handler.post(() -> {
-                        progressSearch.setVisibility(View.GONE);
-                        Toast.makeText(this, R.string.etp_login_failed, Toast.LENGTH_SHORT).show();
-                    });
-                }
-            } catch (IOException e) {
-                handler.post(() -> {
-                    progressSearch.setVisibility(View.GONE);
-                    Toast.makeText(this,
-                            getString(R.string.etp_connect_failed, e.getMessage()),
-                            Toast.LENGTH_SHORT).show();
-                });
-            }
-        });
+        if (r.items.isEmpty()) {
+            renderEmpty(r.query);
+            return;
+        }
+
+        tvResultCount.setText(getString(R.string.etp_result_count, r.totalCount));
+        resultAdapter.submitList(r.items);
+        resultAdapter.setShowFooter(r.hasMore);
     }
 
-    /**
-     * 构造 Everything path: 过滤器，将用户勾选的路径预设拼接到查询中。
-     */
-    private String buildPathFilter(String rawQuery) {
-        String json = App.get().settingsStore.getString("etp_path_presets", null);
-        EtpSettingsActivity.PathPresets presets;
-        if (json != null) {
-            try {
-                presets = new Gson().fromJson(json, EtpSettingsActivity.PathPresets.class);
-            } catch (Exception ignored) {
-                presets = EtpSettingsActivity.PathPresets.defaults();
-            }
-        } else {
-            presets = EtpSettingsActivity.PathPresets.defaults();
-        }
-        if (presets == null) return rawQuery;
-
-        Map<String, String> builtinMap = new LinkedHashMap<>();
-        builtinMap.put("desktop", "*\\Desktop\\");
-        builtinMap.put("documents", "*\\Documents\\");
-        builtinMap.put("downloads", "*\\Downloads\\");
-        builtinMap.put("videos", "*\\Videos\\");
-        builtinMap.put("pictures", "*\\Pictures\\");
-        builtinMap.put("music", "*\\Music\\");
-
-        List<String> paths = new ArrayList<>();
-        for (Map.Entry<String, Boolean> e : presets.builtin.entrySet()) {
-            if (Boolean.TRUE.equals(e.getValue()) && builtinMap.containsKey(e.getKey())) {
-                paths.add(builtinMap.get(e.getKey()));
-            }
-        }
-        for (Map.Entry<String, Boolean> e : presets.drives.entrySet()) {
-            if (Boolean.TRUE.equals(e.getValue())) {
-                paths.add(e.getKey() + "\\");
-            }
-        }
-        for (String p : presets.custom) {
-            String trimmed = p.trim();
-            if (!trimmed.isEmpty()) paths.add(trimmed);
-        }
-        if (paths.isEmpty()) return rawQuery;
-
-        StringBuilder sb = new StringBuilder(rawQuery);
-        sb.append(" path:");
-        for (int i = 0; i < paths.size(); i++) {
-            if (i > 0) sb.append("|");
-            String path = paths.get(i);
-            if (path.contains(" ") || path.contains("(") || path.contains(")") || path.contains("&")) {
-                sb.append("\"").append(path).append("\"");
-            } else {
-                sb.append(path);
-            }
-        }
-        return sb.toString();
-    }
-
-    /** 从预设中解析查询参数 */
-    private QueryParams loadQueryParams() {
-        String json = App.get().settingsStore.getString("etp_path_presets", null);
-        EtpSettingsActivity.PathPresets p;
-        if (json != null) {
-            try {
-                p = new Gson().fromJson(json, EtpSettingsActivity.PathPresets.class);
-            } catch (Exception e) {
-                p = EtpSettingsActivity.PathPresets.defaults();
-            }
-        } else {
-            p = EtpSettingsActivity.PathPresets.defaults();
-        }
-
-        QueryParams qp = new QueryParams();
-        if (p != null) {
-            qp.matchCase = p.matchCase;
-            qp.matchPath = p.matchPath;
-            qp.matchRegex = p.matchRegex;
-            qp.matchWholeWord = p.matchWholeWord;
-            qp.sortName = (p.sortName != null && !p.sortName.isEmpty()) ? p.sortName : null;
-            qp.sortAsc = p.sortAsc;
-            qp.maxResults = Math.max(0, p.maxResults);
-        }
-        return qp;
-    }
-
-    private static class QueryParams {
-        int matchCase, matchPath, matchRegex, matchWholeWord;
-        String sortName;
-        boolean sortAsc = true;
-        int maxResults;
-    }
-
-    /** 已登录状态下执行实际搜索 */
-    private void executeSearch(String query) {
-        int columns = EtpClient.SIZE_COLUMN | EtpClient.PATH_COLUMN
-                | EtpClient.DATE_MODIFIED_COLUMN | EtpClient.DATE_CREATED_COLUMN
-                | EtpClient.ATTRIBUTES_COLUMN;
-
-        progressSearch.setVisibility(View.VISIBLE);
-
-        String filteredQuery = buildPathFilter(query);
-        QueryParams qp = loadQueryParams();
-
-        App.get().ioExecutor.execute(() -> {
-            try {
-                List<EtpClient.EtpSearchResult> results = client.query(filteredQuery, columns,
-                        qp.matchCase, qp.matchPath, qp.matchRegex, qp.matchWholeWord,
-                        qp.sortName, qp.sortAsc,
-                        0 /* offset */, qp.maxResults);
-                handler.post(() -> {
-                    progressSearch.setVisibility(View.GONE);
-                    resultAdapter.setResults(results);
-                    if (results.isEmpty()) {
-                        showEmpty(getString(R.string.etp_no_results));
-                    } else {
-                        tvResultCount.setText(getString(R.string.etp_result_count, results.size()));
-                        tvResultCount.setVisibility(View.VISIBLE);
-                        layoutEmpty.setVisibility(View.GONE);
-                        rvResults.setVisibility(View.VISIBLE);
-                    }
-                });
-            } catch (IOException e) {
-                handler.post(() -> {
-                    progressSearch.setVisibility(View.GONE);
-                    loggedIn = false;
-                    Toast.makeText(this,
-                            getString(R.string.etp_search_error, e.getMessage()),
-                            Toast.LENGTH_SHORT).show();
-                });
-            }
-        });
-    }
-
-    private void showEmpty(String title) {
-        tvResultCount.setVisibility(View.GONE);
-        layoutEmpty.setVisibility(View.VISIBLE);
+    private void renderEmpty(String query) {
+        progressSearch.setVisibility(View.GONE);
         rvResults.setVisibility(View.GONE);
-        tvEmptyTitle.setText(title);
+        layoutEmpty.setVisibility(View.VISIBLE);
+        tvResultCount.setVisibility(View.GONE);
+        tvEmptyTitle.setText(getString(R.string.etp_no_results));
+        tvEmptyHint.setVisibility(View.GONE);
+        resultAdapter.submitList(null);
     }
 
-    // ==================== 搜索历史 ====================
-
-    private void loadSearchHistory() {
-        String json = App.get().settingsStore.getString("etp_search_history", "");
-        searchHistory.clear();
-        if (!json.isEmpty()) {
-            try {
-                org.json.JSONArray arr = new org.json.JSONArray(json);
-                for (int i = 0; i < arr.length(); i++) {
-                    searchHistory.add(arr.getString(i));
-                }
-            } catch (org.json.JSONException ignored) {}
-        }
-        refreshHistoryChips();
+    private void renderError(String message) {
+        progressSearch.setVisibility(View.GONE);
+        tvResultCount.setVisibility(View.GONE);
+        resultAdapter.submitList(null);
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        // 保持当前可见内容不变
     }
 
-    private void addSearchHistory(String query) {
-        searchHistory.remove(query);
-        searchHistory.add(query);
-
-        List<String> trimmed = new ArrayList<>(searchHistory);
-        if (trimmed.size() > 10) {
-            searchHistory.clear();
-            for (int i = trimmed.size() - 10; i < trimmed.size(); i++) {
-                searchHistory.add(trimmed.get(i));
-            }
-        }
-
-        org.json.JSONArray arr = new org.json.JSONArray();
-        List<String> list = new ArrayList<>(searchHistory);
-        for (int i = list.size() - 1; i >= 0; i--) {
-            arr.put(list.get(i));
-        }
-        App.get().settingsStore.putString("etp_search_history", arr.toString());
-
-        refreshHistoryChips();
-    }
+    // ==================== 搜索历史 Chips ====================
 
     private void refreshHistoryChips() {
         cgHistory.removeAllViews();
-        if (searchHistory.isEmpty()) {
+        List<String> history = viewModel.getHistoryReversed();
+        if (history.isEmpty()) {
             cgHistory.setVisibility(View.GONE);
             return;
         }
         cgHistory.setVisibility(View.VISIBLE);
-
-        List<String> reversed = new ArrayList<>(searchHistory);
-        java.util.Collections.reverse(reversed);
-        for (int i = 0; i < reversed.size(); i++) {
-            String q = reversed.get(i);
+        for (int i = 0; i < history.size(); i++) {
+            String q = history.get(i);
             Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
             chip.setText(q);
             chip.setClickable(true);
             chip.setCheckable(false);
             chip.setChipIconResource(android.R.drawable.ic_menu_recent_history);
             chip.setCloseIconVisible(true);
-            final int idx = i;
             chip.setOnClickListener(v -> {
                 etSearch.setText(q);
-                doSearch();
+                viewModel.search(q);
             });
             chip.setOnCloseIconClickListener(v -> {
-                // 从历史中移除该项
-                List<String> list = new ArrayList<>(searchHistory);
-                list.remove(q);
-                searchHistory.clear();
-                searchHistory.addAll(list);
-                org.json.JSONArray arr = new org.json.JSONArray();
-                for (int j = list.size() - 1; j >= 0; j--) {
-                    arr.put(list.get(j));
-                }
-                App.get().settingsStore.putString("etp_search_history", arr.toString());
+                viewModel.removeHistory(q);
                 refreshHistoryChips();
             });
             cgHistory.addView(chip);
         }
     }
 
-    // ==================== 结果列表 ====================
+    // ==================== 筛选 BottomSheet ====================
 
-    private class ResultAdapter extends RecyclerView.Adapter<ResultAdapter.VH> {
-
-        private List<EtpClient.EtpSearchResult> items = new ArrayList<>();
-
-        void setResults(List<EtpClient.EtpSearchResult> results) {
-            this.items = results != null ? results : new ArrayList<>();
-            notifyDataSetChanged();
-        }
-
-        @NonNull
-        @Override
-        public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-            View v = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.item_etp_result, parent, false);
-            return new VH(v);
-        }
-
-        @Override
-        public void onBindViewHolder(@NonNull VH holder, int position) {
-            EtpClient.EtpSearchResult r = items.get(position);
-            holder.tvName.setText(r.name);
-            holder.tvIcon.setText(r.isFolder ? "📁" : "📄");
-
-            StringBuilder info = new StringBuilder();
-            if (r.size >= 0) {
-                info.append(EtpClient.EtpSearchResult.formatSize(r.size));
-            }
-            if (r.dateModified > 0) {
-                if (info.length() > 0) info.append("  |  ");
-                long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateModified);
-                info.append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-                        .format(new Date(millis)));
-            }
-            holder.tvInfo.setText(info.toString());
-
-            String fullPath;
-            if (r.path != null && !r.path.isEmpty()) {
-                holder.tvPath.setVisibility(View.VISIBLE);
-                fullPath = r.path + "\\" + r.name;
-                holder.tvPath.setText(fullPath);
-            } else {
-                holder.tvPath.setVisibility(View.GONE);
-                fullPath = r.name;
-            }
-
-            final EtpClient.EtpSearchResult resultRef = r;
-            holder.itemView.setOnClickListener(v -> showFilePropertiesDialog(resultRef));
-        }
-
-        @Override
-        public int getItemCount() {
-            return items.size();
-        }
-
-        class VH extends RecyclerView.ViewHolder {
-            final TextView tvIcon, tvName, tvInfo, tvPath;
-
-            VH(@NonNull View itemView) {
-                super(itemView);
-                tvIcon = itemView.findViewById(R.id.tvIcon);
-                tvName = itemView.findViewById(R.id.tvName);
-                tvInfo = itemView.findViewById(R.id.tvInfo);
-                tvPath = itemView.findViewById(R.id.tvPath);
-            }
-        }
+    private void showFilterSheet() {
+        EtpFilterSheet sheet = new EtpFilterSheet();
+        sheet.setOnFilterApplied(() -> viewModel.onFilterChanged());
+        sheet.show(getSupportFragmentManager(), "etp_filter");
     }
 
-    /** 显示文件属性对话框。 */
+    // ==================== 文件属性对话框 ====================
+
     private void showFilePropertiesDialog(EtpClient.EtpSearchResult r) {
         StringBuilder body = new StringBuilder();
         body.append("路径：").append(r.fullPath()).append("\n\n");
@@ -533,19 +319,20 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             }
             body.append("\n\n");
         }
-
         if (r.dateModified > 0) {
             long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateModified);
-            body.append("修改时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                    .format(new Date(millis))).append("\n\n");
+            body.append("修改时间：")
+                    .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                            .format(new Date(millis)))
+                    .append("\n\n");
         }
-
         if (r.dateCreated > 0) {
             long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateCreated);
-            body.append("创建时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                    .format(new Date(millis))).append("\n\n");
+            body.append("创建时间：")
+                    .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                            .format(new Date(millis)))
+                    .append("\n\n");
         }
-
         if (r.attributes >= 0) {
             body.append("属性：").append(formatFileAttributes(r.attributes));
         }
@@ -559,8 +346,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
         new MaterialAlertDialogBuilder(this)
                 .setTitle(r.name)
-                .setIcon(r.isFolder ? android.R.drawable.ic_dialog_info
-                        : android.R.drawable.ic_dialog_info)
                 .setView(tv)
                 .setPositiveButton("复制路径", (d, w) -> {
                     ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
@@ -599,19 +384,5 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         TypedValue tv = new TypedValue();
         getTheme().resolveAttribute(attr, tv, true);
         return getColor(tv.resourceId);
-    }
-
-    // ==================== 生命周期 ====================
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        EtpClient toClose = client;
-        client = null;
-        if (toClose != null) {
-            App.get().ioExecutor.execute(() -> {
-                try { toClose.close(); } catch (Exception ignored) {}
-            });
-        }
     }
 }
