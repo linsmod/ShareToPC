@@ -46,80 +46,16 @@
                     android:singleLine="true" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <!-- 搜索位置 -->
             <TextView
                 style="@style/PathPresetSectionHeader"
-                android:text="@string/path_preset_common" />
+                android:text="@string/path_preset_title" />
 
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbDesktop"
+            <LinearLayout
+                android:id="@+id/layoutPaths"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/path_preset_desktop" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbDocuments"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_documents" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbDownloads"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_downloads" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbVideos"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_videos" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbPictures"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_pictures" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbMusic"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_music" />
-
-            <!-- 磁盘 -->
-            <TextView
-                style="@style/PathPresetSectionHeader"
-                android:text="@string/path_preset_drives" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbDriveC"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_drive_c" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbDriveD"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_drive_d" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbDriveE"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_drive_e" />
-
-            <com.google.android.material.checkbox.MaterialCheckBox
-                android:id="@+id/cbDriveF"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_drive_f" />
-
-            <!-- 自定义路径 -->
-            <TextView
-                style="@style/PathPresetSectionHeader"
-                android:text="@string/path_preset_custom" />
+                android:orientation="vertical"
+                android:layout_marginBottom="8dp" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -151,41 +87,102 @@
                     android:text="@string/path_preset_add" />
             </LinearLayout>
 
-            <LinearLayout
-                android:id="@+id/layoutCustomPaths"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:layout_marginTop="8dp" />
-
             <!-- 匹配选项 -->
             <TextView
                 style="@style/PathPresetSectionHeader"
                 android:text="@string/path_preset_match_options" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/swMatchCase"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/path_preset_match_case" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="4dp">
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/swWholeWord"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_match_whole_word" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipMatchCase"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Aa"
+                    android:checkable="true" />
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/swMatchPath"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/path_preset_match_path" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/path_preset_match_case"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+            </LinearLayout>
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/swRegex"
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/path_preset_match_regex" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="4dp">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipWholeWord"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Ab|"
+                    android:checkable="true" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/path_preset_match_whole_word"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="4dp">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipMatchPath"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="路径"
+                    android:checkable="true" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/path_preset_match_path"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingVertical="4dp">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/chipRegex"
+                    style="@style/Widget.Material3.Chip.Filter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=".*"
+                    android:checkable="true" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/path_preset_match_regex"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+            </LinearLayout>
 
             <!-- 排序 -->
             <TextView

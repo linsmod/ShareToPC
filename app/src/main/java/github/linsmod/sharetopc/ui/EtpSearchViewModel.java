@@ -9,10 +9,9 @@ import com.google.gson.Gson;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -28,8 +27,13 @@ public class EtpSearchViewModel extends ViewModel {
     private static final int PAGE_SIZE = 50;
     private static final int MAX_HISTORY = 10;
 
-    private EtpClient client;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean connecting;
+
+    // 自动重连
+    private String savedHost;
+    private int savedPort;
+    private String pendingQuery;
 
     // 观察者
     private Consumer<SearchUiState> stateObserver;
@@ -51,7 +55,7 @@ public class EtpSearchViewModel extends ViewModel {
     /** 注册状态观察者，注册时立即回调当前状态。 */
     public void observe(Consumer<SearchUiState> observer) {
         this.stateObserver = observer;
-        if (client != null && client.isLoggedIn()) {
+        if (!connecting && savedHost != null && !savedHost.isEmpty()) {
             emit(new SearchUiState.Ready());
         } else {
             emit(new SearchUiState.Connecting());
@@ -72,72 +76,103 @@ public class EtpSearchViewModel extends ViewModel {
     // ==================== 连接 ====================
 
     public void connect(String host, int port) {
+        this.savedHost = host;
+        this.savedPort = port;
+        connecting = true;
         emit(new SearchUiState.Connecting());
-        client = new EtpClient(host, port);
 
         App.get().ioExecutor.execute(() -> {
-            try {
-                client.connect();
-                if (client.login("anonymous", "")) {
-                    // 尝试 app 用户名
+            try (EtpClient c = new EtpClient(host, port)) {
+                c.connect();
+                c.login("anonymous", "");
+                if (!c.isLoggedIn()) {
+                    c.login("anonymous", "");
                 }
-                // 匿名登录失败，尝试空密码
-                if (!client.isLoggedIn()) {
-                    try { client.login("anonymous", ""); } catch (IOException ignored) {}
-                }
-                if (client.isLoggedIn()) {
+                if (c.isLoggedIn()) {
                     App.get().settingsStore.setLastEtpHost(host);
                     App.get().settingsStore.setLastEtpPort(port);
-                    emit(new SearchUiState.Ready());
+                    connecting = false;
+
+                    String pq = pendingQuery;
+                    pendingQuery = null;
+                    if (pq != null && !pq.isEmpty()) {
+                        doQuery(pq, 0);
+                    } else {
+                        emit(new SearchUiState.Ready());
+                    }
                 } else {
+                    connecting = false;
+                    pendingQuery = null;
                     emit(new SearchUiState.Error("登录失败，请检查 ETP 服务是否开启"));
                 }
             } catch (IOException e) {
+                connecting = false;
+                pendingQuery = null;
                 emit(new SearchUiState.Error("连接失败: " + e.getMessage()));
             }
         });
     }
 
     public boolean isConnected() {
-        return client != null && client.isConnected() && client.isLoggedIn();
+        return !connecting && savedHost != null && !savedHost.isEmpty();
+    }
+
+    /** 使用上次保存的地址自动重连。 */
+    private void reconnect() {
+        if (savedHost == null || savedHost.isEmpty()) {
+            emit(new SearchUiState.Error("未配置连接信息"));
+            return;
+        }
+        connect(savedHost, savedPort);
     }
 
     // ==================== 搜索 ====================
 
-    /** 执行新搜索（重置分页）。 */
+    /** 执行新搜索（重置分页），自动处理重连。 */
     public void search(String query) {
         if (query.isEmpty()) return;
         currentQuery = query;
         currentOffset = 0;
         allResults.clear();
-        addSearchHistory(query);
         emit(new SearchUiState.Searching(query));
+
+        if (connecting) {
+            // 正在连接中，挂起查询，连接成功后自动执行
+            pendingQuery = query;
+            return;
+        }
+
+        if (!isConnected()) {
+            // 断连 → 自动重连
+            pendingQuery = query;
+            reconnect();
+            return;
+        }
+
+        pendingQuery = null;
         doQuery(query, 0);
     }
 
     /** 加载更多（翻页）。 */
     public void loadMore() {
         if (!hasMore || currentQuery.isEmpty()) return;
+        if (!isConnected()) return;
         currentOffset += PAGE_SIZE;
         doQuery(currentQuery, currentOffset);
     }
 
     private void doQuery(String query, int offset) {
-        if (!isConnected()) {
-            emit(new SearchUiState.Error("未连接"));
-            return;
-        }
-
         int columns = EtpClient.SIZE_COLUMN | EtpClient.PATH_COLUMN
                 | EtpClient.DATE_MODIFIED_COLUMN | EtpClient.DATE_CREATED_COLUMN
                 | EtpClient.ATTRIBUTES_COLUMN;
 
         String filteredQuery = buildPathFilter(query);
         QueryParams qp = loadQueryParams();
-        EtpClient c = client;
 
         App.get().ioExecutor.execute(() -> {
-            try {
+            try (EtpClient c = new EtpClient(savedHost, savedPort)) {
+                c.connect();
+                c.login("anonymous", "");
                 List<EtpClient.EtpSearchResult> page = c.query(filteredQuery, columns,
                         qp.matchCase, qp.matchPath, qp.matchRegex, qp.matchWholeWord,
                         qp.sortName, qp.sortAsc, offset, PAGE_SIZE);
@@ -156,7 +191,7 @@ public class EtpSearchViewModel extends ViewModel {
         resultCount = allResults.size();
 
         if (allResults.isEmpty()) {
-            emit(new SearchUiState.Empty(query));
+            emit(new SearchUiState.Empty(query, getQueryPathLabels()));
         } else {
             emit(new SearchUiState.HasResults(
                     new ArrayList<>(allResults), resultCount, hasMore, query));
@@ -165,71 +200,107 @@ public class EtpSearchViewModel extends ViewModel {
 
     // ==================== 路径过滤 ====================
 
-    /** 构造 Everything path: 过滤器。 */
-    private String buildPathFilter(String rawQuery) {
+    /** 从 SettingsStore 加载路径预设，失败时返回默认值。 */
+    private EtpSettingsActivity.PathPresets loadPresets() {
         String json = App.get().settingsStore.getString("etp_path_presets", null);
-        EtpSettingsActivity.PathPresets presets;
         if (json != null) {
             try {
-                presets = new Gson().fromJson(json, EtpSettingsActivity.PathPresets.class);
-            } catch (Exception e) {
-                presets = EtpSettingsActivity.PathPresets.defaults();
-            }
-        } else {
-            presets = EtpSettingsActivity.PathPresets.defaults();
+                EtpSettingsActivity.PathPresets p = new Gson().fromJson(json, EtpSettingsActivity.PathPresets.class);
+                if (p != null) return p;
+            } catch (Exception ignored) {}
         }
-        if (presets == null) return rawQuery;
+        return EtpSettingsActivity.PathPresets.defaults();
+    }
 
-        Map<String, String> builtinMap = new LinkedHashMap<>();
-        builtinMap.put("desktop", "*\\Desktop\\");
-        builtinMap.put("documents", "*\\Documents\\");
-        builtinMap.put("downloads", "*\\Downloads\\");
-        builtinMap.put("videos", "*\\Videos\\");
-        builtinMap.put("pictures", "*\\Pictures\\");
-        builtinMap.put("music", "*\\Music\\");
+    /** 构造 Everything 位置过滤：(pathA | pathB | pathC) {kw} */
+    private String buildPathFilter(String rawQuery) {
+        EtpSettingsActivity.PathPresets presets = loadPresets();
+        if (presets == null || presets.paths == null) return rawQuery;
 
         List<String> paths = new ArrayList<>();
-        for (Map.Entry<String, Boolean> e : presets.builtin.entrySet()) {
-            if (Boolean.TRUE.equals(e.getValue()) && builtinMap.containsKey(e.getKey())) {
-                paths.add(builtinMap.get(e.getKey()));
+        for (EtpSettingsActivity.PathEntry entry : presets.paths) {
+            if (entry.checked) {
+                String trimmed = entry.path.trim();
+                if (!trimmed.isEmpty()) paths.add(trimmed);
             }
-        }
-        for (Map.Entry<String, Boolean> e : presets.drives.entrySet()) {
-            if (Boolean.TRUE.equals(e.getValue())) paths.add(e.getKey() + "\\");
-        }
-        for (String p : presets.custom) {
-            String trimmed = p.trim();
-            if (!trimmed.isEmpty()) paths.add(trimmed);
         }
         if (paths.isEmpty()) return rawQuery;
 
-        StringBuilder sb = new StringBuilder(rawQuery);
-        sb.append(" path:");
+        StringBuilder sb = new StringBuilder("(");
         for (int i = 0; i < paths.size(); i++) {
-            if (i > 0) sb.append("|");
-            String path = paths.get(i);
-            if (path.contains(" ") || path.contains("(") || path.contains(")") || path.contains("&")) {
-                sb.append("\"").append(path).append("\"");
-            } else {
-                sb.append(path);
+            if (i > 0) sb.append(" | ");
+            sb.append(paths.get(i));
+        }
+        sb.append(") ").append(rawQuery);
+        return sb.toString();
+    }
+
+    /** 获取当前启用的搜索路径标签（用于空结果时展示）。 */
+    public List<String> getQueryPathLabels() {
+        EtpSettingsActivity.PathPresets presets = loadPresets();
+        if (presets == null || presets.paths == null) return new ArrayList<>();
+
+        List<String> labels = new ArrayList<>();
+        for (EtpSettingsActivity.PathEntry entry : presets.paths) {
+            if (entry.checked) {
+                String trimmed = entry.label.trim();
+                if (!trimmed.isEmpty()) labels.add(trimmed);
             }
         }
-        return sb.toString();
+        return labels;
+    }
+
+    /** 获取所有路径项（含选中状态），用于渲染 checkbox 列表。 */
+    public List<PathItem> getAllPathItems() {
+        EtpSettingsActivity.PathPresets presets = loadPresets();
+        if (presets == null || presets.paths == null) return new ArrayList<>();
+
+        List<PathItem> items = new ArrayList<>();
+        for (EtpSettingsActivity.PathEntry entry : presets.paths) {
+            items.add(new PathItem(entry.path, entry.label, entry.type, entry.checked));
+        }
+        return items;
+    }
+
+    /** 切换单个路径的选中状态，保存并重新搜索。 */
+    public void togglePath(String key, String type, boolean checked) {
+        EtpSettingsActivity.PathPresets presets = loadPresets();
+        if (presets == null || presets.paths == null) return;
+
+        for (EtpSettingsActivity.PathEntry entry : presets.paths) {
+            if (entry.path.equals(key)) {
+                entry.checked = checked;
+                break;
+            }
+        }
+
+        String newJson = new Gson().toJson(presets);
+        App.get().settingsStore.putString("etp_path_presets", newJson);
+
+        // 重新搜索
+        if (currentQuery != null && !currentQuery.isEmpty()) {
+            search(currentQuery);
+        }
+    }
+
+    /** 路径项数据（用于构建 checkbox 列表）。 */
+    public static class PathItem {
+        public final String key;
+        public final String label;
+        public final String type;
+        public final boolean checked;
+
+        public PathItem(String key, String label, String type, boolean checked) {
+            this.key = key;
+            this.label = label;
+            this.type = type;
+            this.checked = checked;
+        }
     }
 
     /** 从预设中解析查询参数。 */
     private QueryParams loadQueryParams() {
-        String json = App.get().settingsStore.getString("etp_path_presets", null);
-        EtpSettingsActivity.PathPresets p;
-        if (json != null) {
-            try {
-                p = new Gson().fromJson(json, EtpSettingsActivity.PathPresets.class);
-            } catch (Exception e) {
-                p = EtpSettingsActivity.PathPresets.defaults();
-            }
-        } else {
-            p = EtpSettingsActivity.PathPresets.defaults();
-        }
+        EtpSettingsActivity.PathPresets p = loadPresets();
         QueryParams qp = new QueryParams();
         if (p != null) {
             qp.matchCase = p.matchCase;
@@ -263,7 +334,7 @@ public class EtpSearchViewModel extends ViewModel {
         }
     }
 
-    private void addSearchHistory(String query) {
+    void addSearchHistory(String query) {
         searchHistory.remove(query);
         searchHistory.add(query);
         List<String> trimmed = new ArrayList<>(searchHistory);
@@ -295,6 +366,11 @@ public class EtpSearchViewModel extends ViewModel {
         App.get().settingsStore.putString("etp_search_history", arr.toString());
     }
 
+    public void clearHistory() {
+        searchHistory.clear();
+        App.get().settingsStore.putString("etp_search_history", "[]");
+    }
+
     /** 修改过滤条件后，如果有当前查询则重新搜索。 */
     public void onFilterChanged() {
         if (!currentQuery.isEmpty()) {
@@ -306,17 +382,8 @@ public class EtpSearchViewModel extends ViewModel {
 
     @Override
     protected void onCleared() {
-        disconnect();
+        connecting = false;
+        pendingQuery = null;
         super.onCleared();
-    }
-
-    public void disconnect() {
-        EtpClient c = client;
-        client = null;
-        if (c != null) {
-            App.get().ioExecutor.execute(() -> {
-                try { c.close(); } catch (Exception ignored) {}
-            });
-        }
     }
 }

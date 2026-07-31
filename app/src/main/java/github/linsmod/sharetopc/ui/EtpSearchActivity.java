@@ -3,19 +3,32 @@ package github.linsmod.sharetopc.ui;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.content.res.TypedArray;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
+import android.text.style.ImageSpan;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -25,9 +38,11 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.divider.MaterialDividerItemDecoration;
 import com.google.android.material.textfield.TextInputEditText;
+import com.google.gson.Gson;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -41,27 +56,64 @@ import github.linsmod.sharetopc.transfer.EtpClient;
 /**
  * ETP 远程文件搜索界面（重构版）。
  * View 层只负责渲染状态、处理用户交互，业务逻辑全在 ViewModel。
+ * 筛选条件直接内联在搜索框下方。
  */
 public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity {
 
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
 
+    private static final String PREF_KEY = "etp_path_presets";
+    private static final String[] SORT_NAMES = {
+            "name", "size", "path", "extension", "date_modified", "date_created"};
+
     private EtpSearchViewModel viewModel;
 
     // View 引用
+    private View searchArea;
     private TextInputEditText etSearch;
+    private View layoutCommonPaths;
+    private LinearLayout layoutCommonPathCheckboxes;
+    private View layoutHistory;
     private ChipGroup cgHistory;
     private ProgressBar progressSearch;
     private RecyclerView rvResults;
-    private View layoutEmpty;
-    private TextView tvEmptyTitle;
-    private TextView tvEmptyHint;
+    private View layoutResultHeader, dividerResult;
     private TextView tvResultCount;
+    private TextView tvSearchQuery;
+    private View layoutQueryPaths;
+    private LinearLayout layoutPathCheckboxes;
+
+    private boolean showingResults;
+
+    // 结果排序
+    private View layoutResultSort;
+    private ChipGroup cgMatchOptions;
+    private Chip chipMatchCase, chipWholeWord, chipMatchPath, chipRegex;
+    private TextView tvSortName, tvSortSize, tvSortPath,
+            tvSortExt, tvSortDateMod, tvSortDateCre;
+
+    private EtpSettingsActivity.PathPresets presets;
+    private SortItem[] sortItems;
+    private String currentSort;
+    private final Gson gson = new Gson();
 
     private EtpResultAdapter resultAdapter;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private Runnable debounceSearch;
+
+    // ---- SortItem ----
+
+    private static class SortItem {
+        final TextView view;
+        final String sortName;
+        final CharSequence label;
+        int state; // 0=none, 1=asc, 2=desc
+
+        SortItem(TextView view, String sortName) {
+            this.view = view;
+            this.sortName = sortName;
+            this.label = view.getText();
+        }
+    }
 
     // ==================== 生命周期 ====================
 
@@ -88,7 +140,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         }
 
         initViews(deviceName);
-        initDebounce();
+        initFilter();
+        initEnterSearch();
         initViewModel(deviceHost, etpPort);
     }
 
@@ -96,7 +149,22 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     protected void onDestroy() {
         super.onDestroy();
         viewModel.removeObserver();
-        viewModel.disconnect();
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (showingResults) {
+            backToSearch();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    /** 从结果页回到搜索页。 */
+    private void backToSearch() {
+        showingResults = false;
+        renderResult(null); // 触发 renderReady
+        etSearch.requestFocus();
     }
 
     // ==================== 初始化 ====================
@@ -105,8 +173,13 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbarEtpSearch);
         toolbar.setTitle(getString(R.string.etp_search_title_format,
                 deviceName != null ? deviceName : ""));
-        toolbar.setNavigationOnClickListener(v -> finish());
-        // 右上角设置按钮 → 完整设置页（端口管理等）
+        toolbar.setNavigationOnClickListener(v -> {
+            if (showingResults) {
+                backToSearch();
+            } else {
+                finish();
+            }
+        });
         toolbar.inflateMenu(R.menu.etp_search_menu);
         toolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.action_etp_settings) {
@@ -117,22 +190,69 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         });
 
         etSearch = findViewById(R.id.etSearch);
+        searchArea = findViewById(R.id.searchArea);
         cgHistory = findViewById(R.id.cgRecentSearches);
+        layoutHistory = findViewById(R.id.layoutHistory);
+        layoutCommonPaths = findViewById(R.id.layoutCommonPaths);
+        layoutCommonPathCheckboxes = findViewById(R.id.layoutCommonPathCheckboxes);
+
+        // 清空搜索历史
+        findViewById(R.id.tvClearHistory).setOnClickListener(v -> {
+            viewModel.clearHistory();
+            cgHistory.removeAllViews();
+            layoutHistory.setVisibility(View.GONE);
+        });
         progressSearch = findViewById(R.id.progressSearch);
         rvResults = findViewById(R.id.rvResults);
-        layoutEmpty = findViewById(R.id.layoutEmpty);
-        tvEmptyTitle = findViewById(R.id.tvEmptyTitle);
-        tvEmptyHint = findViewById(R.id.tvEmptyHint);
         tvResultCount = findViewById(R.id.tvResultCount);
+        tvSearchQuery = findViewById(R.id.tvSearchQuery);
+        layoutResultHeader = findViewById(R.id.layoutResultHeader);
+        dividerResult = findViewById(R.id.dividerResult);
+        layoutQueryPaths = findViewById(R.id.layoutQueryPaths);
+        layoutPathCheckboxes = findViewById(R.id.layoutPathCheckboxes);
+
+        // 结果排序视图
+        layoutResultSort = findViewById(R.id.layoutResultSort);
+        cgMatchOptions = findViewById(R.id.cgMatchOptions);
+        tvSortName = findViewById(R.id.tvSortName);
+        tvSortSize = findViewById(R.id.tvSortSize);
+        tvSortPath = findViewById(R.id.tvSortPath);
+        tvSortExt = findViewById(R.id.tvSortExt);
+        tvSortDateMod = findViewById(R.id.tvSortDateMod);
+        tvSortDateCre = findViewById(R.id.tvSortDateCre);
 
         rvResults.setLayoutManager(new LinearLayoutManager(this));
         rvResults.addItemDecoration(new MaterialDividerItemDecoration(this,
                 MaterialDividerItemDecoration.VERTICAL));
+        rvResults.setItemAnimator(null);
 
         resultAdapter = new EtpResultAdapter(this::showFilePropertiesDialog);
         rvResults.setAdapter(resultAdapter);
 
-        // 上拉加载更多
+        // 键盘搜索键（唯一记录历史的入口）
+        etSearch.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH) {
+                String q = v.getText() != null ? v.getText().toString().trim() : "";
+                if (!q.isEmpty()) {
+                    viewModel.addSearchHistory(q);
+                    viewModel.search(q);
+                }
+                return true;
+            }
+            return false;
+        });
+
+        // 激活输入框时显示常用位置和搜索历史，失焦时隐藏
+        etSearch.setOnFocusChangeListener((v, hasFocus) -> {
+            if (hasFocus && viewModel.isConnected()) {
+                refreshCommonPaths();
+                refreshHistoryChips();
+            } else if (!hasFocus) {
+                layoutCommonPaths.setVisibility(View.GONE);
+                layoutHistory.setVisibility(View.GONE);
+            }
+        });
+
         rvResults.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
@@ -146,29 +266,214 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             }
         });
 
-        // 筛选 FAB → BottomSheet
-        findViewById(R.id.fabPathPreset).setOnClickListener(v -> showFilterSheet());
+        // 结果页点击搜索框 → 返回搜索
+        etSearch.setOnClickListener(v -> {
+            if (showingResults) {
+                backToSearch();
+            }
+        });
+
+        // 加载更多错误重试
+        resultAdapter.setOnLoadMoreListener(() -> viewModel.loadMore());
     }
 
-    private void initDebounce() {
-        debounceSearch = () -> {
-            String query = etSearch.getText() != null
-                    ? etSearch.getText().toString().trim() : "";
-            if (!query.isEmpty()) viewModel.search(query);
-        };
+    // ==================== 筛选（内联） ====================
 
+    private void initFilter() {
+        loadPresets();
+        buildMatchChips();
+        initSortItems();
+        applyToUI();
+    }
+
+    private void buildMatchChips() {
+        chipMatchCase = createMatchChip("Aa", presets.matchCase != 0,
+                checked -> { presets.matchCase = checked ? 1 : 0; commitFilter(); });
+        chipWholeWord = createMatchChip("Ab|", presets.matchWholeWord != 0,
+                checked -> { presets.matchWholeWord = checked ? 1 : 0; commitFilter(); });
+        chipMatchPath = createMatchChip("路径", presets.matchPath != 0,
+                checked -> { presets.matchPath = checked ? 1 : 0; commitFilter(); });
+        chipRegex = createMatchChip(".*", presets.matchRegex != 0,
+                checked -> { presets.matchRegex = checked ? 1 : 0; commitFilter(); });
+
+        cgMatchOptions.removeAllViews();
+        cgMatchOptions.addView(chipMatchCase);
+        cgMatchOptions.addView(chipWholeWord);
+        cgMatchOptions.addView(chipMatchPath);
+        cgMatchOptions.addView(chipRegex);
+    }
+
+    private Chip createMatchChip(String text, boolean checked,
+                                  androidx.core.util.Consumer<Boolean> listener) {
+        Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
+        chip.setText(text);
+        chip.setCheckable(true);
+        chip.setChecked(checked);
+        chip.setOnCheckedChangeListener((c, isChecked) -> listener.accept(isChecked));
+        return chip;
+    }
+
+    private void commitFilter() {
+        savePresets();
+        viewModel.onFilterChanged();
+    }
+
+    private void loadPresets() {
+        String json = App.get().settingsStore.getString(PREF_KEY, null);
+        if (json != null) {
+            try {
+                presets = gson.fromJson(json, EtpSettingsActivity.PathPresets.class);
+                if (presets != null) return;
+            } catch (Exception ignored) {}
+        }
+        presets = EtpSettingsActivity.PathPresets.defaults();
+    }
+
+    private void savePresets() {
+        App.get().settingsStore.putString(PREF_KEY, gson.toJson(presets));
+    }
+
+    private void initSortItems() {
+        TextView[] views = {tvSortName, tvSortSize, tvSortPath,
+                tvSortExt, tvSortDateMod, tvSortDateCre};
+
+        if (presets.sortFields.isEmpty() && presets.sortName != null) {
+            presets.sortFields.put(presets.sortName, presets.sortAsc ? 1 : 2);
+        }
+        for (String name : SORT_NAMES) {
+            if (!presets.sortFields.containsKey(name)) {
+                presets.sortFields.put(name, 0);
+            }
+        }
+
+        sortItems = new SortItem[SORT_NAMES.length];
+        for (int i = 0; i < SORT_NAMES.length; i++) {
+            String name = SORT_NAMES[i];
+            SortItem item = new SortItem(views[i], name);
+            item.state = presets.sortFields.getOrDefault(name, 0);
+            sortItems[i] = item;
+            final int idx = i;
+            views[i].setOnClickListener(v -> onSortItemClicked(idx));
+        }
+        currentSort = (presets.sortName != null && !presets.sortName.isEmpty()
+                && presets.sortFields.getOrDefault(presets.sortName, 0) != 0)
+                ? presets.sortName : null;
+    }
+
+    private void onSortItemClicked(int index) {
+        SortItem clicked = sortItems[index];
+        clicked.state = (clicked.state + 1) % 3;
+        presets.sortFields.put(clicked.sortName, clicked.state);
+
+        if (clicked.state != 0) {
+            currentSort = clicked.sortName;
+        } else if (clicked.sortName.equals(currentSort)) {
+            currentSort = null;
+            for (SortItem item : sortItems) {
+                if (item.state != 0) { currentSort = item.sortName; break; }
+            }
+        }
+
+        if (currentSort != null) {
+            presets.sortName = currentSort;
+            presets.sortAsc = presets.sortFields.getOrDefault(currentSort, 0) == 1;
+        } else {
+            presets.sortName = null;
+            presets.sortAsc = true;
+        }
+        refreshSortIndicators();
+        commitFilter();
+    }
+
+    private void refreshSortIndicators() {
+        TypedValue tv = new TypedValue();
+        getTheme().resolveAttribute(
+                com.google.android.material.R.attr.colorPrimary, tv, true);
+        int accent = tv.data;
+        tv = new TypedValue();
+        getTheme().resolveAttribute(
+                com.google.android.material.R.attr.colorOnSurface, tv, true);
+        int subtle = (tv.data & 0x00FFFFFF) | 0x60000000;
+        int surface = (tv.data & 0x00FFFFFF) | 0x1A000000; // ~10% alpha 作为非激活背景
+        int activeBg = (accent & 0x00FFFFFF) | 0x2A000000; // ~16% alpha 作为激活背景
+
+        float density = getResources().getDisplayMetrics().density;
+        float textHeight = tvSortName.getPaint().getFontMetrics().descent
+                - tvSortName.getPaint().getFontMetrics().ascent;
+        int iconSize = (int) (textHeight * 0.6f);
+
+        for (SortItem item : sortItems) {
+            boolean active = item.sortName.equals(currentSort);
+            int resId;
+            int iconColor;
+            int textColor;
+            if (item.state == 1) {
+                resId = R.drawable.ic_sort_asc; iconColor = accent;
+            } else if (item.state == 2) {
+                resId = R.drawable.ic_sort_desc; iconColor = accent;
+            } else {
+                resId = R.drawable.ic_sort_both; iconColor = active ? accent : subtle;
+            }
+
+            // 文字颜色：激活项用 accent，其他用半透明
+            textColor = active ? accent : subtle;
+            item.view.setTextColor(textColor);
+            item.view.setTypeface(null, active ? Typeface.BOLD : Typeface.NORMAL);
+
+            // 背景：激活项用 accent 色圆形背景，其他用浅灰圆形背景
+            GradientDrawable bg = new GradientDrawable();
+            bg.setCornerRadius(density * 16);
+            bg.setColor(active ? activeBg : surface);
+            item.view.setBackground(bg);
+            int hPad = (int) (density * 10);
+            int vPad = (int) (density * 4);
+            item.view.setPadding(hPad, vPad, hPad, vPad);
+
+            Drawable icon = makeIcon(resId, iconColor, iconSize);
+            SpannableString ss = new SpannableString(item.label + "  ");
+            ImageSpan span = new ImageSpan(icon, ImageSpan.ALIGN_CENTER);
+            ss.setSpan(span, ss.length() - 1, ss.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            item.view.setText(ss);
+        }
+    }
+
+    private Drawable makeIcon(int resId, int color, int size) {
+        Drawable d = ContextCompat.getDrawable(this, resId);
+        if (d == null) return null;
+        d = DrawableCompat.wrap(d).mutate();
+        DrawableCompat.setTint(d, color);
+        d.setBounds(0, 0, size, size);
+        return d;
+    }
+
+    private void applyToUI() {
+        if (chipMatchCase != null) chipMatchCase.setChecked(presets.matchCase != 0);
+        if (chipWholeWord != null) chipWholeWord.setChecked(presets.matchWholeWord != 0);
+        if (chipMatchPath != null) chipMatchPath.setChecked(presets.matchPath != 0);
+        if (chipRegex != null) chipRegex.setChecked(presets.matchRegex != 0);
+        refreshSortIndicators();
+    }
+
+    private void collectFromUI() {
+        if (chipMatchCase != null) presets.matchCase = chipMatchCase.isChecked() ? 1 : 0;
+        if (chipWholeWord != null) presets.matchWholeWord = chipWholeWord.isChecked() ? 1 : 0;
+        if (chipMatchPath != null) presets.matchPath = chipMatchPath.isChecked() ? 1 : 0;
+        if (chipRegex != null) presets.matchRegex = chipRegex.isChecked() ? 1 : 0;
+    }
+
+    // ==================== 搜索触发（仅回车） ====================
+
+    private void initEnterSearch() {
+        // 清空搜索框 → 回到 Ready 态
         etSearch.addTextChangedListener(new android.text.TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
             @Override
             public void afterTextChanged(android.text.Editable s) {
-                handler.removeCallbacks(debounceSearch);
-                String q = s.toString().trim();
-                if (q.isEmpty()) {
-                    renderResult(null); // 回退到空状态
-                    return;
+                if (s.toString().trim().isEmpty()) {
+                    renderResult(null);
+                    etSearch.requestFocus();
                 }
-                handler.postDelayed(debounceSearch, 300);
             }
         });
     }
@@ -186,7 +491,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             } else if (state instanceof SearchUiState.HasResults) {
                 renderResult((SearchUiState.HasResults) state);
             } else if (state instanceof SearchUiState.Empty) {
-                renderEmpty(((SearchUiState.Empty) state).query);
+                SearchUiState.Empty e = (SearchUiState.Empty) state;
+                renderEmpty(e.query);
             } else if (state instanceof SearchUiState.Error) {
                 renderError(((SearchUiState.Error) state).message);
             }
@@ -198,41 +504,63 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     // ==================== 状态渲染 ====================
 
     private void renderConnecting() {
+        showingResults = false;
+        setSearchEditable(true);
+        searchArea.setVisibility(View.VISIBLE);
         progressSearch.setVisibility(View.VISIBLE);
         rvResults.setVisibility(View.GONE);
-        layoutEmpty.setVisibility(View.VISIBLE);
+        layoutResultHeader.setVisibility(View.GONE);
+        dividerResult.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.GONE);
-        tvEmptyTitle.setText("连接中…");
-        tvEmptyHint.setVisibility(View.GONE);
-        refreshHistoryChips();
+        cgMatchOptions.setVisibility(View.GONE);
+        layoutHistory.setVisibility(View.GONE);
+        layoutCommonPaths.setVisibility(View.GONE);
+        layoutResultSort.setVisibility(View.GONE);
     }
 
     private void renderReady() {
+        showingResults = false;
+        setSearchEditable(true);
+        searchArea.setVisibility(View.VISIBLE);
+        cgMatchOptions.setVisibility(View.GONE);
         progressSearch.setVisibility(View.GONE);
         rvResults.setVisibility(View.GONE);
-        layoutEmpty.setVisibility(View.VISIBLE);
+        layoutResultHeader.setVisibility(View.GONE);
+        dividerResult.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.GONE);
-        tvEmptyTitle.setText(getString(R.string.etp_empty_title));
-        tvEmptyHint.setVisibility(View.VISIBLE);
-        refreshHistoryChips();
+        layoutResultSort.setVisibility(View.GONE);
+        etSearch.requestFocus();
     }
 
     private void renderSearching(String query) {
+        showingResults = true;
+        setSearchEditable(false);
+        searchArea.setVisibility(View.GONE);
+        cgMatchOptions.setVisibility(View.VISIBLE);
         progressSearch.setVisibility(View.VISIBLE);
         rvResults.setVisibility(View.GONE);
-        layoutEmpty.setVisibility(View.GONE);
+        layoutResultHeader.setVisibility(View.VISIBLE);
+        dividerResult.setVisibility(View.VISIBLE);
+        layoutQueryPaths.setVisibility(View.GONE);
+        layoutResultSort.setVisibility(View.VISIBLE);
         tvResultCount.setVisibility(View.VISIBLE);
         tvResultCount.setText(getString(R.string.etp_searching));
+        tvSearchQuery.setVisibility(View.GONE);
     }
 
     private void renderResult(SearchUiState.HasResults r) {
+        showingResults = true;
+        setSearchEditable(false);
+        searchArea.setVisibility(View.GONE);
+        cgMatchOptions.setVisibility(View.VISIBLE);
         progressSearch.setVisibility(View.GONE);
-        layoutEmpty.setVisibility(View.GONE);
         rvResults.setVisibility(View.VISIBLE);
-        tvResultCount.setVisibility(View.VISIBLE);
+        layoutResultHeader.setVisibility(View.VISIBLE);
+        dividerResult.setVisibility(View.VISIBLE);
+        layoutQueryPaths.setVisibility(View.GONE);
+        layoutResultSort.setVisibility(View.VISIBLE);
 
         if (r == null) {
-            // 空输入 → 回到 Ready
             resultAdapter.submitList(null);
             resultAdapter.setShowFooter(false);
             renderReady();
@@ -245,26 +573,116 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         }
 
         tvResultCount.setText(getString(R.string.etp_result_count, r.totalCount));
+        tvSearchQuery.setVisibility(View.VISIBLE);
+        tvSearchQuery.setText(getString(R.string.etp_search_query_label, r.query));
         resultAdapter.submitList(r.items);
         resultAdapter.setShowFooter(r.hasMore);
     }
 
     private void renderEmpty(String query) {
+        showingResults = true;
+        setSearchEditable(false);
+        searchArea.setVisibility(View.GONE);
+        cgMatchOptions.setVisibility(View.VISIBLE);
         progressSearch.setVisibility(View.GONE);
         rvResults.setVisibility(View.GONE);
-        layoutEmpty.setVisibility(View.VISIBLE);
-        tvResultCount.setVisibility(View.GONE);
-        tvEmptyTitle.setText(getString(R.string.etp_no_results));
-        tvEmptyHint.setVisibility(View.GONE);
+        layoutResultHeader.setVisibility(View.VISIBLE);
+        dividerResult.setVisibility(View.VISIBLE);
+        layoutResultSort.setVisibility(View.VISIBLE);
+        tvResultCount.setText(getString(R.string.etp_result_count, 0));
+        tvSearchQuery.setVisibility(View.VISIBLE);
+        tvSearchQuery.setText(getString(R.string.etp_search_query_label, query));
         resultAdapter.submitList(null);
+
+        // 动态创建路径 CheckBox 列表
+        List<EtpSearchViewModel.PathItem> items = viewModel.getAllPathItems();
+        layoutPathCheckboxes.removeAllViews();
+        layoutQueryPaths.setVisibility(View.VISIBLE);
+
+        for (EtpSearchViewModel.PathItem item : items) {
+            CheckBox cb = new CheckBox(this);
+            cb.setText(item.label);
+            cb.setChecked(item.checked);
+            cb.setOnCheckedChangeListener((buttonView, isChecked) ->
+                    viewModel.togglePath(item.key, item.type, isChecked));
+            layoutPathCheckboxes.addView(cb);
+        }
     }
 
     private void renderError(String message) {
+        showingResults = false;
+        setSearchEditable(true);
+        searchArea.setVisibility(View.VISIBLE);
+        cgMatchOptions.setVisibility(View.GONE);
         progressSearch.setVisibility(View.GONE);
+        layoutResultHeader.setVisibility(View.GONE);
+        dividerResult.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.GONE);
         resultAdapter.submitList(null);
+        layoutHistory.setVisibility(View.GONE);
+        layoutCommonPaths.setVisibility(View.GONE);
+        layoutResultSort.setVisibility(View.GONE);
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-        // 保持当前可见内容不变
+    }
+
+    /** 切换搜索框的编辑/只读状态。结果页设为只读，点击可回到搜索页。 */
+    private void setSearchEditable(boolean editable) {
+        etSearch.setFocusable(editable);
+        etSearch.setFocusableInTouchMode(editable);
+        etSearch.setCursorVisible(editable);
+        etSearch.setClickable(!editable);
+    }
+
+    // ==================== 常用位置 CheckBox ====================
+
+    /** 渲染常用位置列表，样式与设置页一致。 */
+    private void refreshCommonPaths() {
+        layoutCommonPathCheckboxes.removeAllViews();
+        List<EtpSearchViewModel.PathItem> items = new java.util.ArrayList<>();
+        for (EtpSearchViewModel.PathItem item : viewModel.getAllPathItems()) {
+            if ("common".equals(item.type)) items.add(item);
+        }
+        if (items.isEmpty()) {
+            layoutCommonPaths.setVisibility(View.GONE);
+            return;
+        }
+        layoutCommonPaths.setVisibility(View.VISIBLE);
+
+        TypedArray a = obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackground});
+        int selectableItemBackground = a.getResourceId(0, 0);
+        a.recycle();
+
+        for (EtpSearchViewModel.PathItem item : items) {
+            LinearLayout wrapper = new LinearLayout(this);
+            LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
+            wlp.setMargins(dp(2), dp(2), dp(2), dp(2));
+            wrapper.setLayoutParams(wlp);
+            wrapper.setBackgroundResource(selectableItemBackground);
+            wrapper.setClickable(true);
+            wrapper.setFocusable(true);
+            wrapper.setOrientation(LinearLayout.HORIZONTAL);
+            wrapper.setGravity(Gravity.CENTER_VERTICAL);
+
+            MaterialCheckBox cb = new MaterialCheckBox(this);
+            cb.setLayoutParams(new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            cb.setBackground(null);
+            cb.setText(item.label);
+            cb.setChecked(item.checked);
+            cb.setClickable(false);
+            cb.setFocusable(false);
+            cb.setGravity(Gravity.CENTER);
+
+            wrapper.setOnClickListener(v -> {
+                cb.toggle();
+                viewModel.togglePath(item.key, item.type, cb.isChecked());
+            });
+            wrapper.addView(cb);
+            layoutCommonPathCheckboxes.addView(wrapper);
+        }
     }
 
     // ==================== 搜索历史 Chips ====================
@@ -273,17 +691,16 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         cgHistory.removeAllViews();
         List<String> history = viewModel.getHistoryReversed();
         if (history.isEmpty()) {
-            cgHistory.setVisibility(View.GONE);
+            layoutHistory.setVisibility(View.GONE);
             return;
         }
-        cgHistory.setVisibility(View.VISIBLE);
+        layoutHistory.setVisibility(View.VISIBLE);
         for (int i = 0; i < history.size(); i++) {
             String q = history.get(i);
             Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
             chip.setText(q);
             chip.setClickable(true);
             chip.setCheckable(false);
-            chip.setChipIconResource(android.R.drawable.ic_menu_recent_history);
             chip.setCloseIconVisible(true);
             chip.setOnClickListener(v -> {
                 etSearch.setText(q);
@@ -291,18 +708,10 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             });
             chip.setOnCloseIconClickListener(v -> {
                 viewModel.removeHistory(q);
-                refreshHistoryChips();
+                if (etSearch.hasFocus()) refreshHistoryChips();
             });
             cgHistory.addView(chip);
         }
-    }
-
-    // ==================== 筛选 BottomSheet ====================
-
-    private void showFilterSheet() {
-        EtpFilterSheet sheet = new EtpFilterSheet();
-        sheet.setOnFilterApplied(() -> viewModel.onFilterChanged());
-        sheet.show(getSupportFragmentManager(), "etp_filter");
     }
 
     // ==================== 文件属性对话框 ====================

@@ -19,7 +19,7 @@
             android:layout_height="wrap_content"
             app:navigationIcon="?attr/homeAsUpIndicator" />
 
-        <!-- 搜索栏 -->
+        <!-- 搜索栏（始终可见） -->
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/tilSearch"
             style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
@@ -39,17 +39,102 @@
                 android:singleLine="true" />
         </com.google.android.material.textfield.TextInputLayout>
 
-        <!-- 搜索历史 -->
+        <!-- 匹配选项开关（仅结果页显示） -->
         <com.google.android.material.chip.ChipGroup
-            android:id="@+id/cgRecentSearches"
+            android:id="@+id/cgMatchOptions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="16dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="4dp"
-            app:singleLine="false"
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginTop="4dp"
+            app:singleLine="true"
+            app:selectionRequired="false"
+            android:visibility="gone" />
+
+        <!-- ====== 搜索区域（结果态隐藏） ====== -->
+        <LinearLayout
+            android:id="@+id/searchArea"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+        <!-- 常用位置 -->
+        <LinearLayout
+            android:id="@+id/layoutCommonPaths"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
             android:visibility="gone"
-            tools:visibility="visible" />
+            tools:visibility="visible">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="8dp"
+                android:text="@string/path_preset_common"
+                android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+            <LinearLayout
+                android:id="@+id/layoutCommonPathCheckboxes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp" />
+        </LinearLayout>
+
+        <!-- 搜索历史 -->
+        <LinearLayout
+            android:id="@+id/layoutHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="搜索历史"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/tvClearHistory"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:text="清空"
+                    android:textColor="?android:attr/textColorSecondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/cgRecentSearches"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="4dp"
+                app:singleLine="false" />
+        </LinearLayout>
+
+        </LinearLayout>
+        <!-- ====== /搜索区域 ====== -->
 
         <!-- 进度条 -->
         <ProgressBar
@@ -60,19 +145,170 @@
             android:indeterminate="true"
             android:visibility="gone" />
 
-        <!-- 结果计数 -->
-        <TextView
-            android:id="@+id/tvResultCount"
+        <!-- 结果头部：分隔线 + 计数 + 查询词 -->
+        <LinearLayout
+            android:id="@+id/layoutResultHeader"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             android:paddingHorizontal="16dp"
-            android:paddingTop="8dp"
-            android:paddingBottom="2dp"
-            android:textColor="?android:attr/textColorSecondary"
-            android:textSize="13sp"
+            android:paddingTop="10dp"
+            android:paddingBottom="6dp"
             android:visibility="gone"
-            tools:text="共 5 条结果"
+            tools:visibility="visible">
+
+            <TextView
+                android:id="@+id/tvResultCount"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="13sp"
+                tools:text="共 5 条结果" />
+
+            <TextView
+                android:id="@+id/tvSearchQuery"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="?android:attr/textColorSecondary"
+                android:textSize="12sp"
+                tools:text="*.doc" />
+        </LinearLayout>
+
+        <!-- 结果排序 -->
+        <LinearLayout
+            android:id="@+id/layoutResultSort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="6dp"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:text="结果排序"
+                android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvSortName"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="文件名" />
+
+                <TextView
+                    android:id="@+id/tvSortSize"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="大小" />
+
+                <TextView
+                    android:id="@+id/tvSortPath"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="路径" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/tvSortExt"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="扩展名" />
+
+                <TextView
+                    android:id="@+id/tvSortDateMod"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="修改日期" />
+
+                <TextView
+                    android:id="@+id/tvSortDateCre"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center"
+                    android:text="创建日期" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 搜索/结果区域分隔线 -->
+        <View
+            android:id="@+id/dividerResult"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginHorizontal="16dp"
+            android:background="?android:attr/listDivider"
+            android:visibility="gone"
             tools:visibility="visible" />
+
+        <!-- 空结果时显示的查询位置 -->
+        <LinearLayout
+            android:id="@+id/layoutQueryPaths"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp"
+                android:paddingTop="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="查询了以下位置"
+                    android:textAppearance="?attr/textAppearanceTitleSmall" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutPathCheckboxes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingHorizontal="16dp"
+                android:paddingBottom="8dp" />
+        </LinearLayout>
 
         <!-- 结果区域（占满剩余空间） -->
         <FrameLayout
@@ -87,53 +323,8 @@
                 android:clipToPadding="false"
                 android:padding="8dp"
                 android:visibility="gone" />
-
-            <!-- 空状态 -->
-            <LinearLayout
-                android:id="@+id/layoutEmpty"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:orientation="vertical"
-                tools:visibility="visible">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="📂"
-                    android:textSize="48sp" />
-
-                <TextView
-                    android:id="@+id/tvEmptyTitle"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:text="@string/etp_empty_title"
-                    android:textAppearance="?attr/textAppearanceTitleMedium"
-                    android:textColor="?android:attr/textColorPrimary" />
-
-                <TextView
-                    android:id="@+id/tvEmptyHint"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/etp_empty_hint"
-                    android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="?android:attr/textColorSecondary"
-                    android:visibility="gone" />
-            </LinearLayout>
         </FrameLayout>
 
     </LinearLayout>
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabPathPreset"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="16dp"
-        android:contentDescription="@string/path_preset_fab"
-        android:src="@drawable/ic_filter_fab"
-        app:fabSize="normal" />
 
 </FrameLayout>

@@ -35,13 +35,6 @@ import github.linsmod.sharetopc.R;
 public class EtpFilterSheet extends BottomSheetDialogFragment {
 
     private static final String PREF_KEY = "etp_path_presets";
-    private static final String BUILTIN_NAMES[] = {"desktop", "documents", "downloads",
-            "videos", "pictures", "music"};
-    private static final int BUILTIN_LABELS[] = {
-            R.string.path_preset_desktop, R.string.path_preset_documents,
-            R.string.path_preset_downloads, R.string.path_preset_videos,
-            R.string.path_preset_pictures, R.string.path_preset_music};
-    private static final String DRIVES[] = {"C:", "D:", "E:", "F:"};
     private static final String[] SORT_NAMES = {
             "name", "size", "path", "extension", "date_modified", "date_created"};
 
@@ -149,24 +142,25 @@ public class EtpFilterSheet extends BottomSheetDialogFragment {
 
     private void buildBuiltinChips() {
         cgBuiltinPaths.removeAllViews();
-        for (int i = 0; i < BUILTIN_NAMES.length; i++) {
-            String key = BUILTIN_NAMES[i];
-            boolean checked = presets.builtin.getOrDefault(key, false);
-            Chip chip = createFilterChip(getString(BUILTIN_LABELS[i]), checked);
-            chip.setOnCheckedChangeListener((c, isChecked) ->
-                    presets.builtin.put(key, isChecked));
-            cgBuiltinPaths.addView(chip);
+        if (presets.paths == null) return;
+        for (EtpSettingsActivity.PathEntry entry : presets.paths) {
+            if ("common".equals(entry.type)) {
+                Chip chip = createFilterChip(entry.label, entry.checked);
+                chip.setOnCheckedChangeListener((c, isChecked) -> entry.checked = isChecked);
+                cgBuiltinPaths.addView(chip);
+            }
         }
     }
 
     private void buildDriveChips() {
         cgDrives.removeAllViews();
-        for (String drive : DRIVES) {
-            boolean checked = presets.drives.getOrDefault(drive, false);
-            Chip chip = createFilterChip(drive, checked);
-            chip.setOnCheckedChangeListener((c, isChecked) ->
-                    presets.drives.put(drive, isChecked));
-            cgDrives.addView(chip);
+        if (presets.paths == null) return;
+        for (EtpSettingsActivity.PathEntry entry : presets.paths) {
+            if ("drive".equals(entry.type)) {
+                Chip chip = createFilterChip(entry.label, entry.checked);
+                chip.setOnCheckedChangeListener((c, isChecked) -> entry.checked = isChecked);
+                cgDrives.addView(chip);
+            }
         }
     }
 

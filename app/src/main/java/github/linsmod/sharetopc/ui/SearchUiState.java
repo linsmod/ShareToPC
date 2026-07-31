@@ -49,8 +49,12 @@ public abstract class SearchUiState {
     /** 空结果 */
     public static final class Empty extends SearchUiState {
         public final String query;
-        public Empty(String query) { this.query = query; }
-        @Override public String toString() { return "Empty{" + query + "}"; }
+        public final List<String> queryPaths;
+        public Empty(String query, List<String> queryPaths) {
+            this.query = query;
+            this.queryPaths = queryPaths;
+        }
+        @Override public String toString() { return "Empty{" + query + ", paths=" + queryPaths + "}"; }
     }
 
     /** 错误 */

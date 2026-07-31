@@ -127,6 +127,7 @@
     <string name="etp_searching">搜索中…</string>
     <string name="etp_no_results">未找到匹配文件</string>
     <string name="etp_result_count">共 %1$d 条结果</string>
+    <string name="etp_search_query_label">\"%1$s\"</string>
     <string name="etp_search_error">搜索出错: %1$s</string>
     <string name="pref_etp_search_title">远程文件搜索</string>
     <string name="pref_etp_search_summary">连接电脑 Everything ETP 服务器搜索文件</string>
@@ -156,8 +157,8 @@
     <string name="device_menu_device_props">设备属性</string>
 
     <!-- 路径预设 -->
-    <string name="path_preset_title">筛选路径</string>
-    <string name="path_preset_common">搜索位置</string>
+    <string name="path_preset_title">默认搜索位置</string>
+    <string name="path_preset_common">常用位置</string>
     <string name="path_preset_desktop">桌面</string>
     <string name="path_preset_documents">文档</string>
     <string name="path_preset_downloads">下载</string>
@@ -165,10 +166,7 @@
     <string name="path_preset_pictures">图片</string>
     <string name="path_preset_music">音乐</string>
     <string name="path_preset_drives">磁盘</string>
-    <string name="path_preset_drive_c">C: 盘</string>
-    <string name="path_preset_drive_d">D: 盘</string>
-    <string name="path_preset_drive_e">E: 盘</string>
-    <string name="path_preset_drive_f">F: 盘</string>
+    <string name="path_preset_drive_format">%1$s 盘</string>
     <string name="path_preset_custom">自定义路径</string>
     <string name="path_preset_custom_hint">输入路径，如 D:\\Projects</string>
     <string name="path_preset_add">添加</string>
@@ -185,9 +183,9 @@
     <string name="path_preset_match_options">匹配选项</string>
     <string name="path_preset_match_case">区分大小写</string>
     <string name="path_preset_match_whole_word">全字匹配</string>
-    <string name="path_preset_match_path">匹配完整路径</string>
+    <string name="path_preset_match_path">使用完整路径匹配而不是从文件名</string>
     <string name="path_preset_match_regex">使用正则表达式</string>
-    <string name="path_preset_sort">排序</string>
+    <string name="path_preset_sort">结果排序</string>
     <string name="path_preset_sort_asc">升序</string>
     <string name="path_preset_sort_desc">降序</string>
     <string name="path_preset_limit">结果限制</string>

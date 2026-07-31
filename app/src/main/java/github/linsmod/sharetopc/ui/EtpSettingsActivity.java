@@ -1,11 +1,14 @@
 package github.linsmod.sharetopc.ui;
 
+import android.content.res.TypedArray;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.Nullable;
@@ -13,7 +16,6 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.chip.Chip;
-import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.gson.Gson;
 
@@ -33,61 +35,78 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
     private static final String PREF_KEY = "etp_path_presets";
 
-    static class PathPresets {
-        Map<String, Boolean> builtin = new LinkedHashMap<>();
-        Map<String, Boolean> drives = new LinkedHashMap<>();
-        List<String> custom = new ArrayList<>();
+    static class PathEntry {
+        String type;
+        String label;
+        String path;
+        boolean checked;
 
-        // 匹配选项
+        PathEntry() {}
+
+        PathEntry(String type, String label, String path) {
+            this(type, label, path, true);
+        }
+
+        PathEntry(String type, String label, String path, boolean checked) {
+            this.type = type;
+            this.label = label;
+            this.path = path;
+            this.checked = checked;
+        }
+    }
+
+    static class PathPresets {
+        List<PathEntry> paths = new ArrayList<>();
+
         int matchCase;
         int matchPath;
         int matchRegex;
         int matchWholeWord;
 
-        // 排序
-        String sortName;     // null / "" 表示默认排序
+        String sortName;
         boolean sortAsc = true;
-        // 多字段独立排序状态持久化: fieldName -> 0=none, 1=asc, 2=desc
         Map<String, Integer> sortFields = new LinkedHashMap<>();
 
-        // 结果限制（0 = 不限）
         int maxResults;
-
+        // Search Syntax for paths: (pathA | pathB | pathC)
         static PathPresets defaults() {
             PathPresets p = new PathPresets();
-            p.builtin.put("desktop", false);
-            p.builtin.put("documents", false);
-            p.builtin.put("downloads", false);
-            p.builtin.put("videos", false);
-            p.builtin.put("pictures", false);
-            p.builtin.put("music", false);
-            p.drives.put("C:", false);
-            p.drives.put("D:", false);
-            p.drives.put("E:", false);
-            p.drives.put("F:", false);
+            p.paths.add(new PathEntry("common", "桌面", "regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+(?:\\[^\\]+)?)$"));
+            p.paths.add(new PathEntry("common", "文档", "regex:[A-Z]:\\Users\\([^\\]+)\\Documents\\([^\\]+(?:\\[^\\]+)?)$"));
+            p.paths.add(new PathEntry("common", "下载", "regex:[A-Z]:\\Users\\([^\\]+)\\Downloads\\([^\\]+(?:\\[^\\]+)?)$"));
+            p.paths.add(new PathEntry("common", "视频", "regex:[A-Z]:\\Users\\([^\\]+)\\Videos\\([^\\]+(?:\\[^\\]+)?)$"));
+            p.paths.add(new PathEntry("common", "图片", "regex:[A-Z]:\\Users\\([^\\]+)\\Pictures\\([^\\]+(?:\\[^\\]+)?)$"));
+            p.paths.add(new PathEntry("common", "音乐", "regex:[A-Z]:\\Users\\([^\\]+)\\Videos\\([^\\]+(?:\\[^\\]+)?)$"));
+            p.paths.add(new PathEntry("common", "Program Files", "path:regex:[A-Z]:\\\\Program\\sFiles",false));
+            p.paths.add(new PathEntry("common", "Program Files (x86)", "path:regex:[A-Z]:\\\\Program\\sFiles\\s\\(x86\\)",false));
+            for (char c = 'A'; c <= 'Z'; c++) {
+                p.paths.add(new PathEntry("drive", c + ": 盘", c + ":\\",false));
+            }
+            p.paths.add(new PathEntry("custom_path", "D:\\Software", "D:\\Software",false));
+            p.maxResults = 200;
             for (String f : new String[]{"name", "size", "path", "extension", "date_modified", "date_created"}) {
                 p.sortFields.put(f, 0);
             }
             return p;
         }
+        
     }
 
     private PathPresets presets;
 
-    // 搜索位置
-    private MaterialCheckBox cbDesktop, cbDocuments, cbDownloads, cbVideos, cbPictures, cbMusic;
-    // 磁盘
-    private MaterialCheckBox cbDriveC, cbDriveD, cbDriveE, cbDriveF;
-    // 自定义
+    // 搜索位置（统一容器）
+    private LinearLayout layoutPaths;
+    private final Map<String, MaterialCheckBox> pathCheckBoxes = new LinkedHashMap<>();
+
+    // 自定义路径输入
     private TextInputEditText etCustomPath;
     private View btnAdd;
-    private LinearLayout layoutCustomPaths;
 
     // ETP 端口
     private TextInputEditText etEtpPort;
 
     // 匹配选项
-    private MaterialSwitch swMatchCase, swWholeWord, swMatchPath, swRegex;
+    private Chip chipMatchCase, chipWholeWord, chipMatchPath, chipRegex;
 
     // 排序
     private Spinner spSortField;
@@ -111,24 +130,12 @@ public class EtpSettingsActivity extends AppCompatActivity {
         androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbarEtpSettings);
         toolbar.setNavigationOnClickListener(v -> finish());
 
-        // 搜索位置
-        cbDesktop = findViewById(R.id.cbDesktop);
-        cbDocuments = findViewById(R.id.cbDocuments);
-        cbDownloads = findViewById(R.id.cbDownloads);
-        cbVideos = findViewById(R.id.cbVideos);
-        cbPictures = findViewById(R.id.cbPictures);
-        cbMusic = findViewById(R.id.cbMusic);
-
-        // 磁盘
-        cbDriveC = findViewById(R.id.cbDriveC);
-        cbDriveD = findViewById(R.id.cbDriveD);
-        cbDriveE = findViewById(R.id.cbDriveE);
-        cbDriveF = findViewById(R.id.cbDriveF);
+        // 搜索位置：统一容器
+        layoutPaths = findViewById(R.id.layoutPaths);
 
         // 自定义
         etCustomPath = findViewById(R.id.etCustomPath);
         btnAdd = findViewById(R.id.btnAddPath);
-        layoutCustomPaths = findViewById(R.id.layoutCustomPaths);
 
         btnAdd.setOnClickListener(v -> addCustomPath());
 
@@ -136,10 +143,10 @@ public class EtpSettingsActivity extends AppCompatActivity {
         etEtpPort = findViewById(R.id.etEtpPort);
 
         // 匹配选项
-        swMatchCase = findViewById(R.id.swMatchCase);
-        swWholeWord = findViewById(R.id.swWholeWord);
-        swMatchPath = findViewById(R.id.swMatchPath);
-        swRegex = findViewById(R.id.swRegex);
+        chipMatchCase = findViewById(R.id.chipMatchCase);
+        chipWholeWord = findViewById(R.id.chipWholeWord);
+        chipMatchPath = findViewById(R.id.chipMatchPath);
+        chipRegex = findViewById(R.id.chipRegex);
 
         // 排序
         spSortField = findViewById(R.id.spSortField);
@@ -170,7 +177,7 @@ public class EtpSettingsActivity extends AppCompatActivity {
         if (json != null) {
             try {
                 presets = gson.fromJson(json, PathPresets.class);
-                if (presets != null) return;
+                if (presets != null && presets.paths != null && !presets.paths.isEmpty()) return;
             } catch (Exception ignored) {}
         }
         presets = PathPresets.defaults();
@@ -196,29 +203,17 @@ public class EtpSettingsActivity extends AppCompatActivity {
     // ---- UI ----
 
     private void applyToUI() {
-        cbDesktop.setChecked(presets.builtin.get("desktop"));
-        cbDocuments.setChecked(presets.builtin.get("documents"));
-        cbDownloads.setChecked(presets.builtin.get("downloads"));
-        cbVideos.setChecked(presets.builtin.get("videos"));
-        cbPictures.setChecked(presets.builtin.get("pictures"));
-        cbMusic.setChecked(presets.builtin.get("music"));
-
-        cbDriveC.setChecked(presets.drives.get("C:"));
-        cbDriveD.setChecked(presets.drives.get("D:"));
-        cbDriveE.setChecked(presets.drives.get("E:"));
-        cbDriveF.setChecked(presets.drives.get("F:"));
-
-        rebuildCustomPaths();
+        rebuildPaths();
 
         // ETP 端口
         int port = App.get().settingsStore.getEtpPort();
         etEtpPort.setText(String.valueOf(port));
 
         // 匹配选项
-        swMatchCase.setChecked(presets.matchCase != 0);
-        swWholeWord.setChecked(presets.matchWholeWord != 0);
-        swMatchPath.setChecked(presets.matchPath != 0);
-        swRegex.setChecked(presets.matchRegex != 0);
+        chipMatchCase.setChecked(presets.matchCase != 0);
+        chipWholeWord.setChecked(presets.matchWholeWord != 0);
+        chipMatchPath.setChecked(presets.matchPath != 0);
+        chipRegex.setChecked(presets.matchRegex != 0);
 
         // 排序
         int sortIdx = 0;
@@ -240,23 +235,18 @@ public class EtpSettingsActivity extends AppCompatActivity {
     }
 
     private void collectFromUI() {
-        presets.builtin.put("desktop", cbDesktop.isChecked());
-        presets.builtin.put("documents", cbDocuments.isChecked());
-        presets.builtin.put("downloads", cbDownloads.isChecked());
-        presets.builtin.put("videos", cbVideos.isChecked());
-        presets.builtin.put("pictures", cbPictures.isChecked());
-        presets.builtin.put("music", cbMusic.isChecked());
-
-        presets.drives.put("C:", cbDriveC.isChecked());
-        presets.drives.put("D:", cbDriveD.isChecked());
-        presets.drives.put("E:", cbDriveE.isChecked());
-        presets.drives.put("F:", cbDriveF.isChecked());
+        for (PathEntry entry : presets.paths) {
+            MaterialCheckBox cb = pathCheckBoxes.get(entry.path);
+            if (cb != null) {
+                entry.checked = cb.isChecked();
+            }
+        }
 
         // 匹配选项
-        presets.matchCase = swMatchCase.isChecked() ? 1 : 0;
-        presets.matchWholeWord = swWholeWord.isChecked() ? 1 : 0;
-        presets.matchPath = swMatchPath.isChecked() ? 1 : 0;
-        presets.matchRegex = swRegex.isChecked() ? 1 : 0;
+        presets.matchCase = chipMatchCase.isChecked() ? 1 : 0;
+        presets.matchWholeWord = chipWholeWord.isChecked() ? 1 : 0;
+        presets.matchPath = chipMatchPath.isChecked() ? 1 : 0;
+        presets.matchRegex = chipRegex.isChecked() ? 1 : 0;
 
         // 排序
         int sortIdx = spSortField.getSelectedItemPosition();
@@ -271,6 +261,75 @@ public class EtpSettingsActivity extends AppCompatActivity {
         }
     }
 
+    // ---- 动态路径 ----
+
+    private void rebuildPaths() {
+        layoutPaths.removeAllViews();
+        pathCheckBoxes.clear();
+
+        if (presets.paths == null || presets.paths.isEmpty()) {
+            presets.paths = PathPresets.defaults().paths;
+        }
+
+        TypedArray a = obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackground});
+        int selectableItemBackground = a.getResourceId(0, 0);
+        a.recycle();
+
+        for (String type : new String[]{"common", "drive", "custom_path"}) {
+            List<PathEntry> group = new ArrayList<>();
+            for (PathEntry entry : presets.paths) {
+                if (type.equals(entry.type)) group.add(entry);
+            }
+            if (group.isEmpty()) continue;
+
+            switch (type) {
+                case "common": addSectionHeader(R.string.path_preset_common); break;
+                case "drive": addSectionHeader(R.string.path_preset_drives); break;
+                case "custom_path": addSectionHeader(R.string.path_preset_custom); break;
+            }
+
+            for (PathEntry entry : group) {
+                addPathCheckBox(entry, selectableItemBackground);
+            }
+        }
+    }
+
+    private void addSectionHeader(int titleRes) {
+        TextView header = new TextView(this, null, 0, R.style.PathPresetSectionHeader);
+        header.setText(titleRes);
+        layoutPaths.addView(header);
+    }
+
+    private void addPathCheckBox(PathEntry entry, int selectableItemBackground) {
+        LinearLayout wrapper = new LinearLayout(this);
+        LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+        wlp.setMargins(2, 2, 2, 2);
+        wrapper.setLayoutParams(wlp);
+        wrapper.setBackgroundResource(selectableItemBackground);
+        wrapper.setClickable(true);
+        wrapper.setFocusable(true);
+        wrapper.setOrientation(LinearLayout.HORIZONTAL);
+        wrapper.setGravity(Gravity.CENTER_VERTICAL);
+
+        MaterialCheckBox cb = new MaterialCheckBox(this);
+        cb.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        cb.setBackground(null);
+        cb.setText(entry.label);
+        cb.setChecked(entry.checked);
+        cb.setClickable(false);
+        cb.setFocusable(false);
+        cb.setGravity(Gravity.CENTER);
+
+        wrapper.setOnClickListener(v -> cb.toggle());
+        pathCheckBoxes.put(entry.path, cb);
+        wrapper.addView(cb);
+        layoutPaths.addView(wrapper);
+    }
+
     // ---- 自定义路径 ----
 
     private void addCustomPath() {
@@ -279,36 +338,14 @@ public class EtpSettingsActivity extends AppCompatActivity {
             Toast.makeText(this, R.string.path_preset_empty_hint, Toast.LENGTH_SHORT).show();
             return;
         }
-        if (presets.custom.contains(path)) {
-            Toast.makeText(this, R.string.path_preset_duplicate, Toast.LENGTH_SHORT).show();
-            return;
+        for (PathEntry entry : presets.paths) {
+            if (entry.path.equals(path)) {
+                Toast.makeText(this, R.string.path_preset_duplicate, Toast.LENGTH_SHORT).show();
+                return;
+            }
         }
-        presets.custom.add(path);
+        presets.paths.add(new PathEntry("custom_path", path, path, true));
         etCustomPath.setText("");
-        rebuildCustomPaths();
-    }
-
-    private void removeCustomPath(String path) {
-        presets.custom.remove(path);
-        rebuildCustomPaths();
-    }
-
-    private void rebuildCustomPaths() {
-        layoutCustomPaths.removeAllViews();
-        for (String path : presets.custom) {
-            Chip chip = new Chip(this);
-            chip.setText(path);
-            chip.setCloseIconVisible(true);
-            chip.setCloseIconResource(R.drawable.ic_close_chip);
-            chip.setClickable(false);
-            chip.setCheckable(false);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-            lp.setMargins(0, 4, 8, 4);
-            chip.setLayoutParams(lp);
-            chip.setOnCloseIconClickListener(v -> removeCustomPath(path));
-            layoutCustomPaths.addView(chip);
-        }
+        rebuildPaths();
     }
 }

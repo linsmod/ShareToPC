@@ -3,6 +3,8 @@ package github.linsmod.sharetopc.ui;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -14,6 +16,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.transfer.EtpClient;
@@ -27,6 +30,35 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
     private static final int TYPE_ITEM = 0;
     private static final int TYPE_FOOTER = 1;
 
+    // 匹配 C:\Users\{username}\Desktop\ 等已知文件夹路径
+    private static final Pattern PATTERN_USER_FOLDER = Pattern.compile(
+            "\\\\users\\\\[^\\\\]+\\\\(desktop|documents|downloads|videos|pictures|music)(\\\\|$)",
+            Pattern.CASE_INSENSITIVE);
+
+    private static String getLocationLabel(EtpClient.EtpSearchResult r) {
+        String path = r.path != null ? r.path : (r.name != null ? r.name : "");
+        if (path.isEmpty()) return null;
+
+        java.util.regex.Matcher m = PATTERN_USER_FOLDER.matcher(path);
+        if (m.find()) {
+            String folder = m.group(1).toLowerCase(Locale.getDefault());
+            switch (folder) {
+                case "desktop":  return "桌面";
+                case "documents": return "文档";
+                case "downloads": return "下载";
+                case "videos":   return "视频";
+                case "pictures": return "图片";
+                case "music":    return "音乐";
+            }
+        }
+
+        // 否则显示盘符
+        if (path.length() >= 2 && path.charAt(1) == ':') {
+            return path.substring(0, 2);
+        }
+        return null;
+    }
+
     private static final DiffUtil.ItemCallback<EtpClient.EtpSearchResult> DIFF =
             new DiffUtil.ItemCallback<EtpClient.EtpSearchResult>() {
                 @Override
@@ -39,7 +71,8 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
                 public boolean areContentsTheSame(@NonNull EtpClient.EtpSearchResult o,
                                                   @NonNull EtpClient.EtpSearchResult n) {
                     return o.size == n.size && o.dateModified == n.dateModified
-                            && o.isFolder == n.isFolder;
+                            && o.isFolder == n.isFolder
+                            && (o.path == null ? n.path == null : o.path.equals(n.path));
                 }
             };
 
@@ -118,23 +151,45 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         ItemViewHolder ivh = (ItemViewHolder) holder;
         EtpClient.EtpSearchResult r = getItem(position);
         ivh.tvName.setText(r.name);
-        ivh.tvIcon.setText(r.isFolder ? "📁" : "📄");
+        ivh.ivIcon.setImageResource(r.isFolder ? R.drawable.ic_folder : R.drawable.ic_file);
 
-        StringBuilder info = new StringBuilder();
-        if (r.size >= 0) info.append(EtpClient.EtpSearchResult.formatSize(r.size));
-        if (r.dateModified > 0) {
-            if (info.length() > 0) info.append("  |  ");
-            long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateModified);
-            info.append(new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-                    .format(new Date(millis)));
-        }
-        ivh.tvInfo.setText(info.toString());
-
-        if (r.path != null && !r.path.isEmpty()) {
-            ivh.tvPath.setVisibility(View.VISIBLE);
-            ivh.tvPath.setText(r.path + "\\" + r.name);
+        // 文件大小
+        if (r.size >= 0) {
+            ivh.tvFileSize.setVisibility(View.VISIBLE);
+            ivh.tvFileSize.setText(EtpClient.EtpSearchResult.formatSize(r.size));
         } else {
+            ivh.tvFileSize.setVisibility(View.GONE);
+        }
+
+        // 位置标签：匹配 presets paths 获取标签，显示 C:\Users\{user}\Documents 等，或盘符
+        String locationLabel = getLocationLabel(r);
+        if (locationLabel != null) {
+            ivh.tvLocation.setText(locationLabel);
+            ivh.tvLocation.setVisibility(View.VISIBLE);
+        } else {
+            ivh.tvLocation.setVisibility(View.GONE);
+        }
+
+        // 第二行：路径 + 日期
+        boolean hasPath = r.path != null && !r.path.isEmpty();
+        boolean hasDate = r.dateModified > 0;
+        if (hasPath && !r.path.isEmpty()) {
+            ivh.layoutPathRow.setVisibility(View.VISIBLE);
+            ivh.tvPath.setText(r.path + "\\" + r.name);
+        } else if (hasDate) {
+            ivh.layoutPathRow.setVisibility(View.VISIBLE);
             ivh.tvPath.setVisibility(View.GONE);
+        } else {
+            ivh.layoutPathRow.setVisibility(View.GONE);
+        }
+
+        if (hasDate) {
+            ivh.tvFileDate.setVisibility(View.VISIBLE);
+            long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateModified);
+            ivh.tvFileDate.setText(new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    .format(new Date(millis)));
+        } else {
+            ivh.tvFileDate.setVisibility(View.GONE);
         }
 
         ivh.itemView.setOnClickListener(v -> {
@@ -157,13 +212,18 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
     // ---- ViewHolder ----
 
     static class ItemViewHolder extends RecyclerView.ViewHolder {
-        final TextView tvIcon, tvName, tvInfo, tvPath;
+        final ImageView ivIcon;
+        final TextView tvName, tvLocation, tvFileSize, tvPath, tvFileDate;
+        final LinearLayout layoutPathRow;
         ItemViewHolder(@NonNull View itemView) {
             super(itemView);
-            tvIcon = itemView.findViewById(R.id.tvIcon);
+            ivIcon = itemView.findViewById(R.id.ivIcon);
             tvName = itemView.findViewById(R.id.tvName);
-            tvInfo = itemView.findViewById(R.id.tvInfo);
+            tvLocation = itemView.findViewById(R.id.tvLocation);
+            tvFileSize = itemView.findViewById(R.id.tvFileSize);
             tvPath = itemView.findViewById(R.id.tvPath);
+            tvFileDate = itemView.findViewById(R.id.tvFileDate);
+            layoutPathRow = itemView.findViewById(R.id.layoutPathRow);
         }
     }
 
