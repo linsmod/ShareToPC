@@ -2,6 +2,7 @@ package github.linsmod.sharetopc.ui;
 
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.Intent;
 import android.graphics.Typeface;
 import android.os.Bundle;
 
@@ -34,10 +35,14 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+
+import com.google.gson.Gson;
 
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
@@ -96,6 +101,10 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         // 设备芯片
         chipDevice = findViewById(R.id.chipDevice);
         chipDevice.setOnClickListener(v -> showDeviceSheet());
+
+        // 筛选路径 FAB
+        findViewById(R.id.fabPathPreset).setOnClickListener(v ->
+                startActivity(new Intent(this, PathPresetActivity.class)));
 
         // 搜索栏
         etSearch = findViewById(R.id.etSearch);
@@ -564,6 +573,101 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         });
     }
 
+    /**
+     * 构造 Everything path: 过滤器，将用户勾选的路径预设拼接到查询中。
+     * 无任何勾选时返回原始 query。
+     */
+    private String buildPathFilter(String rawQuery) {
+        String json = App.get().settingsStore.getString("etp_path_presets", null);
+        PathPresetActivity.PathPresets presets;
+        if (json != null) {
+            try {
+                presets = new Gson().fromJson(json, PathPresetActivity.PathPresets.class);
+            } catch (Exception ignored) {
+                presets = PathPresetActivity.PathPresets.defaults();
+            }
+        } else {
+            presets = PathPresetActivity.PathPresets.defaults();
+        }
+        if (presets == null) return rawQuery;
+
+        // builtin key → Everything path pattern（用 *\ 前缀匹配任意盘符+用户目录）
+        Map<String, String> builtinMap = new LinkedHashMap<>();
+        builtinMap.put("desktop", "*\\Desktop\\");
+        builtinMap.put("documents", "*\\Documents\\");
+        builtinMap.put("downloads", "*\\Downloads\\");
+        builtinMap.put("videos", "*\\Videos\\");
+        builtinMap.put("pictures", "*\\Pictures\\");
+        builtinMap.put("music", "*\\Music\\");
+
+        List<String> paths = new ArrayList<>();
+
+        for (Map.Entry<String, Boolean> e : presets.builtin.entrySet()) {
+            if (Boolean.TRUE.equals(e.getValue()) && builtinMap.containsKey(e.getKey())) {
+                paths.add(builtinMap.get(e.getKey()));
+            }
+        }
+        for (Map.Entry<String, Boolean> e : presets.drives.entrySet()) {
+            if (Boolean.TRUE.equals(e.getValue())) {
+                paths.add(e.getKey() + "\\");
+            }
+        }
+        for (String p : presets.custom) {
+            String trimmed = p.trim();
+            if (!trimmed.isEmpty()) paths.add(trimmed);
+        }
+
+        if (paths.isEmpty()) return rawQuery;
+
+        StringBuilder sb = new StringBuilder(rawQuery);
+        sb.append(" path:");
+        for (int i = 0; i < paths.size(); i++) {
+            if (i > 0) sb.append("|");
+            String path = paths.get(i);
+            // 含空格或特殊字符则加引号
+            if (path.contains(" ") || path.contains("(") || path.contains(")") || path.contains("&")) {
+                sb.append("\"").append(path).append("\"");
+            } else {
+                sb.append(path);
+            }
+        }
+        return sb.toString();
+    }
+
+    /** 从预设中解析查询参数 */
+    private QueryParams loadQueryParams() {
+        String json = App.get().settingsStore.getString("etp_path_presets", null);
+        PathPresetActivity.PathPresets p;
+        if (json != null) {
+            try {
+                p = new Gson().fromJson(json, PathPresetActivity.PathPresets.class);
+            } catch (Exception e) {
+                p = PathPresetActivity.PathPresets.defaults();
+            }
+        } else {
+            p = PathPresetActivity.PathPresets.defaults();
+        }
+
+        QueryParams qp = new QueryParams();
+        if (p != null) {
+            qp.matchCase = p.matchCase;
+            qp.matchPath = p.matchPath;
+            qp.matchRegex = p.matchRegex;
+            qp.matchWholeWord = p.matchWholeWord;
+            qp.sortName = (p.sortName != null && !p.sortName.isEmpty()) ? p.sortName : null;
+            qp.sortAsc = p.sortAsc;
+            qp.maxResults = Math.max(0, p.maxResults);
+        }
+        return qp;
+    }
+
+    private static class QueryParams {
+        int matchCase, matchPath, matchRegex, matchWholeWord;
+        String sortName;
+        boolean sortAsc = true;
+        int maxResults;
+    }
+
     /** 已登录状态下执行实际搜索 */
     private void executeSearch(String query) {
         int columns = EtpClient.SIZE_COLUMN | EtpClient.PATH_COLUMN
@@ -572,9 +676,15 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
         progressSearch.setVisibility(View.VISIBLE);
 
+        String filteredQuery = buildPathFilter(query);
+        QueryParams qp = loadQueryParams();
+
         App.get().ioExecutor.execute(() -> {
             try {
-                List<EtpClient.EtpSearchResult> results = client.query(query, columns);
+                List<EtpClient.EtpSearchResult> results = client.query(filteredQuery, columns,
+                        qp.matchCase, qp.matchPath, qp.matchRegex, qp.matchWholeWord,
+                        qp.sortName, qp.sortAsc,
+                        0 /* offset */, qp.maxResults);
                 handler.post(() -> {
                     progressSearch.setVisibility(View.GONE);
                     resultAdapter.setResults(results);

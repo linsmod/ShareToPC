@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context=".ui.PathPresetActivity">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbarPathPreset"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:navigationIcon="?attr/homeAsUpIndicator"
+        app:title="@string/path_preset_title" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scrollbarStyle="outsideOverlay">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="12dp">
+
+            <!-- 常用路径 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/path_preset_common" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbDesktop"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_desktop" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbDocuments"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_documents" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbDownloads"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_downloads" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbVideos"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_videos" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbPictures"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_pictures" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbMusic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_music" />
+
+            <!-- 磁盘 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/path_preset_drives" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbDriveC"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_drive_c" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbDriveD"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_drive_d" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbDriveE"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_drive_e" />
+
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/cbDriveF"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_drive_f" />
+
+            <!-- 自定义路径 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/path_preset_custom" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="@string/path_preset_custom_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etCustomPath"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text"
+                        android:singleLine="true" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAddPath"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/path_preset_add" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layoutCustomPaths"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp" />
+
+            <!-- 匹配选项 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/path_preset_match_options" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swMatchCase"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_match_case" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swWholeWord"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_match_whole_word" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swMatchPath"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_match_path" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/swRegex"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/path_preset_match_regex" />
+
+            <!-- 排序 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/path_preset_sort" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <Spinner
+                    android:id="@+id/spSortField"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:entries="@array/path_preset_sort_fields" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSortDir"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/path_preset_sort_asc"
+                    app:icon="@drawable/ic_sort_arrow" />
+            </LinearLayout>
+
+            <!-- 结果限制 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/path_preset_limit" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/path_preset_max_results_hint"
+                app:counterEnabled="true"
+                app:counterMaxLength="6">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etMaxResults"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- 底部留白 -->
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="24dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

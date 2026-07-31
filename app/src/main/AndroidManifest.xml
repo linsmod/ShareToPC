@@ -59,6 +59,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.PathPresetActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.LogViewerActivity"
             android:exported="false" />
 

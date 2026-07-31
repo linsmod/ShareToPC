@@ -147,4 +147,47 @@
     <string name="etp_sheet_manual">手动输入</string>
     <string name="etp_sheet_no_devices">暂无已配对设备</string>
     <string name="etp_sheet_connecting_status">连接中…</string>
+
+    <!-- 路径预设 -->
+    <string name="path_preset_title">筛选路径</string>
+    <string name="path_preset_common">常用路径</string>
+    <string name="path_preset_desktop">桌面</string>
+    <string name="path_preset_documents">文档</string>
+    <string name="path_preset_downloads">下载</string>
+    <string name="path_preset_videos">视频</string>
+    <string name="path_preset_pictures">图片</string>
+    <string name="path_preset_music">音乐</string>
+    <string name="path_preset_drives">磁盘</string>
+    <string name="path_preset_drive_c">C: 盘</string>
+    <string name="path_preset_drive_d">D: 盘</string>
+    <string name="path_preset_drive_e">E: 盘</string>
+    <string name="path_preset_drive_f">F: 盘</string>
+    <string name="path_preset_custom">自定义路径</string>
+    <string name="path_preset_custom_hint">输入路径，如 D:\\Projects</string>
+    <string name="path_preset_add">添加</string>
+    <string name="path_preset_empty_hint">请输入路径</string>
+    <string name="path_preset_duplicate">路径已存在</string>
+    <string name="path_preset_fab">筛选路径</string>
+
+    <!-- 路径预设 - 查询参数 -->
+    <string name="path_preset_match_options">匹配选项</string>
+    <string name="path_preset_match_case">区分大小写</string>
+    <string name="path_preset_match_whole_word">全字匹配</string>
+    <string name="path_preset_match_path">匹配完整路径</string>
+    <string name="path_preset_match_regex">使用正则表达式</string>
+    <string name="path_preset_sort">排序</string>
+    <string name="path_preset_sort_asc">升序</string>
+    <string name="path_preset_sort_desc">降序</string>
+    <string name="path_preset_limit">结果限制</string>
+    <string name="path_preset_max_results_hint">最大返回条数（0 不限）</string>
+
+    <string-array name="path_preset_sort_fields">
+        <item>默认排序</item>
+        <item>文件名</item>
+        <item>路径</item>
+        <item>大小</item>
+        <item>扩展名</item>
+        <item>修改日期</item>
+        <item>创建日期</item>
+    </string-array>
 </resources>

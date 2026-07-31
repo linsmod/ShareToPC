@@ -130,11 +130,12 @@ public class EtpClient implements Closeable {
      */
     public List<EtpSearchResult> query(String search, int columns) throws IOException {
         return query(search, columns, 0 /* matchCase */, 0 /* matchPath */, 0 /* matchRegex */,
-                0 /* matchWholeWord */, null /* sortName */, true /* sortAsc */);
+                0 /* matchWholeWord */, null /* sortName */, true /* sortAsc */,
+                0 /* offset */, 0 /* count */);
     }
 
     /**
-     * 执行搜索并返回结果列表（完整参数）。
+     * 执行搜索并返回结果列表（完整参数，不含翻页）。
      *
      * @param search         搜索关键字
      * @param columns        需要的列（按位组合）
@@ -149,6 +150,29 @@ public class EtpClient implements Closeable {
                                        int matchCase, int matchPath, int matchRegex,
                                        int matchWholeWord,
                                        String sortName, boolean sortAscending) throws IOException {
+        return query(search, columns, matchCase, matchPath, matchRegex, matchWholeWord,
+                sortName, sortAscending, 0 /* offset */, 0 /* count */);
+    }
+
+    /**
+     * 执行搜索并返回结果列表（完整参数 + 翻页）。
+     *
+     * @param search         搜索关键字
+     * @param columns        需要的列（按位组合）
+     * @param matchCase      区分大小写
+     * @param matchPath      匹配完整路径
+     * @param matchRegex     使用正则表达式
+     * @param matchWholeWord 全字匹配
+     * @param sortName       排序列名，如 "name"、"size"、"date_modified"，null 表示默认
+     * @param sortAscending  true 升序 / false 降序
+     * @param offset         翻页偏移（0 起始），≤0 表示不限制
+     * @param count          最大返回条数，≤0 表示不限制
+     */
+    public List<EtpSearchResult> query(String search, int columns,
+                                       int matchCase, int matchPath, int matchRegex,
+                                       int matchWholeWord,
+                                       String sortName, boolean sortAscending,
+                                       int offset, int count) throws IOException {
         if (!loggedIn) throw new IOException("未登录");
 
         // 设置搜索选项
@@ -171,6 +195,10 @@ public class EtpClient implements Closeable {
             String sortWithDir = sortAscending ? sortName + "_ascending" : sortName + "_descending";
             sendEverything("SORT", sortWithDir);
         }
+
+        // 设置翻页
+        if (offset > 0) sendEverything("OFFSET", String.valueOf(offset));
+        if (count > 0) sendEverything("COUNT", String.valueOf(count));
 
         // 设置搜索字符串
         String resp = sendEverything("SEARCH", search);
