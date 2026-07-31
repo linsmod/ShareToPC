@@ -5,6 +5,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.PopupMenu;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -43,12 +44,12 @@ public class DevicesFragment extends Fragment {
         deviceAdapter = new DeviceAdapter(new DeviceAdapter.OnDeviceClickListener() {
             @Override
             public void onClick(DiscoveredDevice device) {
-                ((MainActivity) requireActivity()).showDeviceQueueDialog(device);
+                ((MainActivity) requireActivity()).showTaskForDevice(device);
             }
 
             @Override
-            public void onLongClick(DiscoveredDevice device) {
-                ((MainActivity) requireActivity()).showAliasDialog(device);
+            public void onLongClick(View anchor, DiscoveredDevice device) {
+                showDeviceContextMenu(anchor, device);
             }
         });
         rvDevices.setAdapter(deviceAdapter);
@@ -64,6 +65,23 @@ public class DevicesFragment extends Fragment {
         viewModel.setDeviceProgressListener(deviceAdapter::notifyProgressChanged);
 
         return view;
+    }
+
+    private void showDeviceContextMenu(View anchor, DiscoveredDevice device) {
+        PopupMenu popup = new PopupMenu(requireContext(), anchor);
+        popup.getMenuInflater().inflate(R.menu.device_context_menu, popup.getMenu());
+        popup.setOnMenuItemClickListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.action_etp_search) {
+                ((MainActivity) requireActivity()).showEtpSearch(device);
+                return true;
+            } else if (id == R.id.action_device_props) {
+                ((MainActivity) requireActivity()).showAliasDialog(device);
+                return true;
+            }
+            return false;
+        });
+        popup.show();
     }
 
     @Override

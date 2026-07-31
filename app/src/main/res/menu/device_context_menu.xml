@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/action_etp_search"
+        android:title="@string/device_menu_etp_search" />
+    <item
+        android:id="@+id/action_device_props"
+        android:title="@string/device_menu_device_props" />
+</menu>

@@ -31,9 +31,8 @@ import java.io.InputStream;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.service.ShareForegroundService;
-import github.linsmod.sharetopc.ui.DeviceQueueDialog;
 import github.linsmod.sharetopc.ui.DevicesFragment;
-import github.linsmod.sharetopc.ui.Listeners;
+import github.linsmod.sharetopc.ui.EtpSearchActivity;
 import github.linsmod.sharetopc.ui.TaskFragment;
 import github.linsmod.sharetopc.ui.SettingsActivity;
 
@@ -42,7 +41,6 @@ import androidx.fragment.app.Fragment;
 public class MainActivity extends AppCompatActivity {
 
     private MainViewModel viewModel;
-    private DeviceQueueDialog deviceQueueDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,55 +90,19 @@ public class MainActivity extends AppCompatActivity {
                 .commit();
     }
 
-    public void showDeviceQueueDialog(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
-        if (deviceQueueDialog != null && deviceQueueDialog.isShowing()) {
-            deviceQueueDialog.dismiss();
-        }
+    public void showTaskForDevice(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
+        Bundle args = new Bundle();
+        args.putString(TaskFragment.EXTRA_HOST, device.host);
+        args.putInt(TaskFragment.EXTRA_PORT, device.port);
+        args.putString(TaskFragment.EXTRA_DEVICE_NAME, device.displayName());
 
-        // 通过 device.latestJobId 直接取该设备最近一次任务，优先用队列中的 SendJob 信息
-        github.linsmod.sharetopc.ui.TaskGroup group = null;
-        String jobId = device.latestJobId;
-        if (jobId != null) {
-            github.linsmod.sharetopc.transfer.TransferManager.SendJob job = viewModel.findJobById(jobId);
-            if (job != null && job.items != null && !job.items.isEmpty()) {
-                // 用 SendJob 自身的 updateMillis，不再从 entry 算时间
-                long time = job.updateMillis != null ? job.updateMillis : 0;
-                String name = job.device != null ? job.device.displayName() : (job.host != null ? job.host : "");
-                group = new github.linsmod.sharetopc.ui.TaskGroup(jobId, name,
-                        job.host, job.port, time, new java.util.ArrayList<>(job.items));
-                group.recomputeProgress();
-            }
-        }
+        TaskFragment fragment = new TaskFragment();
+        fragment.setArguments(args);
 
-        deviceQueueDialog = new DeviceQueueDialog(this, device, group,
-                new Listeners.TaskActionListener() {
-            @Override
-            public void onGroupMenuRequested(github.linsmod.sharetopc.ui.TaskGroup group,
-                                             View anchor, float touchX) {
-                // 由 DeviceQueueDialog 内部 showGroupMenu 处理
-            }
-
-            @Override
-            public void onGroupPauseRequested(github.linsmod.sharetopc.ui.TaskGroup group) {
-                viewModel.pauseGroup(group);
-                Toast.makeText(MainActivity.this, "已暂停传输", Toast.LENGTH_SHORT).show();
-            }
-
-            @Override
-            public void onGroupResumeRequested(github.linsmod.sharetopc.ui.TaskGroup group) {
-                viewModel.resumeGroup(group);
-            }
-
-            @Override
-            public void onGroupDeleteRequested(github.linsmod.sharetopc.ui.TaskGroup group) {
-                viewModel.deleteGroup(group);
-                Toast.makeText(MainActivity.this,
-                        getString(R.string.group_deleted, group.totalEntries),
-                        Toast.LENGTH_SHORT).show();
-                if (deviceQueueDialog != null) deviceQueueDialog.dismiss();
-            }
-        }, transferId -> viewModel.hasPfd(transferId), viewModel);
-        deviceQueueDialog.show();
+        getSupportFragmentManager().beginTransaction()
+                .replace(R.id.navHost, fragment)
+                .addToBackStack(null)
+                .commit();
     }
 
     private void showTextPreview(github.linsmod.sharetopc.data.SendEntry record) {
@@ -171,6 +133,14 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
+    }
+
+    public void showEtpSearch(DiscoveredDevice device) {
+        Intent intent = new Intent(this, EtpSearchActivity.class);
+        intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_NAME, device.displayName());
+        intent.putExtra(EtpSearchActivity.EXTRA_HOST, device.host);
+        intent.putExtra(EtpSearchActivity.EXTRA_PORT, device.port);
+        startActivity(intent);
     }
 
     public void showAliasDialog(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {

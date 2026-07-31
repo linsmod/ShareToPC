@@ -31,7 +31,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     public interface OnDeviceClickListener {
         void onClick(DiscoveredDevice device);
-        void onLongClick(DiscoveredDevice device);
+        void onLongClick(View anchor, DiscoveredDevice device);
     }
 
     public interface OnAddDeviceClickListener { void onAddDevice(); }
@@ -181,7 +181,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             if (clickListener != null) clickListener.onClick(device);
         });
         vh.itemView.setOnLongClickListener(v -> {
-            if (clickListener != null) { clickListener.onLongClick(device); return true; }
+            if (clickListener != null) { clickListener.onLongClick(v, device); return true; }
             return false;
         });
     }

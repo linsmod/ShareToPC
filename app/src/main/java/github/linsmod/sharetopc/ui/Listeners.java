@@ -4,7 +4,7 @@ import android.view.View;
 
 import github.linsmod.sharetopc.data.SendEntry;
 
-/** 统一的任务操作回调，供 TaskAdapter、DeviceQueueDialog 共用。 */
+/** 统一的任务操作回调，供 TaskAdapter 和 TaskFragment 共用。 */
 public final class Listeners {
     private Listeners() {}
 
