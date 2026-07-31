@@ -5,8 +5,8 @@ import android.content.ClipboardManager;
 import android.content.Intent;
 import android.os.Bundle;
 
+import androidx.activity.EdgeToEdge;
 import androidx.annotation.Nullable;
-import androidx.appcompat.app.AlertDialog;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
@@ -18,12 +18,16 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.DividerItemDecoration;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.divider.MaterialDividerItemDecoration;
 import com.google.android.material.textfield.TextInputEditText;
 
 import java.io.IOException;
@@ -50,13 +54,11 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
-    public static final String EXTRA_PORT = "port";
-    private static final int DEFAULT_ETP_PORT = 21;
 
     private EtpClient client;
     private boolean loggedIn;
     private String deviceHost;
-    private int devicePort;
+    private int etpPort;
 
     // 搜索
     private TextInputEditText etSearch;
@@ -65,6 +67,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private RecyclerView rvResults;
     private View layoutEmpty;
     private TextView tvEmptyTitle;
+    private TextView tvEmptyHint;
+    private TextView tvResultCount;
 
     private final ResultAdapter resultAdapter = new ResultAdapter();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -80,13 +84,20 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
         setContentView(R.layout.activity_etp_search);
+
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.etpRoot), (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+            return insets;
+        });
 
         // 读取设备信息
         Intent intent = getIntent();
         String deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
         deviceHost = intent.getStringExtra(EXTRA_HOST);
-        devicePort = intent.getIntExtra(EXTRA_PORT, DEFAULT_ETP_PORT);
+        etpPort = App.get().settingsStore.getEtpPort();
         if (deviceHost == null || deviceHost.isEmpty()) {
             Toast.makeText(this, "未指定设备", Toast.LENGTH_SHORT).show();
             finish();
@@ -101,7 +112,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
         // 筛选路径 FAB
         findViewById(R.id.fabPathPreset).setOnClickListener(v ->
-                startActivity(new Intent(this, PathPresetActivity.class)));
+                startActivity(new Intent(this, EtpSettingsActivity.class)));
 
         // 搜索栏
         etSearch = findViewById(R.id.etSearch);
@@ -110,9 +121,12 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         rvResults = findViewById(R.id.rvResults);
         layoutEmpty = findViewById(R.id.layoutEmpty);
         tvEmptyTitle = findViewById(R.id.tvEmptyTitle);
+        tvEmptyHint = findViewById(R.id.tvEmptyHint);
+        tvResultCount = findViewById(R.id.tvResultCount);
 
         rvResults.setLayoutManager(new LinearLayoutManager(this));
-        rvResults.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
+        rvResults.addItemDecoration(new MaterialDividerItemDecoration(this,
+                MaterialDividerItemDecoration.VERTICAL));
         rvResults.setAdapter(resultAdapter);
 
         // 输入防抖搜索（300ms）
@@ -142,7 +156,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     // ==================== 连接 ====================
 
     private void connectDevice() {
-        client = new EtpClient(deviceHost, devicePort);
+        client = new EtpClient(deviceHost, etpPort);
 
         App.get().ioExecutor.execute(() -> {
             try {
@@ -152,7 +166,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
                     if (client.login("anonymous", "")) {
                         loggedIn = true;
                         App.get().settingsStore.setLastEtpHost(deviceHost);
-                        App.get().settingsStore.setLastEtpPort(devicePort);
+                        App.get().settingsStore.setLastEtpPort(etpPort);
                         return;
                     }
                 } catch (IOException ignored) {}
@@ -196,13 +210,13 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         App.get().ioExecutor.execute(() -> {
             try {
                 if (client == null || !client.isConnected()) {
-                    client = new EtpClient(deviceHost, devicePort);
+                    client = new EtpClient(deviceHost, etpPort);
                     client.connect();
                 }
                 if (client.login("anonymous", "")) {
                     loggedIn = true;
                     App.get().settingsStore.setLastEtpHost(deviceHost);
-                    App.get().settingsStore.setLastEtpPort(devicePort);
+                    App.get().settingsStore.setLastEtpPort(etpPort);
                     handler.post(() -> executeSearch(query));
                 } else {
                     handler.post(() -> {
@@ -226,15 +240,15 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
      */
     private String buildPathFilter(String rawQuery) {
         String json = App.get().settingsStore.getString("etp_path_presets", null);
-        PathPresetActivity.PathPresets presets;
+        EtpSettingsActivity.PathPresets presets;
         if (json != null) {
             try {
-                presets = new Gson().fromJson(json, PathPresetActivity.PathPresets.class);
+                presets = new Gson().fromJson(json, EtpSettingsActivity.PathPresets.class);
             } catch (Exception ignored) {
-                presets = PathPresetActivity.PathPresets.defaults();
+                presets = EtpSettingsActivity.PathPresets.defaults();
             }
         } else {
-            presets = PathPresetActivity.PathPresets.defaults();
+            presets = EtpSettingsActivity.PathPresets.defaults();
         }
         if (presets == null) return rawQuery;
 
@@ -280,15 +294,15 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     /** 从预设中解析查询参数 */
     private QueryParams loadQueryParams() {
         String json = App.get().settingsStore.getString("etp_path_presets", null);
-        PathPresetActivity.PathPresets p;
+        EtpSettingsActivity.PathPresets p;
         if (json != null) {
             try {
-                p = new Gson().fromJson(json, PathPresetActivity.PathPresets.class);
+                p = new Gson().fromJson(json, EtpSettingsActivity.PathPresets.class);
             } catch (Exception e) {
-                p = PathPresetActivity.PathPresets.defaults();
+                p = EtpSettingsActivity.PathPresets.defaults();
             }
         } else {
-            p = PathPresetActivity.PathPresets.defaults();
+            p = EtpSettingsActivity.PathPresets.defaults();
         }
 
         QueryParams qp = new QueryParams();
@@ -334,6 +348,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
                     if (results.isEmpty()) {
                         showEmpty(getString(R.string.etp_no_results));
                     } else {
+                        tvResultCount.setText(getString(R.string.etp_result_count, results.size()));
+                        tvResultCount.setVisibility(View.VISIBLE);
                         layoutEmpty.setVisibility(View.GONE);
                         rvResults.setVisibility(View.VISIBLE);
                     }
@@ -351,6 +367,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     }
 
     private void showEmpty(String title) {
+        tvResultCount.setVisibility(View.GONE);
         layoutEmpty.setVisibility(View.VISIBLE);
         rvResults.setVisibility(View.GONE);
         tvEmptyTitle.setText(title);
@@ -402,25 +419,33 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         }
         cgHistory.setVisibility(View.VISIBLE);
 
-        TextView label = new TextView(this);
-        label.setText("最近：");
-        label.setTextSize(13);
-        label.setTextColor(getThemeColor(android.R.attr.textColorSecondary));
-        label.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        ChipGroup.LayoutParams lp = new ChipGroup.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cgHistory.addView(label, lp);
-
         List<String> reversed = new ArrayList<>(searchHistory);
         java.util.Collections.reverse(reversed);
-        for (String q : reversed) {
-            Chip chip = new Chip(this);
+        for (int i = 0; i < reversed.size(); i++) {
+            String q = reversed.get(i);
+            Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
             chip.setText(q);
             chip.setClickable(true);
             chip.setCheckable(false);
+            chip.setChipIconResource(android.R.drawable.ic_menu_recent_history);
+            chip.setCloseIconVisible(true);
+            final int idx = i;
             chip.setOnClickListener(v -> {
                 etSearch.setText(q);
                 doSearch();
+            });
+            chip.setOnCloseIconClickListener(v -> {
+                // 从历史中移除该项
+                List<String> list = new ArrayList<>(searchHistory);
+                list.remove(q);
+                searchHistory.clear();
+                searchHistory.addAll(list);
+                org.json.JSONArray arr = new org.json.JSONArray();
+                for (int j = list.size() - 1; j >= 0; j--) {
+                    arr.put(list.get(j));
+                }
+                App.get().settingsStore.putString("etp_search_history", arr.toString());
+                refreshHistoryChips();
             });
             cgHistory.addView(chip);
         }
@@ -532,7 +557,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         tv.setPadding(dp(16), dp(16), dp(16), dp(8));
         tv.setTextIsSelectable(true);
 
-        new AlertDialog.Builder(this)
+        new MaterialAlertDialogBuilder(this)
                 .setTitle(r.name)
                 .setIcon(r.isFolder ? android.R.drawable.ic_dialog_info
                         : android.R.drawable.ic_dialog_info)

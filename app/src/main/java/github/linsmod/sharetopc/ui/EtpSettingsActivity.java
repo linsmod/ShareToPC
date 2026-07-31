@@ -4,8 +4,6 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.AdapterView;
-import android.widget.ArrayAdapter;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.Toast;
@@ -26,11 +24,12 @@ import java.util.Map;
 
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
+import github.linsmod.sharetopc.data.SettingsStore;
 
 /**
- * 路径筛选预设页：勾选常用路径/磁盘 + 自定义添加路径。
+ * ETP 设置页：路径筛选、端口管理、匹配/排序选项。
  */
-public class PathPresetActivity extends AppCompatActivity {
+public class EtpSettingsActivity extends AppCompatActivity {
 
     private static final String PREF_KEY = "etp_path_presets";
 
@@ -70,7 +69,7 @@ public class PathPresetActivity extends AppCompatActivity {
 
     private PathPresets presets;
 
-    // 常用路径
+    // 搜索位置
     private MaterialCheckBox cbDesktop, cbDocuments, cbDownloads, cbVideos, cbPictures, cbMusic;
     // 磁盘
     private MaterialCheckBox cbDriveC, cbDriveD, cbDriveE, cbDriveF;
@@ -78,6 +77,9 @@ public class PathPresetActivity extends AppCompatActivity {
     private TextInputEditText etCustomPath;
     private View btnAdd;
     private LinearLayout layoutCustomPaths;
+
+    // ETP 端口
+    private TextInputEditText etEtpPort;
 
     // 匹配选项
     private MaterialSwitch swMatchCase, swWholeWord, swMatchPath, swRegex;
@@ -98,13 +100,13 @@ public class PathPresetActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_path_preset);
+        setContentView(R.layout.activity_etp_settings);
 
         // Toolbar
-        androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbarPathPreset);
+        androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbarEtpSettings);
         toolbar.setNavigationOnClickListener(v -> finish());
 
-        // 常用路径
+        // 搜索位置
         cbDesktop = findViewById(R.id.cbDesktop);
         cbDocuments = findViewById(R.id.cbDocuments);
         cbDownloads = findViewById(R.id.cbDownloads);
@@ -124,6 +126,9 @@ public class PathPresetActivity extends AppCompatActivity {
         layoutCustomPaths = findViewById(R.id.layoutCustomPaths);
 
         btnAdd.setOnClickListener(v -> addCustomPath());
+
+        // ETP 端口
+        etEtpPort = findViewById(R.id.etEtpPort);
 
         // 匹配选项
         swMatchCase = findViewById(R.id.swMatchCase);
@@ -167,8 +172,20 @@ public class PathPresetActivity extends AppCompatActivity {
     }
 
     private void save() {
+        // 保存路径预设
         String json = gson.toJson(presets);
         App.get().settingsStore.putString(PREF_KEY, json);
+
+        // 保存 ETP 端口
+        String portStr = etEtpPort.getText().toString().trim();
+        int port;
+        try {
+            port = portStr.isEmpty() ? SettingsStore.DEFAULT_ETP_PORT : Integer.parseInt(portStr);
+            if (port <= 0 || port > 65535) port = SettingsStore.DEFAULT_ETP_PORT;
+        } catch (NumberFormatException e) {
+            port = SettingsStore.DEFAULT_ETP_PORT;
+        }
+        App.get().settingsStore.putString(SettingsStore.KEY_ETP_PORT, String.valueOf(port));
     }
 
     // ---- UI ----
@@ -187,6 +204,10 @@ public class PathPresetActivity extends AppCompatActivity {
         cbDriveF.setChecked(presets.drives.get("F:"));
 
         rebuildCustomPaths();
+
+        // ETP 端口
+        int port = App.get().settingsStore.getEtpPort();
+        etEtpPort.setText(String.valueOf(port));
 
         // 匹配选项
         swMatchCase.setChecked(presets.matchCase != 0);

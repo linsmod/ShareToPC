@@ -5,14 +5,14 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    tools:context=".ui.PathPresetActivity">
+    tools:context=".ui.EtpSettingsActivity">
 
     <com.google.android.material.appbar.MaterialToolbar
-        android:id="@+id/toolbarPathPreset"
+        android:id="@+id/toolbarEtpSettings"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:navigationIcon="?attr/homeAsUpIndicator"
-        app:title="@string/path_preset_title" />
+        app:title="@string/etp_settings_title" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -25,7 +25,28 @@
             android:orientation="vertical"
             android:padding="12dp">
 
-            <!-- 常用路径 -->
+            <!-- ETP 端口 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/etp_settings_port_section" />
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/etp_settings_port_hint"
+                app:counterEnabled="true"
+                app:counterMaxLength="5">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/etEtpPort"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:singleLine="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- 搜索位置 -->
             <TextView
                 style="@style/PathPresetSectionHeader"
                 android:text="@string/path_preset_common" />

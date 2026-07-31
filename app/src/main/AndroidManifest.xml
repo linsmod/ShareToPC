@@ -59,7 +59,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".ui.PathPresetActivity"
+            android:name=".ui.EtpSettingsActivity"
             android:exported="false" />
 
         <activity

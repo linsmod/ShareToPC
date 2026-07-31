@@ -3,8 +3,10 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
     android:orientation="vertical"
-    android:padding="10dp">
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -26,6 +28,7 @@
             android:layout_weight="1"
             android:layout_marginStart="8dp"
             android:textSize="15sp"
+            android:textColor="?android:attr/textColorPrimary"
             android:ellipsize="middle"
             android:singleLine="true"
             tools:text="document.pdf" />

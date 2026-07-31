@@ -130,6 +130,8 @@
     <string name="etp_search_error">搜索出错: %1$s</string>
     <string name="pref_etp_search_title">远程文件搜索</string>
     <string name="pref_etp_search_summary">连接电脑 Everything ETP 服务器搜索文件</string>
+    <string name="pref_etp_port_title">ETP 端口号</string>
+    <string name="pref_etp_port_summary">Everything ETP/FTP 服务器端口，默认 21</string>
 
     <!-- ETP v2 新增 -->
     <string name="etp_select_device">选择设备</string>
@@ -155,7 +157,7 @@
 
     <!-- 路径预设 -->
     <string name="path_preset_title">筛选路径</string>
-    <string name="path_preset_common">常用路径</string>
+    <string name="path_preset_common">搜索位置</string>
     <string name="path_preset_desktop">桌面</string>
     <string name="path_preset_documents">文档</string>
     <string name="path_preset_downloads">下载</string>
@@ -172,7 +174,12 @@
     <string name="path_preset_add">添加</string>
     <string name="path_preset_empty_hint">请输入路径</string>
     <string name="path_preset_duplicate">路径已存在</string>
-    <string name="path_preset_fab">筛选路径</string>
+    <string name="path_preset_fab">ETP 设置</string>
+
+    <!-- ETP 设置 -->
+    <string name="etp_settings_title">ETP 设置</string>
+    <string name="etp_settings_port_section">ETP 连接端口</string>
+    <string name="etp_settings_port_hint">Everything ETP 端口（默认 21）</string>
 
     <!-- 路径预设 - 查询参数 -->
     <string name="path_preset_match_options">匹配选项</string>
