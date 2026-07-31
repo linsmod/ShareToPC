@@ -145,6 +145,12 @@
     <string name="etp_tap_to_connect">点击设备连接</string>
     <string name="etp_empty_title">请输入关键字搜索</string>
     <string name="etp_copied">已复制: %1$s</string>
+    <string name="etp_query_params_title">查询参数</string>
+    <string name="etp_query_sent">实际查询</string>
+    <string name="etp_none">无</string>
+    <string name="etp_limit_value">%1$d 条</string>
+    <string name="etp_limit_unlimited">不限</string>
+    <string name="etp_sort_default">默认</string>
     <string name="etp_empty_not_connected">未连接设备</string>
     <string name="etp_empty_not_connected_hint">请先连接设备，即可开始搜索文件</string>
     <string name="etp_sheet_title">选择设备</string>

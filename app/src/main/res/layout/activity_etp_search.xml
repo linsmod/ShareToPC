@@ -112,9 +112,8 @@
                     android:layout_height="0dp"
                     android:layout_weight="1" />
 
-                <com.google.android.material.button.MaterialButton
+                <github.linsmod.sharetopc.ui.TextButton
                     android:id="@+id/tvClearHistory"
-                    style="@style/Widget.ShareToPC.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/etp_clear_history" />
@@ -274,41 +273,87 @@
             android:visibility="gone"
             tools:visibility="visible" />
 
-        <!-- 空结果时显示的查询位置 -->
-        <LinearLayout
-            android:id="@+id/layoutQueryPaths"
+        <!-- 空结果时显示的查询位置 / 查询参数（可滚动） -->
+        <ScrollView
+            android:id="@+id/layoutEmptyScroll"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:fillViewport="true"
+            android:scrollbarStyle="outsideOverlay"
             android:visibility="gone"
             tools:visibility="visible">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="16dp"
-                android:paddingTop="8dp">
+                android:orientation="vertical">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:id="@+id/layoutQueryParams"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="查询了以下位置"
-                    android:textAppearance="?attr/textAppearanceTitleSmall" />
-            </LinearLayout>
+                    android:orientation="vertical">
 
-            <LinearLayout
-                android:id="@+id/layoutPathCheckboxes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="16dp"
-                android:paddingBottom="8dp" />
-        </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingTop="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/etp_query_params_title"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layoutQueryParamRows"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp"
+                        android:paddingBottom="8dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/layoutQueryPaths"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="16dp"
+                        android:paddingTop="8dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="查询了以下位置"
+                            android:textAppearance="?attr/textAppearanceTitleSmall" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/layoutPathCheckboxes"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:paddingHorizontal="16dp"
+                        android:paddingBottom="8dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </ScrollView>
 
         <!-- 结果区域（占满剩余空间） -->
         <FrameLayout
+            android:id="@+id/layoutResultsFrame"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">

@@ -15,7 +15,6 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.textfield.TextInputEditText;
@@ -70,15 +69,15 @@ public class EtpSettingsActivity extends AppCompatActivity {
         Map<String, Integer> sortFields = new LinkedHashMap<>();
 
         int maxResults;
-        // Search Syntax for paths: (pathA | pathB | pathC)
+        // Search Syntax using paths: pathA | pathB | pathC {kw}
         static PathPresets defaults() {
             PathPresets p = new PathPresets();
-            p.paths.add(new PathEntry("common", "桌面", "regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+(?:\\[^\\]+)?)$"));
-            p.paths.add(new PathEntry("common", "文档", "regex:[A-Z]:\\Users\\([^\\]+)\\Documents\\([^\\]+(?:\\[^\\]+)?)$"));
-            p.paths.add(new PathEntry("common", "下载", "regex:[A-Z]:\\Users\\([^\\]+)\\Downloads\\([^\\]+(?:\\[^\\]+)?)$"));
-            p.paths.add(new PathEntry("common", "视频", "regex:[A-Z]:\\Users\\([^\\]+)\\Videos\\([^\\]+(?:\\[^\\]+)?)$"));
-            p.paths.add(new PathEntry("common", "图片", "regex:[A-Z]:\\Users\\([^\\]+)\\Pictures\\([^\\]+(?:\\[^\\]+)?)$"));
-            p.paths.add(new PathEntry("common", "音乐", "regex:[A-Z]:\\Users\\([^\\]+)\\Videos\\([^\\]+(?:\\[^\\]+)?)$"));
+            p.paths.add(new PathEntry("common", "桌面", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Desktop\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "文档", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Documents\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "下载", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Downloads\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "视频", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Videos\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "图片", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Pictures\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "音乐", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Musics\\\\([^\\\\]+)"));
             p.paths.add(new PathEntry("common", "Program Files", "path:regex:[A-Z]:\\\\Program\\sFiles",false));
             p.paths.add(new PathEntry("common", "Program Files (x86)", "path:regex:[A-Z]:\\\\Program\\sFiles\\s\\(x86\\)",false));
             for (char c = 'A'; c <= 'Z'; c++) {
@@ -312,8 +311,7 @@ public class EtpSettingsActivity extends AppCompatActivity {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         header.addView(title);
 
-        MaterialButton restore = new MaterialButton(this, null, 0,
-                R.style.Widget_ShareToPC_TextButton);
+        TextButton restore = new TextButton(this);
         restore.setText(R.string.path_preset_restore_defaults);
         TypedValue tv = new TypedValue();
         getTheme().resolveAttribute(android.R.attr.colorPrimary, tv, true);

@@ -83,6 +83,10 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private TextView tvSearchQuery;
     private View layoutQueryPaths;
     private LinearLayout layoutPathCheckboxes;
+    private View layoutQueryParams;
+    private LinearLayout layoutQueryParamRows;
+    private View layoutEmptyScroll;
+    private View layoutResultsFrame;
 
     private boolean showingResults;
 
@@ -210,6 +214,10 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         dividerResult = findViewById(R.id.dividerResult);
         layoutQueryPaths = findViewById(R.id.layoutQueryPaths);
         layoutPathCheckboxes = findViewById(R.id.layoutPathCheckboxes);
+        layoutQueryParams = findViewById(R.id.layoutQueryParams);
+        layoutQueryParamRows = findViewById(R.id.layoutQueryParamRows);
+        layoutEmptyScroll = findViewById(R.id.layoutEmptyScroll);
+        layoutResultsFrame = findViewById(R.id.layoutResultsFrame);
 
         // 结果排序视图
         layoutResultSort = findViewById(R.id.layoutResultSort);
@@ -516,6 +524,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         layoutHistory.setVisibility(View.GONE);
         layoutCommonPaths.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.GONE);
+        layoutEmptyScroll.setVisibility(View.GONE);
+        layoutResultsFrame.setVisibility(View.GONE);
     }
 
     private void renderReady() {
@@ -529,6 +539,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         dividerResult.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.GONE);
+        layoutEmptyScroll.setVisibility(View.GONE);
+        layoutResultsFrame.setVisibility(View.GONE);
         etSearch.requestFocus();
     }
 
@@ -541,7 +553,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         rvResults.setVisibility(View.GONE);
         layoutResultHeader.setVisibility(View.VISIBLE);
         dividerResult.setVisibility(View.VISIBLE);
-        layoutQueryPaths.setVisibility(View.GONE);
+        layoutEmptyScroll.setVisibility(View.GONE);
+        layoutResultsFrame.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.VISIBLE);
         tvResultCount.setVisibility(View.VISIBLE);
         tvResultCount.setText(getString(R.string.etp_searching));
@@ -557,7 +570,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         rvResults.setVisibility(View.VISIBLE);
         layoutResultHeader.setVisibility(View.VISIBLE);
         dividerResult.setVisibility(View.VISIBLE);
-        layoutQueryPaths.setVisibility(View.GONE);
+        layoutEmptyScroll.setVisibility(View.GONE);
+        layoutResultsFrame.setVisibility(View.VISIBLE);
         layoutResultSort.setVisibility(View.VISIBLE);
 
         if (r == null) {
@@ -588,16 +602,18 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         rvResults.setVisibility(View.GONE);
         layoutResultHeader.setVisibility(View.VISIBLE);
         dividerResult.setVisibility(View.VISIBLE);
-        layoutResultSort.setVisibility(View.VISIBLE);
+        layoutResultSort.setVisibility(View.GONE);
         tvResultCount.setText(getString(R.string.etp_result_count, 0));
         tvSearchQuery.setVisibility(View.VISIBLE);
         tvSearchQuery.setText(getString(R.string.etp_search_query_label, query));
         resultAdapter.submitList(null);
+        layoutResultsFrame.setVisibility(View.GONE);
 
         // 动态创建路径 CheckBox 列表
         List<EtpSearchViewModel.PathItem> items = viewModel.getAllPathItems();
         layoutPathCheckboxes.removeAllViews();
         layoutQueryPaths.setVisibility(View.VISIBLE);
+        layoutEmptyScroll.setVisibility(View.VISIBLE);
 
         for (EtpSearchViewModel.PathItem item : items) {
             CheckBox cb = new CheckBox(this);
@@ -607,6 +623,82 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
                     viewModel.togglePath(item.key, item.type, isChecked));
             layoutPathCheckboxes.addView(cb);
         }
+
+        renderQueryParams(query);
+    }
+
+    /** 渲染空结果时的"查询参数"小节。 */
+    private void renderQueryParams(String query) {
+        layoutQueryParamRows.removeAllViews();
+        List<String[]> rows = new java.util.ArrayList<>();
+
+        rows.add(new String[]{getString(R.string.etp_query_sent),
+                viewModel.buildPathFilter(query)});
+        rows.add(new String[]{getString(R.string.path_preset_match_options),
+                buildMatchOptionsSummary()});
+        rows.add(new String[]{getString(R.string.path_preset_sort),
+                buildSortSummary()});
+        rows.add(new String[]{getString(R.string.path_preset_limit),
+                presets.maxResults > 0
+                        ? getString(R.string.etp_limit_value, presets.maxResults)
+                        : getString(R.string.etp_limit_unlimited)});
+
+        for (String[] row : rows) {
+            LinearLayout rowView = new LinearLayout(this);
+            rowView.setOrientation(LinearLayout.HORIZONTAL);
+            rowView.setGravity(Gravity.CENTER_VERTICAL);
+            rowView.setPadding(0, dp(2), 0, dp(2));
+
+            TextView label = new TextView(this);
+            label.setText(row[0]);
+            label.setTextColor(getThemeColor(android.R.attr.textColorSecondary));
+            label.setLayoutParams(new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+            TextView value = new TextView(this);
+            value.setText(row[1]);
+            value.setGravity(Gravity.END);
+            value.setTextIsSelectable(true);
+            value.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
+            value.setLayoutParams(new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+            rowView.addView(label);
+            rowView.addView(value);
+            layoutQueryParamRows.addView(rowView);
+        }
+        layoutQueryParams.setVisibility(View.VISIBLE);
+    }
+
+    /** 匹配选项摘要：仅列出开启项，无则显示"无"。 */
+    private String buildMatchOptionsSummary() {
+        List<String> enabled = new java.util.ArrayList<>();
+        if (presets.matchCase != 0) enabled.add(getString(R.string.path_preset_match_case));
+        if (presets.matchWholeWord != 0) enabled.add(getString(R.string.path_preset_match_whole_word));
+        if (presets.matchPath != 0) enabled.add(getString(R.string.path_preset_match_path));
+        if (presets.matchRegex != 0) enabled.add(getString(R.string.path_preset_match_regex));
+        return enabled.isEmpty()
+                ? getString(R.string.etp_none)
+                : android.text.TextUtils.join("、", enabled);
+    }
+
+    /** 排序摘要：字段 + 方向，未选择则显示"默认"。 */
+    private String buildSortSummary() {
+        if (currentSort == null) return getString(R.string.etp_sort_default);
+        String[] labels = getResources().getStringArray(R.array.path_preset_sort_fields);
+        String field = labels[0];
+        // 标签数组顺序：0=默认,1=文件名,2=路径,3=大小,4=扩展名,5=修改日期,6=创建日期
+        String name = currentSort;
+        if ("name".equals(name)) field = labels[1];
+        else if ("path".equals(name)) field = labels[2];
+        else if ("size".equals(name)) field = labels[3];
+        else if ("extension".equals(name)) field = labels[4];
+        else if ("date_modified".equals(name)) field = labels[5];
+        else if ("date_created".equals(name)) field = labels[6];
+        String dir = presets.sortAsc
+                ? getString(R.string.path_preset_sort_asc)
+                : getString(R.string.path_preset_sort_desc);
+        return field + " · " + dir;
     }
 
     private void renderError(String message) {
@@ -622,6 +714,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         layoutHistory.setVisibility(View.GONE);
         layoutCommonPaths.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.GONE);
+        layoutEmptyScroll.setVisibility(View.GONE);
+        layoutResultsFrame.setVisibility(View.GONE);
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 

@@ -212,10 +212,10 @@ public class EtpSearchViewModel extends ViewModel {
         return EtpSettingsActivity.PathPresets.defaults();
     }
 
-    /** 构造 Everything 位置过滤：(pathA | pathB | pathC) {kw} */
-    private String buildPathFilter(String rawQuery) {
+    /** 构造 Everything 位置过滤：pathA | pathB | pathC {kw} */
+    public String buildPathFilter(String rawQuery) {
         EtpSettingsActivity.PathPresets presets = loadPresets();
-        if (presets == null || presets.paths == null) return rawQuery;
+        if (presets.paths == null) return rawQuery;
 
         List<String> paths = new ArrayList<>();
         for (EtpSettingsActivity.PathEntry entry : presets.paths) {
@@ -226,12 +226,12 @@ public class EtpSearchViewModel extends ViewModel {
         }
         if (paths.isEmpty()) return rawQuery;
 
-        StringBuilder sb = new StringBuilder("(");
+        StringBuilder sb = new StringBuilder();
         for (int i = 0; i < paths.size(); i++) {
             if (i > 0) sb.append(" | ");
             sb.append(paths.get(i));
         }
-        sb.append(") ").append(rawQuery);
+        sb.append(" ").append(rawQuery);
         return sb.toString();
     }
 
