@@ -114,7 +114,7 @@
 
                 <Button
                     android:id="@+id/tvClearHistory"
-                    style="@style/Widget.Material3.Button.TextButton"
+                    style="@style/Widget.ShareToPC.TextButton"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/etp_clear_history" />

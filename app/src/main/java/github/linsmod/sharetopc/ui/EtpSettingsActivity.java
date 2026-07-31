@@ -3,6 +3,7 @@ package github.linsmod.sharetopc.ui;
 import android.content.res.TypedArray;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -304,15 +305,18 @@ public class EtpSettingsActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(this, null, 0, R.style.PathPresetSectionHeader);
+        title.setTextAppearance(
+                com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
         title.setText(titleRes);
         title.setLayoutParams(new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         header.addView(title);
 
-        Button restore = new Button(this, null, 0,
-                com.google.android.material.R.style.Widget_Material3_Button_TextButton);
+        Button restore = new Button(this, null, 0, R.style.Widget_ShareToPC_TextButton);
         restore.setText(R.string.path_preset_restore_defaults);
-        restore.setAllCaps(false);
+        TypedValue tv = new TypedValue();
+        getTheme().resolveAttribute(android.R.attr.colorPrimary, tv, true);
+        restore.setTextColor(tv.data);
         restore.setOnClickListener(v -> restoreGroupDefaults(type));
         header.addView(restore);
 
