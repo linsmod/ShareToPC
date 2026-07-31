@@ -351,6 +351,7 @@ public class MainViewModel extends AndroidViewModel {
     }
 
     public void refreshHistory() {
+        deviceJobs = null; // 使缓存失效，下次 computeDeviceLatestJob 重新从 DB 读取
         history = app.jobStore.all();
         refreshTasks();
     }
