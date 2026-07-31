@@ -86,16 +86,15 @@ public class TaskFragment extends Fragment {
         }, transferId -> viewModel.hasPfd(transferId));
         rvTask.setAdapter(taskAdapter);
 
-        // 标题和 FAB 根据是否有筛选条件切换
-        FloatingActionButton fabClearTasks = view.findViewById(R.id.fabClearTasks);
+        // 标题根据是否有筛选条件切换
         if (isFiltered()) {
             tvTaskTitle.setText(filterDeviceName + " 的任务");
-            fabClearTasks.setVisibility(View.GONE);
         } else {
             tvTaskTitle.setText(R.string.task_title);
-            fabClearTasks.setVisibility(View.VISIBLE);
-            fabClearTasks.setOnClickListener(v -> showClearTasksDialog());
         }
+
+        FloatingActionButton fabClearTasks = view.findViewById(R.id.fabClearTasks);
+        fabClearTasks.setOnClickListener(v -> showClearTasksDialog());
 
         viewModel.addTasksChangeListener(tasksListener);
         viewModel.addEntryUpdateListener(entryUpdateListener);
