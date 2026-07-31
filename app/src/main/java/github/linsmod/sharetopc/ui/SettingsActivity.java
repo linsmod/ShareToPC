@@ -101,6 +101,14 @@ public class SettingsActivity extends AppCompatActivity {
                 });
             }
 
+            Preference etpSearch = findPreference("etp_file_search");
+            if (etpSearch != null) {
+                etpSearch.setOnPreferenceClickListener(preference -> {
+                    startActivity(new Intent(requireContext(), EtpSearchActivity.class));
+                    return true;
+                });
+            }
+
             Preference version = findPreference("version");
             if (version != null) {
                 try {

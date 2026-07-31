@@ -55,6 +55,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.EtpSearchActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.LogViewerActivity"
             android:exported="false" />
 

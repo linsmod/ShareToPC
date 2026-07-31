@@ -22,6 +22,8 @@ public class SettingsStore {
     public static final String KEY_SCAN_TIMEOUT = "scan_timeout";
     public static final String KEY_LAST_HOST = "last_device_host";
     public static final String KEY_LAST_PORT = "last_device_port";
+    public static final String KEY_ETP_LAST_HOST = "etp_last_host";
+    public static final String KEY_ETP_LAST_PORT = "etp_last_port";
     public static final int DEFAULT_PORT = 51234;
     public static final int DEFAULT_SCAN_TIMEOUT_SEC = 30;
 
@@ -112,5 +114,33 @@ public class SettingsStore {
             prefs.edit().putString(KEY_DEVICE_ID, id).apply();
         }
         return id;
+    }
+
+    // ---- ETP 搜索服务器连接记录 ----
+
+    public void setLastEtpHost(String host) {
+        prefs.edit().putString(KEY_ETP_LAST_HOST, host != null ? host : "").apply();
+    }
+
+    public String getLastEtpHost() {
+        return prefs.getString(KEY_ETP_LAST_HOST, "");
+    }
+
+    public void setLastEtpPort(int port) {
+        prefs.edit().putInt(KEY_ETP_LAST_PORT, port).apply();
+    }
+
+    public int getLastEtpPort() {
+        return prefs.getInt(KEY_ETP_LAST_PORT, 0);
+    }
+
+    // ---- 通用 Key-Value ----
+
+    public String getString(String key, String defaultValue) {
+        return prefs.getString(key, defaultValue);
+    }
+
+    public void putString(String key, String value) {
+        prefs.edit().putString(key, value).apply();
     }
 }
