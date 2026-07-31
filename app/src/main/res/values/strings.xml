@@ -140,4 +140,11 @@
     <string name="etp_tap_to_connect">点击设备连接</string>
     <string name="etp_empty_title">请输入关键字搜索</string>
     <string name="etp_copied">已复制: %1$s</string>
+    <string name="etp_empty_not_connected">未连接设备</string>
+    <string name="etp_empty_not_connected_hint">请先连接设备，即可开始搜索文件</string>
+    <string name="etp_sheet_title">选择设备</string>
+    <string name="etp_sheet_saved_devices">已配对设备</string>
+    <string name="etp_sheet_manual">手动输入</string>
+    <string name="etp_sheet_no_devices">暂无已配对设备</string>
+    <string name="etp_sheet_connecting_status">连接中…</string>
 </resources>

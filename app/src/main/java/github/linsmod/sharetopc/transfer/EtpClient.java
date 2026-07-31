@@ -74,7 +74,6 @@ public class EtpClient implements Closeable {
     private void readWelcome() throws IOException {
         String line;
         while ((line = reader.readLine()) != null) {
-            LogX.d("ETP< " + line);
             if (line.startsWith("220 ") || line.startsWith("421 ")) {
                 break;
             }
@@ -209,8 +208,6 @@ public class EtpClient implements Closeable {
 
         String line;
         while ((line = reader.readLine()) != null) {
-            LogX.d("ETP< " + line);
-
             // 去除行首可能的空格
             String trimmed = line.stripLeading();
 
@@ -336,7 +333,6 @@ public class EtpClient implements Closeable {
         StringBuilder sb = new StringBuilder();
         String line;
         while ((line = reader.readLine()) != null) {
-            LogX.d("ETP< " + line);
             sb.append(line);
             // 单行响应（nnn 后是空格）或多行最后一行（nnn 后是空格）
             if (line.length() >= 4 && line.charAt(3) == ' ') {

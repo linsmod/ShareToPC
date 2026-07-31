@@ -7,205 +7,50 @@
     android:orientation="vertical"
     tools:context=".ui.EtpSearchActivity">
 
+    <!-- Toolbar: 设备选择芯片放在右侧 -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbarEtpSearch"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:navigationIcon="?attr/homeAsUpIndicator"
-        app:title="@string/etp_search_title" />
-
-    <!-- 设备选择条（始终可见） -->
-    <LinearLayout
-        android:id="@+id/layoutDeviceBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingBottom="4dp">
+        app:title="@string/etp_search_title">
 
         <com.google.android.material.chip.Chip
             android:id="@+id/chipDevice"
-            style="@style/Widget.Material3.Chip.Filter"
-            android:layout_width="0dp"
+            style="@style/Widget.Material3.Chip.Suggestion"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/etp_select_device"
+            android:layout_gravity="end|center_vertical"
+            android:layout_marginEnd="12dp"
             android:checkable="false"
             android:clickable="true"
             android:focusable="true"
-            app:chipIcon="@drawable/ic_plus"
-            app:closeIconVisible="false" />
+            android:text="@string/etp_select_device"
+            tools:text="192.168.1.5" />
+    </com.google.android.material.appbar.MaterialToolbar>
 
-        <TextView
-            android:id="@+id/tvConnectionStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:textSize="12sp"
-            android:textColor="?android:attr/textColorTertiary"
-            tools:text="未连接" />
-    </LinearLayout>
-
-    <!-- 手动连接卡片（设备选择"手动输入"时展开） -->
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/cardManualConnect"
+    <!-- 搜索栏 -->
+    <com.google.android.material.textfield.TextInputLayout
+        android:id="@+id/tilSearch"
+        style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
-        android:layout_marginBottom="4dp"
-        app:cardElevation="0dp"
-        app:strokeWidth="1dp"
-        app:strokeColor="?android:attr/colorOutline"
-        android:visibility="gone"
-        tools:visibility="visible">
+        android:layout_marginTop="8dp"
+        android:hint="@string/etp_search_hint"
+        app:endIconMode="clear_text">
 
-        <LinearLayout
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etSearch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="12dp">
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:singleLine="true" />
+    </com.google.android.material.textfield.TextInputLayout>
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="3"
-                    android:hint="@string/etp_host_hint">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etHost"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="text"
-                        android:singleLine="true" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="8dp"
-                    android:hint="@string/etp_port_hint">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etPort"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="number"
-                        android:singleLine="true"
-                        android:text="21" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <Button
-                    android:id="@+id/btnManualConnect"
-                    style="@style/Widget.Material3.Button"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/etp_connect" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/layoutAuth"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:layout_marginTop="8dp"
-                android:visibility="gone">
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:hint="@string/etp_user_hint">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etUser"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="text"
-                        android:singleLine="true"
-                        android:text="anonymous" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <com.google.android.material.textfield.TextInputLayout
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="8dp"
-                    android:hint="@string/etp_pass_hint">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/etPass"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="textPassword"
-                        android:singleLine="true" />
-                </com.google.android.material.textfield.TextInputLayout>
-
-                <Button
-                    android:id="@+id/btnLogin"
-                    style="@style/Widget.Material3.Button"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:text="@string/etp_login" />
-            </LinearLayout>
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <!-- 搜索栏（始终可见，未连接时可点击触发提示） -->
-    <LinearLayout
-        android:id="@+id/layoutSearch"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp"
-        android:gravity="center_vertical">
-
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/tilSearch"
-            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:hint="@string/etp_search_hint"
-            app:endIconMode="clear_text"
-            app:boxCornerRadiusBottomEnd="0dp"
-            app:boxCornerRadiusTopEnd="0dp">
-
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/etSearch"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:imeOptions="actionSearch"
-                android:inputType="text"
-                android:singleLine="true" />
-        </com.google.android.material.textfield.TextInputLayout>
-
-        <Button
-            android:id="@+id/btnSearch"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:text="@string/etp_search" />
-    </LinearLayout>
-
-    <!-- 最近搜索 -->
+    <!-- 搜索历史 -->
     <com.google.android.material.chip.ChipGroup
         android:id="@+id/cgRecentSearches"
         android:layout_width="match_parent"
@@ -215,17 +60,7 @@
         android:paddingBottom="4dp"
         app:singleLine="false"
         android:visibility="gone"
-        tools:visibility="visible">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:text="最近："
-            android:textSize="13sp"
-            android:textColor="?android:attr/textColorTertiary"
-            android:layout_marginEnd="4dp" />
-    </com.google.android.material.chip.ChipGroup>
+        tools:visibility="visible" />
 
     <!-- 进度条 -->
     <ProgressBar
@@ -236,50 +71,44 @@
         android:indeterminate="true"
         android:visibility="gone" />
 
-    <!-- 结果列表 -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvResults"
+    <!-- 结果区域（占满剩余空间） -->
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:padding="8dp"
-        android:visibility="gone" />
+        android:layout_weight="1">
 
-    <!-- 空状态 -->
-    <LinearLayout
-        android:id="@+id/layoutEmpty"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:visibility="gone"
-        tools:visibility="visible">
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvResults"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:padding="8dp"
+            android:visibility="gone" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="📂"
-            android:textSize="48sp" />
+        <!-- 空状态 -->
+        <LinearLayout
+            android:id="@+id/layoutEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:orientation="vertical"
+            tools:visibility="visible">
 
-        <TextView
-            android:id="@+id/tvEmptyTitle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="@string/etp_empty_title"
-            android:textSize="18sp"
-            android:textColor="?android:attr/textColorPrimary" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="📂"
+                android:textSize="48sp" />
 
-        <TextView
-            android:id="@+id/tvEmptyHint"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/etp_empty_hint"
-            android:textSize="14sp"
-            android:textColor="?android:attr/textColorSecondary" />
-    </LinearLayout>
+            <TextView
+                android:id="@+id/tvEmptyTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/etp_empty_title"
+                android:textSize="18sp"
+                android:textColor="?android:attr/textColorPrimary" />
+        </LinearLayout>
+    </FrameLayout>
 
 </LinearLayout>

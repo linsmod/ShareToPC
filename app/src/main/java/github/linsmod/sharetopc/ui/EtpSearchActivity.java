@@ -2,27 +2,30 @@ package github.linsmod.sharetopc.ui;
 
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.graphics.Typeface;
 import android.os.Bundle;
+
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
-import android.widget.PopupMenu;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.textfield.TextInputEditText;
@@ -42,19 +45,10 @@ import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.transfer.EtpClient;
 
 /**
- * ETP 文件搜索界面（v2 产品设计）。
- * <p>
- * 核心理念：打开即搜。连接是手段，搜索是目的。
- * <ul>
- *   <li>进入页面自动尝试连接上次的设备</li>
- *   <li>设备选择器一键切换，手动输入作为兜底</li>
- *   <li>搜索框始终可见，最近搜索一键复用</li>
- *   <li>点击结果项复制路径</li>
- * </ul>
+ * ETP 文件搜索界面（v3 — 列表为主，连接收进 BottomSheet）。
  */
-public class EtpSearchActivity extends AppCompatActivity {
+public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity {
 
-    // 连接状态
     private enum ConnState { DISCONNECTED, CONNECTING, CONNECTED, LOGGED_IN }
 
     private EtpClient client;
@@ -62,30 +56,32 @@ public class EtpSearchActivity extends AppCompatActivity {
     private String connectedHost;
     private int connectedPort;
 
-    // 设备选择
+    // 工具栏设备芯片
     private Chip chipDevice;
-    private TextView tvConnStatus;
-    private List<DiscoveredDevice> savedDevices = new ArrayList<>();
-
-    // 手动连接卡片
-    private MaterialCardView cardManualConnect;
-    private TextInputEditText etHost, etPort, etUser, etPass;
-    private Button btnManualConnect, btnLogin;
-    private View layoutAuth;
 
     // 搜索
     private TextInputEditText etSearch;
-    private Button btnSearch;
     private ChipGroup cgHistory;
     private ProgressBar progressSearch;
     private RecyclerView rvResults;
     private View layoutEmpty;
-    private TextView tvEmptyTitle, tvEmptyHint;
+    private TextView tvEmptyTitle;
+
+    // 设备列表
+    private List<DiscoveredDevice> savedDevices = new ArrayList<>();
+
+    // BottomSheet
+    private BottomSheetDialog deviceSheet;
 
     private final ResultAdapter resultAdapter = new ResultAdapter();
     private final Handler handler = new Handler(Looper.getMainLooper());
-
-    // 搜索历史（最多 10 条）
+    private String debounceQuery = "";
+    private final Runnable debounceSearch = new Runnable() {
+        @Override
+        public void run() {
+            doSearch();
+        }
+    };
     private final Set<String> searchHistory = new LinkedHashSet<>();
 
     @Override
@@ -94,122 +90,72 @@ public class EtpSearchActivity extends AppCompatActivity {
         setContentView(R.layout.activity_etp_search);
 
         // Toolbar
-        findViewById(R.id.toolbarEtpSearch).setOnClickListener(v -> finish());
+        androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbarEtpSearch);
+        toolbar.setNavigationOnClickListener(v -> finish());
 
-        // ---- 设备选择条 ----
+        // 设备芯片
         chipDevice = findViewById(R.id.chipDevice);
-        tvConnStatus = findViewById(R.id.tvConnectionStatus);
-        chipDevice.setOnClickListener(v -> showDeviceMenu());
+        chipDevice.setOnClickListener(v -> showDeviceSheet());
 
-        // ---- 手动连接卡片 ----
-        cardManualConnect = findViewById(R.id.cardManualConnect);
-        etHost = findViewById(R.id.etHost);
-        etPort = findViewById(R.id.etPort);
-        btnManualConnect = findViewById(R.id.btnManualConnect);
-        layoutAuth = findViewById(R.id.layoutAuth);
-        etUser = findViewById(R.id.etUser);
-        etPass = findViewById(R.id.etPass);
-        btnLogin = findViewById(R.id.btnLogin);
-
-        btnManualConnect.setOnClickListener(v -> doManualConnect());
-        btnLogin.setOnClickListener(v -> doManualLogin());
-
-        // 端口键盘回车 → 连接
-        etPort.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                doManualConnect();
-                return true;
-            }
-            return false;
-        });
-        etPass.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                doManualLogin();
-                return true;
-            }
-            return false;
-        });
-
-        // ---- 搜索栏 ----
+        // 搜索栏
         etSearch = findViewById(R.id.etSearch);
-        btnSearch = findViewById(R.id.btnSearch);
         cgHistory = findViewById(R.id.cgRecentSearches);
         progressSearch = findViewById(R.id.progressSearch);
         rvResults = findViewById(R.id.rvResults);
         layoutEmpty = findViewById(R.id.layoutEmpty);
         tvEmptyTitle = findViewById(R.id.tvEmptyTitle);
-        tvEmptyHint = findViewById(R.id.tvEmptyHint);
 
         rvResults.setLayoutManager(new LinearLayoutManager(this));
         rvResults.addItemDecoration(new DividerItemDecoration(this, DividerItemDecoration.VERTICAL));
         rvResults.setAdapter(resultAdapter);
 
-        btnSearch.setOnClickListener(v -> doSearch());
-        etSearch.setOnEditorActionListener((v, actionId, event) -> {
-            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
-                doSearch();
-                return true;
+        // 输入防抖搜索（300ms）
+        etSearch.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                handler.removeCallbacks(debounceSearch);
+                String query = s.toString().trim();
+                if (query.isEmpty()) {
+                    resultAdapter.setResults(new ArrayList<>());
+                    showEmpty(getString(R.string.etp_empty_title));
+                    return;
+                }
+                debounceQuery = query;
+                handler.postDelayed(debounceSearch, 300);
             }
-            return false;
         });
 
-        // ---- 初始化 ----
+        // 初始化
         loadSearchHistory();
         loadDevices();
-        applyDisconnectedState();
+        applyDisconnectedUI();
         autoConnect();
     }
 
-    // ==================== 设备选择 ====================
+    // ==================== 设备 & 连接 ====================
 
     private void loadDevices() {
         savedDevices = App.get().deviceStore.loadAll();
     }
 
-    private void showDeviceMenu() {
-        PopupMenu popup = new PopupMenu(this, chipDevice);
-        int idx = 0;
-
-        // 已存储的设备
-        for (DiscoveredDevice d : savedDevices) {
-            String label = d.displayName() + "  (" + d.host + ")";
-            popup.getMenu().add(0, idx, idx, label);
-            idx++;
+    private void autoConnect() {
+        String lastHost = App.get().settingsStore.getLastEtpHost();
+        int lastPort = App.get().settingsStore.getLastEtpPort();
+        if (!lastHost.isEmpty() && lastPort > 0) {
+            connectToDevice(lastHost, lastPort);
         }
-
-        // 分隔线 + 手动输入
-        if (idx > 0) {
-            popup.getMenu().add(0, idx, idx, "──────────────").setEnabled(false);
-            idx++;
-        }
-        popup.getMenu().add(0, idx, idx, R.string.etp_manual_input);
-        final int manualIdx = idx;
-
-        popup.setOnMenuItemClickListener(item -> {
-            int id = item.getItemId();
-            if (id == manualIdx) {
-                showManualConnect();
-            } else if (id < savedDevices.size()) {
-                DiscoveredDevice d = savedDevices.get(id);
-                connectToDevice(d.host, 21);
-            }
-            return true;
-        });
-        popup.show();
     }
 
     private void connectToDevice(String host, int port) {
-        // 隐藏手动卡片
-        cardManualConnect.setVisibility(View.GONE);
-
         EtpClient old = client;
         client = new EtpClient(host, port);
-        if (old != null) old.close();
 
         setConnState(ConnState.CONNECTING);
-        updateDeviceChip(host, port);
 
         App.get().ioExecutor.execute(() -> {
+            if (old != null) old.close();
             try {
                 client.connect();
                 App.get().settingsStore.setLastEtpHost(host);
@@ -225,149 +171,266 @@ public class EtpSearchActivity extends AppCompatActivity {
                     }
                 } catch (IOException ignored) {}
 
-                connectedHost = host;
-                connectedPort = port;
-                handler.post(() -> setConnState(ConnState.CONNECTED));
-
-            } catch (IOException e) {
-                handler.post(() -> {
-                    setConnState(ConnState.DISCONNECTED);
-                    updateDeviceChip(null, 0);
-                    Toast.makeText(this, getString(R.string.etp_connect_failed, e.getMessage()),
-                            Toast.LENGTH_SHORT).show();
-                });
-            }
-        });
-    }
-
-    private void showManualConnect() {
-        cardManualConnect.setVisibility(View.VISIBLE);
-        layoutAuth.setVisibility(View.GONE);
-        String last = App.get().settingsStore.getLastEtpHost();
-        int lp = App.get().settingsStore.getLastEtpPort();
-        if (!last.isEmpty()) etHost.setText(last);
-        if (lp > 0) etPort.setText(String.valueOf(lp));
-        updateDeviceChip(null, 0);
-    }
-
-    private void doManualConnect() {
-        String host = etHost.getText() != null ? etHost.getText().toString().trim() : "";
-        int port;
-        try {
-            port = Integer.parseInt(etPort.getText() != null ? etPort.getText().toString().trim() : "21");
-        } catch (NumberFormatException e) {
-            port = 21;
-        }
-        if (host.isEmpty()) {
-            Toast.makeText(this, R.string.etp_host_required, Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        btnManualConnect.setEnabled(false);
-        EtpClient old = client;
-        client = new EtpClient(host, port);
-        if (old != null) old.close();
-
-        setConnState(ConnState.CONNECTING);
-        updateDeviceChip(host, port);
-
-        App.get().ioExecutor.execute(() -> {
-            try {
-                client.connect();
-                App.get().settingsStore.setLastEtpHost(host);
-                App.get().settingsStore.setLastEtpPort(port);
-
-                // 自动匿名登录
-                try {
-                    if (client.login("anonymous", "")) {
-                        connectedHost = host;
-                        connectedPort = port;
-                        handler.post(() -> {
-                            cardManualConnect.setVisibility(View.GONE);
-                            setConnState(ConnState.LOGGED_IN);
-                        });
-                        return;
-                    }
-                } catch (IOException ignored) {}
-
-                // 匿名失败，显示认证栏
+                // 匿名失败，需要输入凭证
                 connectedHost = host;
                 connectedPort = port;
                 handler.post(() -> {
-                    btnManualConnect.setEnabled(true);
-                    layoutAuth.setVisibility(View.VISIBLE);
                     setConnState(ConnState.CONNECTED);
+                    showAuthInSheet(host);
                 });
 
             } catch (IOException e) {
                 handler.post(() -> {
-                    btnManualConnect.setEnabled(true);
                     setConnState(ConnState.DISCONNECTED);
-                    updateDeviceChip(null, 0);
-                    Toast.makeText(this, getString(R.string.etp_connect_failed, e.getMessage()),
+                    Toast.makeText(this,
+                            getString(R.string.etp_connect_failed, e.getMessage()),
                             Toast.LENGTH_SHORT).show();
                 });
             }
         });
     }
 
-    private void doManualLogin() {
-        if (client == null || !client.isConnected()) {
-            Toast.makeText(this, R.string.etp_not_connected, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String inputUser = etUser.getText() != null ? etUser.getText().toString().trim() : "";
-        final String user = inputUser.isEmpty() ? "anonymous" : inputUser;
-        final String pass = etPass.getText() != null ? etPass.getText().toString() : "";
+    private void doLogin(String user, String pass) {
+        if (client == null || !client.isConnected()) return;
 
-        btnLogin.setEnabled(false);
         App.get().ioExecutor.execute(() -> {
             try {
                 boolean ok = client.login(user, pass);
                 handler.post(() -> {
-                    btnLogin.setEnabled(true);
                     if (ok) {
-                        cardManualConnect.setVisibility(View.GONE);
+                        dismissDeviceSheet();
                         setConnState(ConnState.LOGGED_IN);
-                        Toast.makeText(this, getString(R.string.etp_login_ok, user), Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this,
+                                getString(R.string.etp_login_ok, user),
+                                Toast.LENGTH_SHORT).show();
                     } else {
-                        Toast.makeText(this, R.string.etp_login_failed, Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this,
+                                R.string.etp_login_failed, Toast.LENGTH_SHORT).show();
                     }
                 });
             } catch (IOException e) {
-                handler.post(() -> {
-                    btnLogin.setEnabled(true);
-                    Toast.makeText(this, getString(R.string.etp_login_error, e.getMessage()),
-                            Toast.LENGTH_SHORT).show();
-                });
+                handler.post(() -> Toast.makeText(this,
+                        getString(R.string.etp_login_error, e.getMessage()),
+                        Toast.LENGTH_SHORT).show());
             }
         });
     }
 
-    // ==================== 自动连接 ====================
+    // ==================== BottomSheet ====================
 
-    private void autoConnect() {
+    private void showDeviceSheet() {
+        deviceSheet = new BottomSheetDialog(this);
+        View sheet = LayoutInflater.from(this)
+                .inflate(R.layout.bottom_sheet_connect, null);
+        deviceSheet.setContentView(sheet);
+
+        // 状态文本
+        TextView tvStatus = sheet.findViewById(R.id.tvSheetStatus);
+
+        // 设备列表
+        LinearLayout layoutDevices = sheet.findViewById(R.id.layoutDeviceList);
+        populateDeviceList(layoutDevices);
+
+        // 手动输入区域
+        View tvManualToggle = sheet.findViewById(R.id.tvManualToggle);
+        LinearLayout layoutManual = sheet.findViewById(R.id.layoutManualInput);
+        TextInputEditText etHost = sheet.findViewById(R.id.etSheetHost);
+        TextInputEditText etPort = sheet.findViewById(R.id.etSheetPort);
+        Button btnConnect = sheet.findViewById(R.id.btnSheetConnect);
+        LinearLayout layoutAuth = sheet.findViewById(R.id.layoutSheetAuth);
+        TextInputEditText etUser = sheet.findViewById(R.id.etSheetUser);
+        TextInputEditText etPass = sheet.findViewById(R.id.etSheetPass);
+        Button btnLogin = sheet.findViewById(R.id.btnSheetLogin);
+
+        // 预填上次的 host/port
         String lastHost = App.get().settingsStore.getLastEtpHost();
         int lastPort = App.get().settingsStore.getLastEtpPort();
-        if (!lastHost.isEmpty() && lastPort > 0) {
-            // 填入输入框
-            if (etHost.getText() != null && etHost.getText().toString().trim().isEmpty()) {
-                etHost.setText(lastHost);
+        if (!lastHost.isEmpty()) etHost.setText(lastHost);
+        if (lastPort > 0) etPort.setText(String.valueOf(lastPort));
+
+        tvManualToggle.setOnClickListener(v -> {
+            boolean show = layoutManual.getVisibility() != View.VISIBLE;
+            layoutManual.setVisibility(show ? View.VISIBLE : View.GONE);
+        });
+
+        btnConnect.setOnClickListener(v -> {
+            final String host = etHost.getText() != null ? etHost.getText().toString().trim() : "";
+            final int port = parsePort(etPort.getText());
+            if (host.isEmpty()) {
+                Toast.makeText(this, R.string.etp_host_required, Toast.LENGTH_SHORT).show();
+                return;
             }
-            if (etPort.getText() != null && etPort.getText().toString().trim().isEmpty()) {
-                etPort.setText(String.valueOf(lastPort));
+
+            btnConnect.setEnabled(false);
+            layoutAuth.setVisibility(View.GONE);
+            tvStatus.setVisibility(View.VISIBLE);
+            tvStatus.setText(R.string.etp_sheet_connecting_status);
+
+            EtpClient oldCli = client;
+            client = new EtpClient(host, port);
+
+            App.get().ioExecutor.execute(() -> {
+                if (oldCli != null) oldCli.close();
+                try {
+                    client.connect();
+                    App.get().settingsStore.setLastEtpHost(host);
+                    App.get().settingsStore.setLastEtpPort(port);
+
+                    try {
+                        if (client.login("anonymous", "")) {
+                            connectedHost = host;
+                            connectedPort = port;
+                            handler.post(() -> {
+                                dismissDeviceSheet();
+                                setConnState(ConnState.LOGGED_IN);
+                            });
+                            return;
+                        }
+                    } catch (IOException ignored) {}
+
+                    connectedHost = host;
+                    connectedPort = port;
+                    handler.post(() -> {
+                        btnConnect.setEnabled(true);
+                        tvStatus.setVisibility(View.GONE);
+                        layoutAuth.setVisibility(View.VISIBLE);
+                        setConnState(ConnState.CONNECTED);
+                    });
+                } catch (IOException e) {
+                    handler.post(() -> {
+                        btnConnect.setEnabled(true);
+                        tvStatus.setVisibility(View.GONE);
+                        Toast.makeText(this,
+                                getString(R.string.etp_connect_failed, e.getMessage()),
+                                Toast.LENGTH_SHORT).show();
+                    });
+                }
+            });
+        });
+
+        btnLogin.setOnClickListener(v -> {
+            String user = etUser.getText() != null ? etUser.getText().toString().trim() : "";
+            final String u = user.isEmpty() ? "anonymous" : user;
+            final String p = etPass.getText() != null ? etPass.getText().toString() : "";
+
+            btnLogin.setEnabled(false);
+            doLogin(u, p);
+            handler.postDelayed(() -> btnLogin.setEnabled(true), 2000);
+        });
+
+        // 端口回车 → 连接
+        etPort.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                btnConnect.performClick();
+                return true;
             }
-            connectToDevice(lastHost, lastPort);
-        } else if (!savedDevices.isEmpty()) {
-            // 有设备但没上次连接记录 → 展示设备列表，显示手动卡片
-            DiscoveredDevice first = savedDevices.get(0);
-            updateDeviceChip(first.host, 0);
-            tvConnStatus.setText(R.string.etp_tap_to_connect);
-            showManualConnect();
-        } else {
-            // 无设备 → 显示手动输入
-            showManualConnect();
+            return false;
+        });
+
+        deviceSheet.show();
+    }
+
+    /** 连接成功但需要登录时，重新打开 Sheet 展示认证栏 */
+    private void showAuthInSheet(String host) {
+        dismissDeviceSheet();
+        showDeviceSheet();
+
+        // 延迟展开手动输入 + 认证栏
+        handler.postDelayed(() -> {
+            if (deviceSheet != null && deviceSheet.isShowing()) {
+                View sheet = deviceSheet.findViewById(R.id.sheetRoot);
+                if (sheet == null) return;
+                sheet.findViewById(R.id.layoutManualInput).setVisibility(View.VISIBLE);
+                sheet.findViewById(R.id.layoutSheetAuth).setVisibility(View.VISIBLE);
+
+                TextInputEditText etHost = sheet.findViewById(R.id.etSheetHost);
+                if (etHost != null && host != null) etHost.setText(host);
+            }
+        }, 200);
+    }
+
+    private void dismissDeviceSheet() {
+        if (deviceSheet != null && deviceSheet.isShowing()) {
+            deviceSheet.dismiss();
         }
+        deviceSheet = null;
+    }
+
+    private static int parsePort(@Nullable CharSequence text) {
+        try {
+            return Integer.parseInt(text != null ? text.toString().trim() : "21");
+        } catch (NumberFormatException e) {
+            return 21;
+        }
+    }
+
+    private void populateDeviceList(LinearLayout container) {
+        container.removeAllViews();
+
+        if (savedDevices.isEmpty()) {
+            TextView tv = new TextView(this);
+            tv.setText(R.string.etp_sheet_no_devices);
+            tv.setTextSize(13);
+            tv.setTextColor(getThemeColor(android.R.attr.textColorTertiary));
+            tv.setPadding(0, 8, 0, 8);
+            container.addView(tv);
+            return;
+        }
+
+        int padding = dp(12);
+        for (int i = 0; i < savedDevices.size(); i++) {
+            DiscoveredDevice d = savedDevices.get(i);
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(padding, padding, padding, padding);
+            row.setClickable(true);
+            row.setFocusable(true);
+            TypedValue typedValue = new TypedValue();
+            getTheme().resolveAttribute(android.R.attr.selectableItemBackground, typedValue, true);
+            row.setForeground(getDrawable(typedValue.resourceId));
+            row.setBackgroundResource(i == 0 ? android.R.color.transparent : android.R.color.transparent);
+
+            // 分隔线（除第一个外）
+            if (i > 0) {
+                View divider = new View(this);
+                divider.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, 1));
+                divider.setBackgroundColor(getThemeColor(android.R.attr.listDivider));
+                container.addView(divider);
+            }
+
+            TextView tvName = new TextView(this);
+            tvName.setText(d.displayName());
+            tvName.setTextSize(15);
+            tvName.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
+            row.addView(tvName);
+
+            TextView tvHost = new TextView(this);
+            tvHost.setText(d.host);
+            tvHost.setTextSize(12);
+            tvHost.setTextColor(getThemeColor(android.R.attr.textColorSecondary));
+            row.addView(tvHost);
+
+            final String host = d.host;
+            row.setOnClickListener(v -> {
+                dismissDeviceSheet();
+                connectToDevice(host, 21);
+            });
+
+            container.addView(row);
+        }
+    }
+
+    private int dp(int dp) {
+        return (int) (dp * getResources().getDisplayMetrics().density);
+    }
+
+    /** 解析主题属性颜色，兼容亮色/暗色模式。 */
+    private int getThemeColor(int attr) {
+        TypedValue tv = new TypedValue();
+        getTheme().resolveAttribute(attr, tv, true);
+        return getColor(tv.resourceId);
     }
 
     // ==================== 连接状态 UI ====================
@@ -376,67 +439,147 @@ public class EtpSearchActivity extends AppCompatActivity {
         connState = state;
         switch (state) {
             case CONNECTING:
-                tvConnStatus.setText(R.string.etp_connecting);
-                tvConnStatus.setTextColor(getColor(android.R.color.holo_orange_dark));
+                chipDevice.setText(R.string.etp_connecting);
+                chipDevice.setChipIconResource(android.R.drawable.presence_away);
+                chipDevice.setChipIconTintResource(android.R.color.holo_orange_dark);
                 break;
             case CONNECTED:
-                tvConnStatus.setText(getString(R.string.etp_connected_need_login, connectedHost, connectedPort));
-                tvConnStatus.setTextColor(getColor(android.R.color.holo_orange_dark));
+                chipDevice.setText(connectedHost + ":" + connectedPort);
+                // 需要登录时用橙色表示警告
+                chipDevice.setChipIconResource(android.R.drawable.ic_lock_idle_lock);
+                chipDevice.setChipIconTintResource(android.R.color.holo_orange_dark);
                 break;
             case LOGGED_IN:
-                tvConnStatus.setText(getString(R.string.etp_ready, connectedHost));
-                tvConnStatus.setTextColor(getColor(android.R.color.holo_green_dark));
+                chipDevice.setText(connectedHost + ":" + connectedPort);
+                chipDevice.setChipIconResource(android.R.drawable.presence_online);
+                chipDevice.setChipIconTintResource(android.R.color.holo_green_dark);
                 break;
             case DISCONNECTED:
-                tvConnStatus.setText(R.string.etp_disconnected);
-                tvConnStatus.setTextColor(getColor(android.R.color.darker_gray));
+                chipDevice.setText(R.string.etp_select_device);
+                chipDevice.setChipIconResource(android.R.drawable.presence_offline);
+                chipDevice.setChipIconTintResource(android.R.color.darker_gray);
                 break;
         }
     }
 
-    private void updateDeviceChip(String host, int port) {
-        if (host != null && !host.isEmpty()) {
-            chipDevice.setText(host + (port > 0 ? ":" + port : ""));
-        } else {
-            chipDevice.setText(R.string.etp_select_device);
-        }
-    }
-
-    private void applyDisconnectedState() {
+    private void applyDisconnectedUI() {
         setConnState(ConnState.DISCONNECTED);
-        updateDeviceChip(null, 0);
     }
 
     // ==================== 搜索 ====================
 
     private void doSearch() {
-        if (connState != ConnState.LOGGED_IN) {
-            Toast.makeText(this, R.string.etp_not_connected, Toast.LENGTH_SHORT).show();
-            return;
-        }
         String query = etSearch.getText() != null ? etSearch.getText().toString().trim() : "";
-        if (query.isEmpty()) {
-            Toast.makeText(this, R.string.etp_query_required, Toast.LENGTH_SHORT).show();
-            return;
-        }
+        if (query.isEmpty()) return;
 
-        // 保存搜索历史
         addSearchHistory(query);
 
-        int columns = EtpClient.SIZE_COLUMN | EtpClient.PATH_COLUMN | EtpClient.DATE_MODIFIED_COLUMN;
+        if (connState == ConnState.LOGGED_IN) {
+            executeSearch(query);
+            return;
+        }
 
-        btnSearch.setEnabled(false);
+        // 自动连接 → 登录 → 搜索
+        progressSearch.setVisibility(View.VISIBLE);
+
+        if (connState == ConnState.CONNECTED) {
+            tryAutoLoginAndSearch(query);
+        } else {
+            String lastHost = App.get().settingsStore.getLastEtpHost();
+            int lastPort = App.get().settingsStore.getLastEtpPort();
+            if (!lastHost.isEmpty() && lastPort > 0) {
+                connectAndLoginAndSearch(lastHost, lastPort, query);
+            } else if (!savedDevices.isEmpty()) {
+                DiscoveredDevice d = savedDevices.get(0);
+                connectAndLoginAndSearch(d.host, 21, query);
+            } else {
+                progressSearch.setVisibility(View.GONE);
+                Toast.makeText(this, "请先选择设备", Toast.LENGTH_SHORT).show();
+                showDeviceSheet();
+            }
+        }
+    }
+
+    /** 已连接但未登录 → 自动匿名登录后搜索 */
+    private void tryAutoLoginAndSearch(String query) {
+        App.get().ioExecutor.execute(() -> {
+            try {
+                if (client.login("anonymous", "")) {
+                    handler.post(() -> {
+                        setConnState(ConnState.LOGGED_IN);
+                        executeSearch(query);
+                    });
+                } else {
+                    handler.post(() -> {
+                        progressSearch.setVisibility(View.GONE);
+                        showAuthInSheet(connectedHost);
+                    });
+                }
+            } catch (IOException e) {
+                handler.post(() -> {
+                    progressSearch.setVisibility(View.GONE);
+                    setConnState(ConnState.DISCONNECTED);
+                    Toast.makeText(this, "登录失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
+    }
+
+    /** 连接 → 自动登录 → 搜索 */
+    private void connectAndLoginAndSearch(String host, int port, String query) {
+        EtpClient old = client;
+        client = new EtpClient(host, port);
+        setConnState(ConnState.CONNECTING);
+
+        App.get().ioExecutor.execute(() -> {
+            if (old != null) old.close();
+            try {
+                client.connect();
+                App.get().settingsStore.setLastEtpHost(host);
+                App.get().settingsStore.setLastEtpPort(port);
+
+                if (client.login("anonymous", "")) {
+                    connectedHost = host;
+                    connectedPort = port;
+                    handler.post(() -> {
+                        setConnState(ConnState.LOGGED_IN);
+                        executeSearch(query);
+                    });
+                } else {
+                    connectedHost = host;
+                    connectedPort = port;
+                    handler.post(() -> {
+                        progressSearch.setVisibility(View.GONE);
+                        setConnState(ConnState.CONNECTED);
+                        showAuthInSheet(host);
+                    });
+                }
+            } catch (IOException e) {
+                handler.post(() -> {
+                    progressSearch.setVisibility(View.GONE);
+                    setConnState(ConnState.DISCONNECTED);
+                    Toast.makeText(this, "连接失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                });
+            }
+        });
+    }
+
+    /** 已登录状态下执行实际搜索 */
+    private void executeSearch(String query) {
+        int columns = EtpClient.SIZE_COLUMN | EtpClient.PATH_COLUMN
+                | EtpClient.DATE_MODIFIED_COLUMN | EtpClient.DATE_CREATED_COLUMN
+                | EtpClient.ATTRIBUTES_COLUMN;
+
         progressSearch.setVisibility(View.VISIBLE);
 
         App.get().ioExecutor.execute(() -> {
             try {
                 List<EtpClient.EtpSearchResult> results = client.query(query, columns);
                 handler.post(() -> {
-                    btnSearch.setEnabled(true);
                     progressSearch.setVisibility(View.GONE);
                     resultAdapter.setResults(results);
                     if (results.isEmpty()) {
-                        showEmpty(getString(R.string.etp_no_results), "");
+                        showEmpty(getString(R.string.etp_no_results));
                     } else {
                         layoutEmpty.setVisibility(View.GONE);
                         rvResults.setVisibility(View.VISIBLE);
@@ -444,21 +587,20 @@ public class EtpSearchActivity extends AppCompatActivity {
                 });
             } catch (IOException e) {
                 handler.post(() -> {
-                    btnSearch.setEnabled(true);
                     progressSearch.setVisibility(View.GONE);
                     setConnState(ConnState.DISCONNECTED);
-                    Toast.makeText(this, getString(R.string.etp_search_error, e.getMessage()),
+                    Toast.makeText(this,
+                            getString(R.string.etp_search_error, e.getMessage()),
                             Toast.LENGTH_SHORT).show();
                 });
             }
         });
     }
 
-    private void showEmpty(String title, String hint) {
+    private void showEmpty(String title) {
         layoutEmpty.setVisibility(View.VISIBLE);
         rvResults.setVisibility(View.GONE);
         tvEmptyTitle.setText(title);
-        if (!hint.isEmpty()) tvEmptyHint.setText(hint);
     }
 
     // ==================== 搜索历史 ====================
@@ -478,11 +620,9 @@ public class EtpSearchActivity extends AppCompatActivity {
     }
 
     private void addSearchHistory(String query) {
-        // 去重：移除旧的同名项
         searchHistory.remove(query);
         searchHistory.add(query);
 
-        // 保持最多 10 条
         List<String> trimmed = new ArrayList<>(searchHistory);
         if (trimmed.size() > 10) {
             searchHistory.clear();
@@ -491,10 +631,8 @@ public class EtpSearchActivity extends AppCompatActivity {
             }
         }
 
-        // 持久化
         org.json.JSONArray arr = new org.json.JSONArray();
         List<String> list = new ArrayList<>(searchHistory);
-        // 反序输出，最新的在前
         for (int i = list.size() - 1; i >= 0; i--) {
             arr.put(list.get(i));
         }
@@ -512,17 +650,15 @@ public class EtpSearchActivity extends AppCompatActivity {
         }
         cgHistory.setVisibility(View.VISIBLE);
 
-        // 标签
         TextView label = new TextView(this);
         label.setText("最近：");
         label.setTextSize(13);
-        label.setTextColor(getColor(android.R.color.secondary_text_dark));
+        label.setTextColor(getThemeColor(android.R.attr.textColorSecondary));
         label.setGravity(android.view.Gravity.CENTER_VERTICAL);
         ChipGroup.LayoutParams lp = new ChipGroup.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         cgHistory.addView(label, lp);
 
-        // 历史 chips（最新在前）
         List<String> reversed = new ArrayList<>(searchHistory);
         java.util.Collections.reverse(reversed);
         for (String q : reversed) {
@@ -538,7 +674,7 @@ public class EtpSearchActivity extends AppCompatActivity {
         }
     }
 
-    // ==================== 结果项点击：复制路径 ====================
+    // ==================== 结果列表 ====================
 
     private class ResultAdapter extends RecyclerView.Adapter<ResultAdapter.VH> {
 
@@ -575,7 +711,7 @@ public class EtpSearchActivity extends AppCompatActivity {
             }
             holder.tvInfo.setText(info.toString());
 
-            String fullPath = "";
+            String fullPath;
             if (r.path != null && !r.path.isEmpty()) {
                 holder.tvPath.setVisibility(View.VISIBLE);
                 fullPath = r.path + "\\" + r.name;
@@ -585,18 +721,9 @@ public class EtpSearchActivity extends AppCompatActivity {
                 fullPath = r.name;
             }
 
-            // 点击复制完整路径
             final String copyPath = fullPath;
-            holder.itemView.setOnClickListener(v -> {
-                ClipboardManager cm = (ClipboardManager) v.getContext().getSystemService(CLIPBOARD_SERVICE);
-                cm.setPrimaryClip(ClipData.newPlainText("file_path", copyPath));
-                Toast.makeText(v.getContext(), "已复制: " + copyPath, Toast.LENGTH_SHORT).show();
-            });
-
-            holder.itemView.setOnLongClickListener(v -> {
-                // 长按可以扩展：分享路径等
-                return false;
-            });
+            final EtpClient.EtpSearchResult resultRef = r;
+            holder.itemView.setOnClickListener(v -> showFilePropertiesDialog(resultRef));
         }
 
         @Override
@@ -617,14 +744,103 @@ public class EtpSearchActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * 显示文件属性对话框。
+     */
+    private void showFilePropertiesDialog(EtpClient.EtpSearchResult r) {
+        // 构建属性信息
+        StringBuilder body = new StringBuilder();
+
+        // 完整路径
+        body.append("路径：").append(r.fullPath()).append("\n\n");
+
+        // 类型
+        body.append("类型：").append(r.isFolder ? "文件夹" : "文件").append("\n\n");
+
+        // 大小
+        if (r.size >= 0) {
+            body.append("大小：").append(EtpClient.EtpSearchResult.formatSize(r.size));
+            if (r.size >= 1024) {
+                body.append("（").append(String.format("%,d 字节", r.size)).append("）");
+            }
+            body.append("\n\n");
+        }
+
+        // 修改时间
+        if (r.dateModified > 0) {
+            long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateModified);
+            body.append("修改时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    .format(new Date(millis))).append("\n\n");
+        }
+
+        // 创建时间
+        if (r.dateCreated > 0) {
+            long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateCreated);
+            body.append("创建时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                    .format(new Date(millis))).append("\n\n");
+        }
+
+        // 文件属性
+        if (r.attributes >= 0) {
+            body.append("属性：").append(formatFileAttributes(r.attributes));
+        }
+
+        TextView tv = new TextView(this);
+        tv.setText(body.toString());
+        tv.setTextSize(14);
+        tv.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
+        tv.setPadding(dp(16), dp(16), dp(16), dp(8));
+        tv.setTextIsSelectable(true);
+
+        new AlertDialog.Builder(this)
+                .setTitle(r.name)
+                .setIcon(r.isFolder ? android.R.drawable.ic_dialog_info
+                        : android.R.drawable.ic_dialog_info)
+                .setView(tv)
+                .setPositiveButton("复制路径", (d, w) -> {
+                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(ClipData.newPlainText("file_path", r.fullPath()));
+                    Toast.makeText(this, getString(R.string.etp_copied, r.fullPath()),
+                            Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
+    /**
+     * 格式化 Windows 文件属性标志位。
+     */
+    private static String formatFileAttributes(int attrs) {
+        StringBuilder sb = new StringBuilder();
+        if ((attrs & 0x01) != 0) sb.append("只读 ");
+        if ((attrs & 0x02) != 0) sb.append("隐藏 ");
+        if ((attrs & 0x04) != 0) sb.append("系统 ");
+        if ((attrs & 0x10) != 0) sb.append("目录 ");
+        if ((attrs & 0x20) != 0) sb.append("存档 ");
+        if ((attrs & 0x80) != 0) sb.append("普通 ");
+        if ((attrs & 0x100) != 0) sb.append("临时 ");
+        if ((attrs & 0x200) != 0) sb.append("稀疏 ");
+        if ((attrs & 0x400) != 0) sb.append("重解析点 ");
+        if ((attrs & 0x800) != 0) sb.append("压缩 ");
+        if ((attrs & 0x1000) != 0) sb.append("脱机 ");
+        if ((attrs & 0x2000) != 0) sb.append("未索引 ");
+        if ((attrs & 0x4000) != 0) sb.append("加密 ");
+        if (sb.length() == 0) sb.append("无");
+        return sb.toString().trim();
+    }
+
     // ==================== 生命周期 ====================
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (client != null) {
-            client.close();
-            client = null;
+        dismissDeviceSheet();
+        EtpClient toClose = client;
+        client = null;
+        if (toClose != null) {
+            App.get().ioExecutor.execute(() -> {
+                try { toClose.close(); } catch (Exception ignored) {}
+            });
         }
     }
 }
