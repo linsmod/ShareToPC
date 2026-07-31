@@ -7,7 +7,6 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -16,6 +15,7 @@ import android.widget.Toast;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.textfield.TextInputEditText;
@@ -312,7 +312,8 @@ public class EtpSettingsActivity extends AppCompatActivity {
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         header.addView(title);
 
-        Button restore = new Button(this, null, 0, R.style.Widget_ShareToPC_TextButton);
+        MaterialButton restore = new MaterialButton(this, null, 0,
+                R.style.Widget_ShareToPC_TextButton);
         restore.setText(R.string.path_preset_restore_defaults);
         TypedValue tv = new TypedValue();
         getTheme().resolveAttribute(android.R.attr.colorPrimary, tv, true);
