@@ -155,7 +155,6 @@
     <string name="etp_empty_title">请输入关键字搜索</string>
     <string name="etp_copied">已复制: %1$s</string>
     <string name="etp_query_params_title">查询参数</string>
-    <string name="etp_query_sent">实际查询</string>
     <string name="etp_change_settings">更改设置</string>
     <string name="etp_none">无</string>
     <string name="etp_limit_value">%1$d 条</string>
@@ -211,6 +210,8 @@
     <string name="path_preset_max_results_hint">最大返回条数（0 不限）</string>
     <string name="etp_quick_search_title">快速检索</string>
     <string name="etp_quick_search_hint">每行一个：显示名 (过滤模式)\n例如：Word 文档 (*.doc | *.docx)</string>
+    <string name="etp_exclude_title">结果排除</string>
+    <string name="etp_exclude_hint">每行一个排除表达式，搜索时自动附加 !\n例如：ext:tmp</string>
 
     <string-array name="path_preset_sort_fields">
         <item>默认排序</item>

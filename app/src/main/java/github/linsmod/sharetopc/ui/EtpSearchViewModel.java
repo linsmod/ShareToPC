@@ -284,27 +284,40 @@ public class EtpSearchViewModel extends ViewModel {
         return EtpSettingsActivity.PathPresets.defaults();
     }
 
-    /** 构造 Everything 位置过滤：pathA | pathB | pathC {kw} */
+    /** 构造 Everything 位置过滤：pathA | pathB | pathC {kw}，并附加结果排除（!expr）。 */
     public String buildPathFilter(String rawQuery) {
         EtpSettingsActivity.PathPresets presets = loadPresets();
-        if (presets.paths == null) return rawQuery;
+        String base = rawQuery;
 
-        List<String> paths = new ArrayList<>();
-        for (EtpSettingsActivity.PathEntry entry : presets.paths) {
-            if (entry.checked) {
-                String trimmed = entry.path.trim();
-                if (!trimmed.isEmpty()) paths.add(trimmed);
+        if (presets.paths != null) {
+            List<String> paths = new ArrayList<>();
+            for (EtpSettingsActivity.PathEntry entry : presets.paths) {
+                if (entry.checked) {
+                    String trimmed = entry.path.trim();
+                    if (!trimmed.isEmpty()) paths.add(trimmed);
+                }
+            }
+            if (!paths.isEmpty()) {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < paths.size(); i++) {
+                    if (i > 0) sb.append(" | ");
+                    sb.append(paths.get(i));
+                }
+                sb.append(" ").append(rawQuery);
+                base = sb.toString();
             }
         }
-        if (paths.isEmpty()) return rawQuery;
 
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < paths.size(); i++) {
-            if (i > 0) sb.append(" | ");
-            sb.append(paths.get(i));
+        // 结果排除：query + ' ' + (items.join(' !'))
+        List<String> excludes = EtpSettingsActivity.PathPresets.parseExcludes(presets.excludeText);
+        if (!excludes.isEmpty()) {
+            StringBuilder sb = new StringBuilder(base);
+            for (String ex : excludes) {
+                sb.append(" !").append(ex);
+            }
+            base = sb.toString();
         }
-        sb.append(" ").append(rawQuery);
-        return sb.toString();
+        return base;
     }
 
     /** 获取当前启用的搜索路径标签（用于空结果时展示）。 */

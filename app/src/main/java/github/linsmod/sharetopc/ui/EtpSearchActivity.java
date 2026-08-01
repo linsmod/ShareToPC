@@ -12,7 +12,6 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.style.ImageSpan;
 import android.util.TypedValue;
-import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.HorizontalScrollView;
@@ -37,6 +36,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -81,6 +81,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private TextView tvSearchQuery;
     private View layoutQueryPaths;
     private LinearLayout layoutPathCheckboxes;
+    private MaterialButton btnChangeSettings;
     private View layoutQueryParams;
     private LinearLayout layoutQueryParamRows;
     private View layoutEmptyScroll;
@@ -225,6 +226,9 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         dividerResult = findViewById(R.id.dividerResult);
         layoutQueryPaths = findViewById(R.id.layoutQueryPaths);
         layoutPathCheckboxes = findViewById(R.id.layoutPathCheckboxes);
+        btnChangeSettings = findViewById(R.id.btnChangeSettings);
+        btnChangeSettings.setOnClickListener(v ->
+                settingsLauncher.launch(new Intent(this, EtpSettingsActivity.class)));
         layoutQueryParams = findViewById(R.id.layoutQueryParams);
         layoutQueryParamRows = findViewById(R.id.layoutQueryParamRows);
         layoutEmptyScroll = findViewById(R.id.layoutEmptyScroll);
@@ -671,7 +675,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         renderQueryParams(query);
     }
 
-    /** 渲染空结果时的"查询了以下位置"：仅显示已勾选的路径，分组展示。 */
+    /** 渲染空结果时的"查询了以下位置"：仅显示已勾选的路径，平铺展示。 */
     private void renderQueryPaths() {
         layoutPathCheckboxes.removeAllViews();
         List<EtpSearchViewModel.PathItem> all = viewModel.getAllPathItems();
@@ -681,138 +685,42 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         }
         if (selected.isEmpty()) {
             layoutQueryPaths.setVisibility(View.GONE);
+            btnChangeSettings.setVisibility(View.GONE);
             return;
         }
 
-        // 分组：common / drive / custom_path
-        String[][] groups = {
-                {"common", getString(R.string.path_preset_common)},
-                {"drive", getString(R.string.path_preset_drives)},
-                {"custom_path", getString(R.string.path_preset_custom)},
-        };
-        boolean hasAny = false;
-        for (String[] group : groups) {
-            List<EtpSearchViewModel.PathItem> items = new java.util.ArrayList<>();
-            for (EtpSearchViewModel.PathItem item : selected) {
-                if (group[0].equals(item.type)) items.add(item);
-            }
-            if (items.isEmpty()) continue;
-            hasAny = true;
-
-            // 分组标题 + "更改设置"
-            LinearLayout header = new LinearLayout(this);
-            header.setOrientation(LinearLayout.HORIZONTAL);
-            header.setGravity(Gravity.CENTER_VERTICAL);
-            header.setPadding(0, dp(4), 0, 0);
-
-            TextView title = new TextView(this);
-            title.setText(group[1]);
-            title.setTextAppearance(
-                    com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
-            title.setLayoutParams(new LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            header.addView(title);
-
-            TextButton change = new TextButton(this);
-            change.setText(R.string.etp_change_settings);
-            TypedValue colorTv = new TypedValue();
-            getTheme().resolveAttribute(android.R.attr.colorPrimary, colorTv, true);
-            change.setTextColor(colorTv.data);
-            change.setOnClickListener(v ->
-                    settingsLauncher.launch(new Intent(this, EtpSettingsActivity.class)));
-            header.addView(change);
-
-            layoutPathCheckboxes.addView(header);
-
-            // 已选择的路径
-            for (EtpSearchViewModel.PathItem item : items) {
-                TextView tv = new TextView(this);
-                tv.setText(item.label);
-                tv.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
-                tv.setPadding(0, dp(2), 0, dp(2));
-                tv.setLayoutParams(new LinearLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.WRAP_CONTENT));
-                layoutPathCheckboxes.addView(tv);
-            }
+        // 直接平铺所有已选位置，不按类型分组
+        for (EtpSearchViewModel.PathItem item : selected) {
+            TextView tv = new TextView(this);
+            tv.setText(item.label);
+            tv.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
+            tv.setPadding(0, dp(2), 0, dp(2));
+            tv.setLayoutParams(new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            layoutPathCheckboxes.addView(tv);
         }
 
+        // "更改设置"按钮放在 section 标题行
+        btnChangeSettings.setVisibility(View.VISIBLE);
         layoutQueryPaths.setVisibility(View.VISIBLE);
-        if (!hasAny) layoutQueryPaths.setVisibility(View.GONE);
     }
 
-    /** 渲染空结果时的"查询参数"小节。 */
+    /** 渲染空结果时的"查询参数"小节：仅显示查询语句，直接显示在 section 下方。 */
     private void renderQueryParams(String query) {
         layoutQueryParamRows.removeAllViews();
-        List<String[]> rows = new java.util.ArrayList<>();
 
-        rows.add(new String[]{getString(R.string.etp_query_sent),
-                viewModel.buildPathFilter(query)});
-        rows.add(new String[]{getString(R.string.path_preset_match_options),
-                buildMatchOptionsSummary()});
-        rows.add(new String[]{getString(R.string.path_preset_sort),
-                buildSortSummary()});
-        rows.add(new String[]{getString(R.string.path_preset_limit),
-                presets.maxResults > 0
-                        ? getString(R.string.etp_limit_value, presets.maxResults)
-                        : getString(R.string.etp_limit_unlimited)});
-
-        for (String[] row : rows) {
-            LinearLayout rowView = new LinearLayout(this);
-            rowView.setOrientation(LinearLayout.HORIZONTAL);
-            rowView.setGravity(Gravity.CENTER_VERTICAL);
-            rowView.setPadding(0, dp(2), 0, dp(2));
-
-            TextView label = new TextView(this);
-            label.setText(row[0]);
-            label.setTextColor(getThemeColor(android.R.attr.textColorSecondary));
-            label.setLayoutParams(new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-            TextView value = new TextView(this);
-            value.setText(row[1]);
-            value.setGravity(Gravity.END);
-            value.setTextIsSelectable(true);
-            value.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
-            value.setLayoutParams(new LinearLayout.LayoutParams(
-                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-
-            rowView.addView(label);
-            rowView.addView(value);
-            layoutQueryParamRows.addView(rowView);
-        }
+        TextView tv = new TextView(this);
+        // 直接显示查询语句本身，无"实际查询"前缀
+        tv.setText(viewModel.buildPathFilter(query));
+        tv.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
+        tv.setTextIsSelectable(true);
+        tv.setPadding(0, dp(2), 0, dp(2));
+        tv.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        layoutQueryParamRows.addView(tv);
         layoutQueryParams.setVisibility(View.VISIBLE);
-    }
-
-    /** 匹配选项摘要：仅列出开启项，无则显示"无"。 */
-    private String buildMatchOptionsSummary() {
-        List<String> enabled = new java.util.ArrayList<>();
-        if (presets.matchCase != 0) enabled.add(getString(R.string.path_preset_match_case));
-        if (presets.matchWholeWord != 0) enabled.add(getString(R.string.path_preset_match_whole_word));
-        if (presets.matchPath != 0) enabled.add(getString(R.string.path_preset_match_path));
-        if (presets.matchRegex != 0) enabled.add(getString(R.string.path_preset_match_regex));
-        return enabled.isEmpty()
-                ? getString(R.string.etp_none)
-                : android.text.TextUtils.join("、", enabled);
-    }
-
-    /** 排序摘要：字段 + 方向，未选择则显示"默认"。 */
-    private String buildSortSummary() {
-        if (currentSort == null) return getString(R.string.etp_sort_default);
-        String[] labels = getResources().getStringArray(R.array.path_preset_sort_fields);
-        String field = labels[0];
-        // 标签数组顺序：0=默认,1=文件名,2=路径,3=大小,4=扩展名,5=修改日期,6=创建日期
-        String name = currentSort;
-        if ("name".equals(name)) field = labels[1];
-        else if ("path".equals(name)) field = labels[2];
-        else if ("size".equals(name)) field = labels[3];
-        else if ("extension".equals(name)) field = labels[4];
-        else if ("date_modified".equals(name)) field = labels[5];
-        else if ("date_created".equals(name)) field = labels[6];
-        String dir = presets.sortAsc
-                ? getString(R.string.path_preset_sort_asc)
-                : getString(R.string.path_preset_sort_desc);
-        return field + " · " + dir;
     }
 
     private void renderError(String message) {

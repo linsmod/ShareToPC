@@ -73,15 +73,17 @@ public class EtpSettingsActivity extends AppCompatActivity {
         int maxResults;
         /** 快速检索：每行一个"显示名 (过滤模式)"，如 "Word 文档 (*.doc | *.docx)"。 */
         String quickSearchText;
+        /** 结果排除：每行一个排除表达式，搜索时附加 ! 前缀。 */
+        String excludeText;
         // Search Syntax using paths: pathA | pathB | pathC {kw}
         static PathPresets defaults() {
             PathPresets p = new PathPresets();
             p.paths.add(new PathEntry("common", "桌面", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Desktop\\\\([^\\\\]+)"));
-            p.paths.add(new PathEntry("common", "文档", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Documents\\\\([^\\\\]+)"));
-            p.paths.add(new PathEntry("common", "下载", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Downloads\\\\([^\\\\]+)"));
-            p.paths.add(new PathEntry("common", "视频", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Videos\\\\([^\\\\]+)"));
-            p.paths.add(new PathEntry("common", "图片", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Pictures\\\\([^\\\\]+)"));
-            p.paths.add(new PathEntry("common", "音乐", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Musics\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "文档目录", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Documents\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "下载目录", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Downloads\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "视频目录", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Videos\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "图片目录", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Pictures\\\\([^\\\\]+)"));
+            p.paths.add(new PathEntry("common", "音乐目录", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Musics\\\\([^\\\\]+)"));
             p.paths.add(new PathEntry("common", "Program Files", "path:regex:[A-Z]:\\\\Program\\sFiles",false));
             p.paths.add(new PathEntry("common", "Program Files (x86)", "path:regex:[A-Z]:\\\\Program\\sFiles\\s\\(x86\\)",false));
             for (char c = 'A'; c <= 'Z'; c++) {
@@ -111,6 +113,26 @@ public class EtpSettingsActivity extends AppCompatActivity {
                     + "PSD (ext:psd)\n"
                     + "\n"
                     ;
+            // 结果排除默认值：办公临时/备份 + Windows 缓存/系统 + 编程构建产物
+            p.excludeText = "~$*\n"
+                    + "ext:asd\n"
+                    + "ext:wbk\n"
+                    + "ext:xlk\n"
+                    + "ext:tmp\n"
+                    + "ext:temp\n"
+                    + "ext:log\n"
+                    + "Thumbs.db\n"
+                    + "ext:lnk\n"
+                    + "ext:chk\n"
+                    + "ext:sys\n"
+                    + "ext:dll\n"
+                    + "ext:ini\n"
+                    + "node_modules\n"
+                    + "startwith:.\n"
+                    + "ext:class\n"
+                    + "ext:pyc\n"
+                    + "\n"
+                    ;
             return p;
         }
 
@@ -138,6 +160,20 @@ public class EtpSettingsActivity extends AppCompatActivity {
                 }
                 // 无括号或括号不完整 → 整行作为显示名和搜索关键词
                 out.add(new String[]{line, line});
+            }
+            return out;
+        }
+
+        /**
+         * 解析结果排除文本：每行一个排除表达式，跳过空行。
+         * @return 排除表达式列表（不含 ! 前缀）
+         */
+        static List<String> parseExcludes(String text) {
+            List<String> out = new ArrayList<>();
+            if (text == null || text.isEmpty()) return out;
+            for (String line : text.split("\\r?\\n")) {
+                line = line.trim();
+                if (!line.isEmpty()) out.add(line);
             }
             return out;
         }
@@ -180,6 +216,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
     // 快速检索（多行文本编辑）
     private TextInputEditText etQuickSearch;
+
+    // 结果排除（多行文本编辑）
+    private TextInputEditText etExclude;
 
     private final Gson gson = new Gson();
 
@@ -228,6 +267,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
         etQuickSearch = findViewById(R.id.etQuickSearch);
         findViewById(R.id.btnRestoreQuickSearch).setOnClickListener(v ->
                 etQuickSearch.setText(PathPresets.defaults().quickSearchText));
+
+        // 结果排除
+        etExclude = findViewById(R.id.etExclude);
 
         load();
         applyToUI();
@@ -315,6 +357,10 @@ public class EtpSettingsActivity extends AppCompatActivity {
         // 快速检索（旧配置无此字段 → 填入默认示例供参考）
         etQuickSearch.setText(presets.quickSearchText != null
                 ? presets.quickSearchText : PathPresets.defaults().quickSearchText);
+
+        // 结果排除（旧配置无此字段 → 填入默认示例供参考）
+        etExclude.setText(presets.excludeText != null
+                ? presets.excludeText : PathPresets.defaults().excludeText);
     }
 
     /** 构建搜索页排序字段勾选列表。 */
@@ -373,6 +419,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
         // 快速检索
         presets.quickSearchText = etQuickSearch.getText().toString();
+
+        // 结果排除
+        presets.excludeText = etExclude.getText().toString();
     }
 
     // ---- 动态路径 ----
