@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import github.linsmod.sharetopc.App;
@@ -24,6 +25,7 @@ import github.linsmod.sharetopc.transfer.EtpClient;
  */
 public class EtpSearchViewModel extends ViewModel {
 
+    /** 每批传输条数（列表底部"加载更多"一次拉取的数量）。 */
     private static final int PAGE_SIZE = 50;
     private static final int MAX_HISTORY = 10;
 
@@ -40,12 +42,16 @@ public class EtpSearchViewModel extends ViewModel {
 
     // 搜索上下文
     private String currentQuery = "";
-    private int currentOffset = 0;
-    private boolean hasMore = false;
-    private int resultCount = 0;
+    private long resultCount = 0;
+    private boolean hasMore = false;          // 服务器还有未传输的结果
+    private boolean loadMoreLoading = false;  // 加载更多进行中（防重入）
+    private int maxResultsLimit = 0;          // 设置中的结果总量上限，0=不限制
 
     // 累积结果（分页追加）
     private final List<EtpClient.EtpSearchResult> allResults = new ArrayList<>();
+
+    // 当前进行中的查询连接（跨线程访问，AtomicReference 保证可见性）
+    private final AtomicReference<EtpClient> activeClient = new AtomicReference<>();
 
     // 搜索历史（LinkedHashSet 做去重 + 保序）
     private final Set<String> searchHistory = new LinkedHashSet<>();
@@ -96,7 +102,7 @@ public class EtpSearchViewModel extends ViewModel {
                     String pq = pendingQuery;
                     pendingQuery = null;
                     if (pq != null && !pq.isEmpty()) {
-                        doQuery(pq, 0);
+                        doQuery(pq, 0, false);
                     } else {
                         emit(new SearchUiState.Ready());
                     }
@@ -128,12 +134,15 @@ public class EtpSearchViewModel extends ViewModel {
 
     // ==================== 搜索 ====================
 
-    /** 执行新搜索（重置分页），自动处理重连。 */
+    /** 执行新搜索，自动处理重连。 */
     public void search(String query) {
         if (query.isEmpty()) return;
+        cancelActiveQuery(); // 取消并关闭上一个进行中的查询
         currentQuery = query;
-        currentOffset = 0;
         allResults.clear();
+        hasMore = false;
+        loadMoreLoading = false;
+        maxResultsLimit = loadQueryParams().maxResults;
         emit(new SearchUiState.Searching(query));
 
         if (connecting) {
@@ -150,18 +159,20 @@ public class EtpSearchViewModel extends ViewModel {
         }
 
         pendingQuery = null;
-        doQuery(query, 0);
+        doQuery(query, 0, false);
     }
 
-    /** 加载更多（翻页）。 */
+    /** 加载更多：从已显示条数开始拉取下一批。 */
     public void loadMore() {
-        if (!hasMore || currentQuery.isEmpty()) return;
+        if (!hasMore || loadMoreLoading || currentQuery.isEmpty()) return;
         if (!isConnected()) return;
-        currentOffset += PAGE_SIZE;
-        doQuery(currentQuery, currentOffset);
+        cancelActiveQuery(); // 取消并关闭上一个请求，防止连点堆积
+        loadMoreLoading = true;
+        emit(new SearchUiState.LoadMoreState(true, false));
+        doQuery(currentQuery, allResults.size(), true);
     }
 
-    private void doQuery(String query, int offset) {
+    private void doQuery(String query, int offset, boolean isLoadMore) {
         int columns = EtpClient.SIZE_COLUMN | EtpClient.PATH_COLUMN
                 | EtpClient.DATE_MODIFIED_COLUMN | EtpClient.DATE_CREATED_COLUMN
                 | EtpClient.ATTRIBUTES_COLUMN;
@@ -169,32 +180,86 @@ public class EtpSearchViewModel extends ViewModel {
         String filteredQuery = buildPathFilter(query);
         QueryParams qp = loadQueryParams();
 
+        // 每批最多 PAGE_SIZE 条；设置总量上限时不超过剩余额度
+        int limit = maxResultsLimit;
+        int count = limit > 0 ? Math.min(PAGE_SIZE, limit - offset) : PAGE_SIZE;
+
         App.get().ioExecutor.execute(() -> {
-            try (EtpClient c = new EtpClient(savedHost, savedPort)) {
+            EtpClient c = new EtpClient(savedHost, savedPort);
+            activeClient.set(c); // 注册当前请求引用，供 cancelActiveQuery() 取消
+            if (activeClient.get() != c) {
+                closeQuietly(c); // 注册前已被取消，直接退出
+                return;
+            }
+            try {
                 c.connect();
                 c.login("anonymous", "");
-                List<EtpClient.EtpSearchResult> page = c.query(filteredQuery, columns,
+                EtpClient.QueryResult qr = c.query(filteredQuery, columns,
                         qp.matchCase, qp.matchPath, qp.matchRegex, qp.matchWholeWord,
-                        qp.sortName, qp.sortAsc, offset, PAGE_SIZE);
-                mainHandler.post(() -> onQueryResult(query, page));
+                        qp.sortName, qp.sortAsc, offset, count);
+                mainHandler.post(() -> onQueryResult(query, qr, c));
             } catch (IOException e) {
-                mainHandler.post(() -> emit(new SearchUiState.Error("搜索出错: " + e.getMessage())));
+                mainHandler.post(() -> onQueryError(query, c, e, isLoadMore));
             }
         });
     }
 
-    private void onQueryResult(String query, List<EtpClient.EtpSearchResult> page) {
-        if (!query.equals(currentQuery)) return; // 过期结果，忽略
+    private void onQueryResult(String query, EtpClient.QueryResult qr, EtpClient client) {
+        try {
+            if (!query.equals(currentQuery)) return; // 过期结果，忽略
 
-        allResults.addAll(page);
-        hasMore = page.size() >= PAGE_SIZE;
-        resultCount = allResults.size();
+            allResults.addAll(qr.items);
+            resultCount = qr.resultCount; // 服务器返回的真实匹配总数（RESULT_COUNT）
+            loadMoreLoading = false;
 
-        if (allResults.isEmpty()) {
-            emit(new SearchUiState.Empty(query, getQueryPathLabels()));
-        } else {
-            emit(new SearchUiState.HasResults(
-                    new ArrayList<>(allResults), resultCount, hasMore, query));
+            // 还有未传输的结果：服务器总数 > 已显示条数，且未达设置的上限
+            hasMore = qr.resultCount > allResults.size()
+                    && (maxResultsLimit <= 0 || allResults.size() < maxResultsLimit);
+
+            if (allResults.isEmpty()) {
+                emit(new SearchUiState.Empty(query, getQueryPathLabels()));
+            } else {
+                emit(new SearchUiState.HasResults(
+                        new ArrayList<>(allResults), resultCount, hasMore, query));
+            }
+        } finally {
+            finishQuery(client); // 查询生命周期已结束，无论结果是否被采用都关闭连接
+        }
+    }
+
+    /** 查询失败（或被取消中断）：仅当前查询报错，过期/被取消的请求静默关闭。 */
+    private void onQueryError(String query, EtpClient client, IOException e, boolean isLoadMore) {
+        try {
+            if (!query.equals(currentQuery)) return; // 已被取消/过期的请求，静默处理
+            loadMoreLoading = false;
+            if (isLoadMore) {
+                // 加载更多失败：不打断结果页，footer 显示重试
+                emit(new SearchUiState.LoadMoreState(false, true));
+            } else {
+                emit(new SearchUiState.Error("搜索出错: " + e.getMessage()));
+            }
+        } finally {
+            finishQuery(client);
+        }
+    }
+
+    /** 取消并关闭当前进行中的查询连接（幂等，无连接时无操作）。 */
+    private void cancelActiveQuery() {
+        closeQuietly(activeClient.getAndSet(null));
+    }
+
+    /** 查询结束收尾：若该连接仍是活跃请求则清空引用，然后关闭连接。 */
+    private void finishQuery(EtpClient client) {
+        activeClient.compareAndSet(client, null);
+        closeQuietly(client);
+    }
+
+    private static void closeQuietly(EtpClient client) {
+        if (client != null) {
+            try {
+                client.close();
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -384,6 +449,7 @@ public class EtpSearchViewModel extends ViewModel {
     protected void onCleared() {
         connecting = false;
         pendingQuery = null;
+        cancelActiveQuery(); // 页面销毁时中断仍在进行中的查询
         super.onCleared();
     }
 }

@@ -131,7 +131,7 @@ public class EtpClient implements Closeable {
     public List<EtpSearchResult> query(String search, int columns) throws IOException {
         return query(search, columns, 0 /* matchCase */, 0 /* matchPath */, 0 /* matchRegex */,
                 0 /* matchWholeWord */, null /* sortName */, true /* sortAsc */,
-                0 /* offset */, 0 /* count */);
+                0 /* offset */, 0 /* count */).items;
     }
 
     /**
@@ -151,7 +151,7 @@ public class EtpClient implements Closeable {
                                        int matchWholeWord,
                                        String sortName, boolean sortAscending) throws IOException {
         return query(search, columns, matchCase, matchPath, matchRegex, matchWholeWord,
-                sortName, sortAscending, 0 /* offset */, 0 /* count */);
+                sortName, sortAscending, 0 /* offset */, 0 /* count */).items;
     }
 
     /**
@@ -168,11 +168,11 @@ public class EtpClient implements Closeable {
      * @param offset         翻页偏移（0 起始），≤0 表示不限制
      * @param count          最大返回条数，≤0 表示不限制
      */
-    public List<EtpSearchResult> query(String search, int columns,
-                                       int matchCase, int matchPath, int matchRegex,
-                                       int matchWholeWord,
-                                       String sortName, boolean sortAscending,
-                                       int offset, int count) throws IOException {
+    public QueryResult query(String search, int columns,
+                             int matchCase, int matchPath, int matchRegex,
+                             int matchWholeWord,
+                             String sortName, boolean sortAscending,
+                             int offset, int count) throws IOException {
         if (!loggedIn) throw new IOException("未登录");
 
         // 设置搜索选项
@@ -223,8 +223,9 @@ public class EtpClient implements Closeable {
      *    FILE readme.txt
      *   200 End.
      */
-    private List<EtpSearchResult> readQueryResults(int columns) throws IOException {
+    private QueryResult readQueryResults(int columns) throws IOException {
         List<EtpSearchResult> results = new ArrayList<>();
+        long resultCount = 0;
         String currentPath = null;
         long currentSize = -1;
         long currentDateModified = -1;
@@ -258,7 +259,11 @@ public class EtpClient implements Closeable {
             if (!inResults) continue;
 
             if (trimmed.startsWith("RESULT_COUNT ")) {
-                // 总结果数，可选展示
+                // 服务器返回的匹配总条数（与 COUNT 设置无关）
+                try {
+                    resultCount = Long.parseLong(trimmed.substring(13));
+                } catch (NumberFormatException ignored) {
+                }
                 continue;
             }
 
@@ -341,8 +346,8 @@ public class EtpClient implements Closeable {
             }
         }
 
-        LogX.d("EtpClient query: " + results.size() + " results");
-        return results;
+        LogX.d("EtpClient query: " + results.size() + " results, total " + resultCount);
+        return new QueryResult(results, resultCount);
     }
 
     // ---- 基础命令 ----
@@ -416,6 +421,16 @@ public class EtpClient implements Closeable {
     }
 
     // ---- 搜索结果数据类 ----
+
+    /** 查询结果：条目列表 + 服务器返回的匹配总条数（RESULT_COUNT）。 */
+    public static class QueryResult {
+        public final List<EtpSearchResult> items;
+        public final long resultCount;
+        public QueryResult(List<EtpSearchResult> items, long resultCount) {
+            this.items = items;
+            this.resultCount = resultCount;
+        }
+    }
 
     /** ETP 搜索结果条目。 */
     public static class EtpSearchResult {

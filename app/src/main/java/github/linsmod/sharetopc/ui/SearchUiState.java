@@ -31,10 +31,10 @@ public abstract class SearchUiState {
     /** 有结果 */
     public static final class HasResults extends SearchUiState {
         public final List<EtpClient.EtpSearchResult> items;
-        public final int totalCount;
-        public final boolean hasMore;
+        public final long totalCount;
+        public final boolean hasMore; // 真实匹配总数超出本次传输条数（受限）
         public final String query;
-        public HasResults(List<EtpClient.EtpSearchResult> items, int totalCount,
+        public HasResults(List<EtpClient.EtpSearchResult> items, long totalCount,
                           boolean hasMore, String query) {
             this.items = items;
             this.totalCount = totalCount;
@@ -55,6 +55,19 @@ public abstract class SearchUiState {
             this.queryPaths = queryPaths;
         }
         @Override public String toString() { return "Empty{" + query + ", paths=" + queryPaths + "}"; }
+    }
+
+    /** 加载更多状态：不改变结果页，只更新列表底部 footer（加载中/失败重试）。 */
+    public static final class LoadMoreState extends SearchUiState {
+        public final boolean loading;
+        public final boolean error;
+        public LoadMoreState(boolean loading, boolean error) {
+            this.loading = loading;
+            this.error = error;
+        }
+        @Override public String toString() {
+            return "LoadMore{loading=" + loading + ", error=" + error + "}";
+        }
     }
 
     /** 错误 */

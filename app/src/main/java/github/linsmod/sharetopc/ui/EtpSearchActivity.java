@@ -240,6 +240,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         rvResults.setItemAnimator(null);
 
         resultAdapter = new EtpResultAdapter(this::showFilePropertiesDialog);
+        // 列表底部“加载更多” → ViewModel 拉取下一批
+        resultAdapter.setOnLoadMoreListener(() -> viewModel.loadMore());
         rvResults.setAdapter(resultAdapter);
 
         // 键盘搜索键（唯一记录历史的入口）
@@ -264,19 +266,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             }
         });
 
-        rvResults.addOnScrollListener(new RecyclerView.OnScrollListener() {
-            @Override
-            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
-                if (dy > 0) {
-                    LinearLayoutManager lm = (LinearLayoutManager) recyclerView.getLayoutManager();
-                    if (lm != null && lm.findLastVisibleItemPosition()
-                            >= resultAdapter.getItemCount() - 3) {
-                        viewModel.loadMore();
-                    }
-                }
-            }
-        });
-
         // 结果页点击搜索框 → 返回搜索
         etSearch.setOnClickListener(v -> {
             if (showingResults) {
@@ -284,8 +273,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             }
         });
 
-        // 加载更多错误重试
-        resultAdapter.setOnLoadMoreListener(() -> viewModel.loadMore());
     }
 
     // ==================== 筛选（内联） ====================
@@ -509,6 +496,13 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
                 renderSearching(((SearchUiState.Searching) state).query);
             } else if (state instanceof SearchUiState.HasResults) {
                 renderResult((SearchUiState.HasResults) state);
+            } else if (state instanceof SearchUiState.LoadMoreState) {
+                // 加载更多进行中/失败：只更新列表底部 footer（不改变结果页）
+                SearchUiState.LoadMoreState lm = (SearchUiState.LoadMoreState) state;
+                resultAdapter.setFooterState(lm.loading
+                                ? EtpResultAdapter.FOOTER_LOADING
+                                : EtpResultAdapter.FOOTER_ERROR,
+                        0);
             } else if (state instanceof SearchUiState.Empty) {
                 SearchUiState.Empty e = (SearchUiState.Empty) state;
                 renderEmpty(e.query);
@@ -559,6 +553,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         cgMatchOptions.setVisibility(View.GONE);
         layoutProgressSearch.setVisibility(View.GONE);
         rvResults.setVisibility(View.GONE);
+        resultAdapter.setFooterState(EtpResultAdapter.FOOTER_HIDDEN, 0); // 重置 footer
         layoutResultHeader.setVisibility(View.GONE);
         dividerResult.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.GONE);
@@ -597,7 +592,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
         if (r == null) {
             resultAdapter.submitList(null);
-            resultAdapter.setShowFooter(false);
             renderReady();
             return;
         }
@@ -612,7 +606,11 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         tvSearchQuery.setVisibility(View.VISIBLE);
         tvSearchQuery.setText(getString(R.string.etp_search_query_label, r.query));
         resultAdapter.submitList(r.items);
-        resultAdapter.setShowFooter(r.hasMore);
+        // footer：还有未传输的结果→“加载更多”；否则常驻“已加载全部 N 条”不消失
+        resultAdapter.setFooterState(r.hasMore
+                        ? EtpResultAdapter.FOOTER_LOAD_MORE
+                        : EtpResultAdapter.FOOTER_ALL_LOADED,
+                r.items.size());
     }
 
     private void renderEmpty(String query) {
@@ -630,6 +628,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         tvSearchQuery.setVisibility(View.VISIBLE);
         tvSearchQuery.setText(getString(R.string.etp_search_query_label, query));
         resultAdapter.submitList(null);
+        resultAdapter.setFooterState(EtpResultAdapter.FOOTER_HIDDEN, 0); // 无结果不显示 footer
         layoutResultsFrame.setVisibility(View.GONE);
         layoutEmptyScroll.setVisibility(View.VISIBLE);
 
@@ -792,6 +791,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         dividerResult.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.GONE);
         resultAdapter.submitList(null);
+        resultAdapter.setFooterState(EtpResultAdapter.FOOTER_HIDDEN, 0); // 重置 footer
         layoutHistory.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.GONE);
         layoutEmptyScroll.setVisibility(View.GONE);

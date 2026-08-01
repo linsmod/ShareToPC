@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.ListAdapter;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.text.SimpleDateFormat;
+import java.util.Calendar;
 import java.util.Date;
 import java.util.Locale;
 import java.util.regex.Pattern;
@@ -23,7 +24,7 @@ import github.linsmod.sharetopc.transfer.EtpClient;
 
 /**
  * 搜索结果适配器 — 用 ListAdapter + DiffUtil 避免全量刷新闪烁。
- * 支持底部"加载更多"状态。
+ * 列表末尾支持"加载更多"footer（可加载 / 加载中 / 失败重试）。
  */
 class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerView.ViewHolder> {
 
@@ -77,8 +78,16 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
             };
 
     private OnItemClickListener onItemClickListener;
-    private boolean showFooter;       // 是否显示"加载更多"底部
-    private boolean footerError;      // 加载失败状态
+
+    // footer 状态：隐藏 / 可加载更多 / 加载中 / 失败重试 / 全部加载完成
+    static final int FOOTER_HIDDEN = 0;
+    static final int FOOTER_LOAD_MORE = 1;
+    static final int FOOTER_LOADING = 2;
+    static final int FOOTER_ERROR = 3;
+    static final int FOOTER_ALL_LOADED = 4;
+
+    private int footerState = FOOTER_HIDDEN;
+    private int loadedCount = 0; // FOOTER_ALL_LOADED 时显示"已加载全部 N 条"
 
     interface OnItemClickListener {
         void onItemClick(EtpClient.EtpSearchResult item);
@@ -89,30 +98,35 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         this.onItemClickListener = listener;
     }
 
-    void setShowFooter(boolean show) {
-        if (this.showFooter != show) {
-            this.showFooter = show;
-            notifyItemChanged(getItemCount()); // footer 位置变化
-        }
-    }
-
-    void setFooterError(boolean error) {
-        this.footerError = error;
-        if (showFooter) {
-            notifyItemChanged(getItemCount());
+    /** 更新 footer 状态（隐藏/可加载/加载中/失败重试/全部加载完成）。 */
+    void setFooterState(int state, int loadedCount) {
+        if (this.footerState == state && this.loadedCount == loadedCount) return;
+        boolean wasShow = this.footerState != FOOTER_HIDDEN;
+        this.footerState = state;
+        this.loadedCount = loadedCount;
+        // footer 恒在列表末尾：出现→insert，消失→remove，状态变化→update
+        int pos = getCurrentList().size();
+        if (state != FOOTER_HIDDEN && !wasShow) {
+            notifyItemInserted(pos);
+        } else if (state == FOOTER_HIDDEN && wasShow) {
+            notifyItemRemoved(pos);
+        } else {
+            notifyItemChanged(pos);
         }
     }
 
     @Override
     public int getItemViewType(int position) {
-        if (showFooter && position == getCurrentList().size()) return TYPE_FOOTER;
+        if (footerState != FOOTER_HIDDEN && position == getCurrentList().size()) {
+            return TYPE_FOOTER;
+        }
         return TYPE_ITEM;
     }
 
     @Override
     public int getItemCount() {
         int count = getCurrentList().size();
-        if (showFooter) count++;
+        if (footerState != FOOTER_HIDDEN) count++;
         return count;
     }
 
@@ -132,19 +146,7 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         if (holder instanceof FooterViewHolder) {
-            FooterViewHolder fh = (FooterViewHolder) holder;
-            if (footerError) {
-                fh.progress.setVisibility(View.GONE);
-                fh.tvMessage.setVisibility(View.VISIBLE);
-                fh.tvMessage.setText("加载失败，点击重试");
-                fh.itemView.setOnClickListener(v -> {
-                    if (onLoadMoreListener != null) onLoadMoreListener.onLoadMore();
-                });
-            } else {
-                fh.progress.setVisibility(View.VISIBLE);
-                fh.tvMessage.setVisibility(View.GONE);
-                fh.itemView.setOnClickListener(null);
-            }
+            bindLoadMore((FooterViewHolder) holder);
             return;
         }
 
@@ -191,8 +193,7 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         if (hasDate) {
             ivh.tvFileDate.setVisibility(View.VISIBLE);
             long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateModified);
-            ivh.tvFileDate.setText(new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                    .format(new Date(millis)));
+            ivh.tvFileDate.setText(formatFileDate(millis));
         } else {
             ivh.tvFileDate.setVisibility(View.GONE);
         }
@@ -200,6 +201,47 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         ivh.itemView.setOnClickListener(v -> {
             if (onItemClickListener != null) onItemClickListener.onItemClick(r);
         });
+    }
+
+    /** 当年记录显示"MM-dd HH:mm"，往年记录显示"yyyy-MM-dd"。 */
+    private static String formatFileDate(long millis) {
+        Calendar cal = Calendar.getInstance();
+        int currentYear = cal.get(Calendar.YEAR);
+        cal.setTimeInMillis(millis);
+        String pattern = cal.get(Calendar.YEAR) == currentYear
+                ? "MM-dd HH:mm" : "yyyy-MM-dd";
+        return new SimpleDateFormat(pattern, Locale.getDefault()).format(new Date(millis));
+    }
+
+    /** 绑定加载更多 footer：四态切换（可加载 / 加载中 / 失败重试 / 全部加载完成）。 */
+    private void bindLoadMore(FooterViewHolder fh) {
+        fh.progress.setVisibility(View.GONE);
+        fh.tvMessage.setVisibility(View.VISIBLE);
+        fh.itemView.setOnClickListener(null);
+        switch (footerState) {
+            case FOOTER_LOAD_MORE:
+                fh.tvMessage.setText(R.string.etp_load_more);
+                fh.itemView.setOnClickListener(v -> {
+                    if (onLoadMoreListener != null) onLoadMoreListener.onLoadMore();
+                });
+                break;
+            case FOOTER_LOADING:
+                fh.progress.setVisibility(View.VISIBLE);
+                fh.tvMessage.setText(R.string.etp_load_more_loading);
+                break;
+            case FOOTER_ERROR:
+                fh.tvMessage.setText(R.string.etp_load_more_error);
+                fh.itemView.setOnClickListener(v -> {
+                    if (onLoadMoreListener != null) onLoadMoreListener.onLoadMore();
+                });
+                break;
+            case FOOTER_ALL_LOADED:
+                fh.tvMessage.setText(fh.itemView.getContext()
+                        .getString(R.string.etp_load_more_all_loaded, loadedCount));
+                break;
+            default:
+                break; // FOOTER_HIDDEN 不应被绑定
+        }
     }
 
     // ---- LoadMore 回调 ----

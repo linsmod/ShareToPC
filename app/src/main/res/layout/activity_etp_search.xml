@@ -324,20 +324,22 @@
         </ScrollView>
 
         <!-- 结果区域（占满剩余空间） -->
-        <FrameLayout
+        <LinearLayout
             android:id="@+id/layoutResultsFrame"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvResults"
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:clipToPadding="false"
                 android:padding="8dp"
                 android:visibility="gone" />
-        </FrameLayout>
+        </LinearLayout>
 
     </LinearLayout>
 
