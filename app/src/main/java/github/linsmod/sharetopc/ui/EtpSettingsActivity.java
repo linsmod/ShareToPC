@@ -67,6 +67,8 @@ public class EtpSettingsActivity extends AppCompatActivity {
         String sortName;
         boolean sortAsc = true;
         Map<String, Integer> sortFields = new LinkedHashMap<>();
+        /** 搜索页显示的排序字段（与 SORT_NAMES 顺序一致）。 */
+        List<String> uiSortFields = new ArrayList<>();
 
         int maxResults;
         // Search Syntax using paths: pathA | pathB | pathC {kw}
@@ -88,6 +90,10 @@ public class EtpSettingsActivity extends AppCompatActivity {
             for (String f : new String[]{"name", "size", "path", "extension", "date_modified", "date_created"}) {
                 p.sortFields.put(f, 0);
             }
+            p.uiSortFields.add("name");
+            p.uiSortFields.add("size");
+            p.uiSortFields.add("path");
+            p.uiSortFields.add("date_modified");
             return p;
         }
         
@@ -116,6 +122,13 @@ public class EtpSettingsActivity extends AppCompatActivity {
     private static final String[] SORT_NAMES = {
             null, "name", "path", "size", "extension", "date_modified", "date_created"
     };
+
+    // 搜索页显示的排序字段（勾选控制）
+    private LinearLayout layoutUiSortFields;
+    private static final String[] UI_SORT_KEYS = {
+            "name", "size", "path", "extension", "date_modified", "date_created"};
+    private static final int[] UI_SORT_LABEL_INDEX = {1, 3, 2, 4, 5, 6}; // 对应 path_preset_sort_fields 数组
+    private final Map<String, MaterialCheckBox> uiSortCheckBoxes = new LinkedHashMap<>();
 
     // 结果限制
     private TextInputEditText etMaxResults;
@@ -157,6 +170,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
             updateSortDirButton();
         });
 
+        // 搜索页显示的排序字段
+        layoutUiSortFields = findViewById(R.id.layoutUiSortFields);
+
         // 结果限制
         etMaxResults = findViewById(R.id.etMaxResults);
 
@@ -182,6 +198,19 @@ public class EtpSettingsActivity extends AppCompatActivity {
             } catch (Exception ignored) {}
         }
         presets = PathPresets.defaults();
+    }
+
+    /** 旧配置兼容：uiSortFields 为空时回退到默认 4 个字段。 */
+    private void ensureUiSortFields() {
+        if (presets.uiSortFields == null) {
+            presets.uiSortFields = new ArrayList<>();
+        }
+        if (presets.uiSortFields.isEmpty()) {
+            presets.uiSortFields.add("name");
+            presets.uiSortFields.add("size");
+            presets.uiSortFields.add("path");
+            presets.uiSortFields.add("date_modified");
+        }
     }
 
     private void save() {
@@ -215,6 +244,7 @@ public class EtpSettingsActivity extends AppCompatActivity {
         chipWholeWord.setChecked(presets.matchWholeWord != 0);
         chipMatchPath.setChecked(presets.matchPath != 0);
         chipRegex.setChecked(presets.matchRegex != 0);
+        rebuildUiSortFields();
 
         // 排序
         int sortIdx = 0;
@@ -228,6 +258,29 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
         // 结果限制
         etMaxResults.setText(presets.maxResults > 0 ? String.valueOf(presets.maxResults) : "");
+    }
+
+    /** 构建搜索页排序字段勾选列表。 */
+    private void rebuildUiSortFields() {
+        ensureUiSortFields();
+        layoutUiSortFields.removeAllViews();
+        uiSortCheckBoxes.clear();
+        String[] labels = getResources().getStringArray(R.array.path_preset_sort_fields);
+        for (int i = 0; i < UI_SORT_KEYS.length; i++) {
+            String key = UI_SORT_KEYS[i];
+            MaterialCheckBox cb = new MaterialCheckBox(this);
+            cb.setText(labels[UI_SORT_LABEL_INDEX[i]]);
+            cb.setChecked(presets.uiSortFields.contains(key));
+            cb.setOnCheckedChangeListener((b, checked) -> {
+                if (checked) {
+                    if (!presets.uiSortFields.contains(key)) presets.uiSortFields.add(key);
+                } else {
+                    presets.uiSortFields.remove(key);
+                }
+            });
+            uiSortCheckBoxes.put(key, cb);
+            layoutUiSortFields.addView(cb);
+        }
     }
 
     private void updateSortDirButton() {

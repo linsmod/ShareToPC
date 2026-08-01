@@ -3,9 +3,9 @@ package github.linsmod.sharetopc.ui;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
@@ -72,7 +72,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private TextInputEditText etSearch;
     private View layoutHistory;
     private ChipGroup cgHistory;
-    private ProgressBar progressSearch;
+    private View layoutProgressSearch;
     private RecyclerView rvResults;
     private View layoutResultHeader, dividerResult;
     private TextView tvResultCount;
@@ -105,6 +105,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
                     result -> {
                         // 从设置页返回：重新加载预设并重新搜索
                         loadPresets();
+                        initSortItems();
                         applyToUI();
                         String q = etSearch.getText().toString().trim();
                         if (!q.isEmpty()) viewModel.search(q);
@@ -210,7 +211,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             cgHistory.removeAllViews();
             layoutHistory.setVisibility(View.GONE);
         });
-        progressSearch = findViewById(R.id.progressSearch);
+        layoutProgressSearch = findViewById(R.id.layoutProgressSearch);
         rvResults = findViewById(R.id.rvResults);
         tvResultCount = findViewById(R.id.tvResultCount);
         tvSearchQuery = findViewById(R.id.tvSearchQuery);
@@ -344,9 +345,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     }
 
     private void initSortItems() {
-        TextView[] views = {tvSortName, tvSortSize, tvSortPath,
-                tvSortExt, tvSortDateMod, tvSortDateCre};
-
         if (presets.sortFields.isEmpty() && presets.sortName != null) {
             presets.sortFields.put(presets.sortName, presets.sortAsc ? 1 : 2);
         }
@@ -356,15 +354,34 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             }
         }
 
-        sortItems = new SortItem[SORT_NAMES.length];
+        // 旧配置兼容：uiSortFields 为空时默认显示 4 个字段
+        if (presets.uiSortFields == null || presets.uiSortFields.isEmpty()) {
+            presets.uiSortFields = new java.util.ArrayList<>();
+            presets.uiSortFields.add("name");
+            presets.uiSortFields.add("size");
+            presets.uiSortFields.add("path");
+            presets.uiSortFields.add("date_modified");
+        }
+
+        // 按 SORT_NAMES 顺序映射视图，未勾选字段隐藏
+        TextView[] allViews = {tvSortName, tvSortSize, tvSortPath,
+                tvSortExt, tvSortDateMod, tvSortDateCre};
+        java.util.List<SortItem> items = new java.util.ArrayList<>();
         for (int i = 0; i < SORT_NAMES.length; i++) {
             String name = SORT_NAMES[i];
-            SortItem item = new SortItem(views[i], name);
+            TextView view = allViews[i];
+            if (!presets.uiSortFields.contains(name)) {
+                view.setVisibility(View.GONE);
+                continue;
+            }
+            view.setVisibility(View.VISIBLE);
+            SortItem item = new SortItem(view, name);
             item.state = presets.sortFields.getOrDefault(name, 0);
-            sortItems[i] = item;
-            final int idx = i;
-            views[i].setOnClickListener(v -> onSortItemClicked(idx));
+            items.add(item);
+            final int idx = items.size() - 1;
+            view.setOnClickListener(v -> onSortItemClicked(idx));
         }
+        sortItems = items.toArray(new SortItem[0]);
         currentSort = (presets.sortName != null && !presets.sortName.isEmpty()
                 && presets.sortFields.getOrDefault(presets.sortName, 0) != 0)
                 ? presets.sortName : null;
@@ -372,25 +389,25 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private void onSortItemClicked(int index) {
         SortItem clicked = sortItems[index];
-        clicked.state = (clicked.state + 1) % 3;
-        presets.sortFields.put(clicked.sortName, clicked.state);
-
-        if (clicked.state != 0) {
-            currentSort = clicked.sortName;
-        } else if (clicked.sortName.equals(currentSort)) {
-            currentSort = null;
+        if (clicked.state == 0) {
+            // 单选：取消其他项激活，激活当前项并沿用设置页方向
             for (SortItem item : sortItems) {
-                if (item.state != 0) { currentSort = item.sortName; break; }
+                if (item != clicked && item.state != 0) {
+                    item.state = 0;
+                    presets.sortFields.put(item.sortName, 0);
+                }
             }
+            clicked.state = presets.sortAsc ? 1 : 2;
+            presets.sortFields.put(clicked.sortName, clicked.state);
+            currentSort = clicked.sortName;
+        } else {
+            // 已激活：切换升/降序
+            clicked.state = clicked.state == 1 ? 2 : 1;
+            presets.sortFields.put(clicked.sortName, clicked.state);
         }
 
-        if (currentSort != null) {
-            presets.sortName = currentSort;
-            presets.sortAsc = presets.sortFields.getOrDefault(currentSort, 0) == 1;
-        } else {
-            presets.sortName = null;
-            presets.sortAsc = true;
-        }
+        presets.sortName = currentSort;
+        presets.sortAsc = presets.sortFields.getOrDefault(currentSort, 0) == 1;
         refreshSortIndicators();
         commitFilter();
     }
@@ -404,8 +421,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         getTheme().resolveAttribute(
                 com.google.android.material.R.attr.colorOnSurface, tv, true);
         int subtle = (tv.data & 0x00FFFFFF) | 0x60000000;
-        int surface = (tv.data & 0x00FFFFFF) | 0x1A000000; // ~10% alpha 作为非激活背景
-        int activeBg = (accent & 0x00FFFFFF) | 0x2A000000; // ~16% alpha 作为激活背景
 
         float density = getResources().getDisplayMetrics().density;
         float textHeight = tvSortName.getPaint().getFontMetrics().descent
@@ -413,31 +428,25 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         int iconSize = (int) (textHeight * 0.6f);
 
         for (SortItem item : sortItems) {
-            boolean active = item.sortName.equals(currentSort);
+            boolean active = item.state != 0;
             int resId;
             int iconColor;
-            int textColor;
             if (item.state == 1) {
                 resId = R.drawable.ic_sort_asc; iconColor = accent;
             } else if (item.state == 2) {
                 resId = R.drawable.ic_sort_desc; iconColor = accent;
             } else {
-                resId = R.drawable.ic_sort_both; iconColor = active ? accent : subtle;
+                resId = R.drawable.ic_sort_both; iconColor = subtle;
             }
 
-            // 文字颜色：激活项用 accent，其他用半透明
-            textColor = active ? accent : subtle;
-            item.view.setTextColor(textColor);
+            // 文字颜色：激活项用主色加粗，未激活用半透明常规
+            item.view.setTextColor(active ? accent : subtle);
             item.view.setTypeface(null, active ? Typeface.BOLD : Typeface.NORMAL);
 
-            // 背景：激活项用 accent 色圆形背景，其他用浅灰圆形背景
-            GradientDrawable bg = new GradientDrawable();
-            bg.setCornerRadius(density * 16);
-            bg.setColor(active ? activeBg : surface);
-            item.view.setBackground(bg);
-            int hPad = (int) (density * 10);
-            int vPad = (int) (density * 4);
-            item.view.setPadding(hPad, vPad, hPad, vPad);
+            // 简化样式：无背景、仅保留垂直 padding
+            item.view.setBackground(null);
+            int vPad = (int) (density * 2);
+            item.view.setPadding(0, vPad, 0, vPad);
 
             Drawable icon = makeIcon(resId, iconColor, iconSize);
             SpannableString ss = new SpannableString(item.label + "  ");
@@ -513,11 +522,25 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     // ==================== 状态渲染 ====================
 
+    /** 显示进度条：容器高度与结果条数行一致，查询切换时不抖动。 */
+    private void showProgress() {
+        Paint.FontMetrics fm = tvResultCount.getPaint().getFontMetrics();
+        float density = getResources().getDisplayMetrics().density;
+        // 结果头部高度 = 文字行高 + paddingTop 10dp + paddingBottom 6dp
+        int h = Math.round(fm.descent - fm.ascent + 16 * density);
+        ViewGroup.LayoutParams lp = layoutProgressSearch.getLayoutParams();
+        if (lp.height != h) {
+            lp.height = h;
+            layoutProgressSearch.requestLayout();
+        }
+        layoutProgressSearch.setVisibility(View.VISIBLE);
+    }
+
     private void renderConnecting() {
         showingResults = false;
         setSearchEditable(true);
         searchArea.setVisibility(View.VISIBLE);
-        progressSearch.setVisibility(View.VISIBLE);
+        showProgress();
         rvResults.setVisibility(View.GONE);
         layoutResultHeader.setVisibility(View.GONE);
         dividerResult.setVisibility(View.GONE);
@@ -534,7 +557,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         setSearchEditable(true);
         searchArea.setVisibility(View.VISIBLE);
         cgMatchOptions.setVisibility(View.GONE);
-        progressSearch.setVisibility(View.GONE);
+        layoutProgressSearch.setVisibility(View.GONE);
         rvResults.setVisibility(View.GONE);
         layoutResultHeader.setVisibility(View.GONE);
         dividerResult.setVisibility(View.GONE);
@@ -550,16 +573,13 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         setSearchEditable(false);
         searchArea.setVisibility(View.GONE);
         cgMatchOptions.setVisibility(View.VISIBLE);
-        progressSearch.setVisibility(View.VISIBLE);
+        showProgress();
         rvResults.setVisibility(View.GONE);
-        layoutResultHeader.setVisibility(View.VISIBLE);
+        layoutResultHeader.setVisibility(View.GONE);
         dividerResult.setVisibility(View.VISIBLE);
         layoutEmptyScroll.setVisibility(View.GONE);
         layoutResultsFrame.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.VISIBLE);
-        tvResultCount.setVisibility(View.VISIBLE);
-        tvResultCount.setText(getString(R.string.etp_searching));
-        tvSearchQuery.setVisibility(View.GONE);
     }
 
     private void renderResult(SearchUiState.HasResults r) {
@@ -567,7 +587,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         setSearchEditable(false);
         searchArea.setVisibility(View.GONE);
         cgMatchOptions.setVisibility(View.VISIBLE);
-        progressSearch.setVisibility(View.GONE);
+        layoutProgressSearch.setVisibility(View.GONE);
         rvResults.setVisibility(View.VISIBLE);
         layoutResultHeader.setVisibility(View.VISIBLE);
         dividerResult.setVisibility(View.VISIBLE);
@@ -587,6 +607,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             return;
         }
 
+        tvResultCount.setVisibility(View.VISIBLE);
         tvResultCount.setText(getString(R.string.etp_result_count, r.totalCount));
         tvSearchQuery.setVisibility(View.VISIBLE);
         tvSearchQuery.setText(getString(R.string.etp_search_query_label, r.query));
@@ -599,11 +620,12 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         setSearchEditable(false);
         searchArea.setVisibility(View.GONE);
         cgMatchOptions.setVisibility(View.VISIBLE);
-        progressSearch.setVisibility(View.GONE);
+        layoutProgressSearch.setVisibility(View.GONE);
         rvResults.setVisibility(View.GONE);
         layoutResultHeader.setVisibility(View.VISIBLE);
         dividerResult.setVisibility(View.VISIBLE);
         layoutResultSort.setVisibility(View.GONE);
+        tvResultCount.setVisibility(View.VISIBLE);
         tvResultCount.setText(getString(R.string.etp_result_count, 0));
         tvSearchQuery.setVisibility(View.VISIBLE);
         tvSearchQuery.setText(getString(R.string.etp_search_query_label, query));
@@ -765,7 +787,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         setSearchEditable(true);
         searchArea.setVisibility(View.VISIBLE);
         cgMatchOptions.setVisibility(View.GONE);
-        progressSearch.setVisibility(View.GONE);
+        layoutProgressSearch.setVisibility(View.GONE);
         layoutResultHeader.setVisibility(View.GONE);
         dividerResult.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.GONE);

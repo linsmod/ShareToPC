@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 排序按钮之间的 3dp 间距分隔条（透明，仅占位） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <size
+        android:width="20dp"
+        android:height="1dp" />
+    <solid android:color="@android:color/transparent" />
+</shape>

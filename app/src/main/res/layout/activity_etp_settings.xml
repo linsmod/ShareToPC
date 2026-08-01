@@ -212,6 +212,17 @@
                     app:icon="@drawable/ic_sort_arrow" />
             </LinearLayout>
 
+            <!-- 搜索页显示的排序字段 -->
+            <TextView
+                style="@style/PathPresetSectionHeader"
+                android:text="@string/path_preset_ui_sort_fields" />
+
+            <LinearLayout
+                android:id="@+id/layoutUiSortFields"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
             <!-- 结果限制 -->
             <TextView
                 style="@style/PathPresetSectionHeader"
