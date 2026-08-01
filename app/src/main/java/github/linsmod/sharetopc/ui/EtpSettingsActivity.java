@@ -71,6 +71,8 @@ public class EtpSettingsActivity extends AppCompatActivity {
         List<String> uiSortFields = new ArrayList<>();
 
         int maxResults;
+        /** 快速检索：每行一个"显示名 (过滤模式)"，如 "Word 文档 (*.doc | *.docx)"。 */
+        String quickSearchText;
         // Search Syntax using paths: pathA | pathB | pathC {kw}
         static PathPresets defaults() {
             PathPresets p = new PathPresets();
@@ -94,7 +96,50 @@ public class EtpSettingsActivity extends AppCompatActivity {
             p.uiSortFields.add("size");
             p.uiSortFields.add("path");
             p.uiSortFields.add("date_modified");
+            p.quickSearchText = "Word 文档 (*.doc | *.docx)\n"
+                    + "Excel 文件 (ext:xls | ext:xlsx)\n"
+                    + "PPT (ext:ppt | ext:pptx)\n"
+                    + "PDF 文件 (ext:pdf)\n"
+                    + "文本文档(ext:txt | ext:md)\n"
+                    + "压缩包 (ext:zip | ext:rar | ext:7z | ext:tar.gz)\n"
+                    + "图片 (image:)\n"
+                    + "视频 (video:)\n"
+                    + "音频 (audio:)\n"
+                    + "思维导图 (ext:xmind)\n"
+                    + "电脑程序 (ext:exe | ext:msi | ext:msix)\n"
+                    + "APK (ext:apk)\n"
+                    + "PSD (ext:psd)\n"
+                    + "\n"
+                    ;
             return p;
+        }
+
+        /**
+         * 解析快速检索文本：每行 "显示名 (过滤模式)"。
+         * 取最后一对括号：括号前为显示名，括号内为搜索关键词（原样发送，不额外处理）。
+         * 无括号的行：整行同时作为显示名和搜索关键词。
+         * @return [label, pattern] 列表
+         */
+        static List<String[]> parseQuickSearches(String text) {
+            List<String[]> out = new ArrayList<>();
+            if (text == null || text.isEmpty()) return out;
+            for (String line : text.split("\\r?\\n")) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
+                int open = line.lastIndexOf('(');
+                int close = line.lastIndexOf(')');
+                if (open > 0 && close > open) {
+                    String label = line.substring(0, open).trim();
+                    String pattern = line.substring(open + 1, close).trim();
+                    if (!label.isEmpty() && !pattern.isEmpty()) {
+                        out.add(new String[]{label, pattern});
+                        continue;
+                    }
+                }
+                // 无括号或括号不完整 → 整行作为显示名和搜索关键词
+                out.add(new String[]{line, line});
+            }
+            return out;
         }
         
     }
@@ -132,6 +177,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
     // 结果限制
     private TextInputEditText etMaxResults;
+
+    // 快速检索（多行文本编辑）
+    private TextInputEditText etQuickSearch;
 
     private final Gson gson = new Gson();
 
@@ -175,6 +223,11 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
         // 结果限制
         etMaxResults = findViewById(R.id.etMaxResults);
+
+        // 快速检索
+        etQuickSearch = findViewById(R.id.etQuickSearch);
+        findViewById(R.id.btnRestoreQuickSearch).setOnClickListener(v ->
+                etQuickSearch.setText(PathPresets.defaults().quickSearchText));
 
         load();
         applyToUI();
@@ -258,6 +311,10 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
         // 结果限制
         etMaxResults.setText(presets.maxResults > 0 ? String.valueOf(presets.maxResults) : "");
+
+        // 快速检索（旧配置无此字段 → 填入默认示例供参考）
+        etQuickSearch.setText(presets.quickSearchText != null
+                ? presets.quickSearchText : PathPresets.defaults().quickSearchText);
     }
 
     /** 构建搜索页排序字段勾选列表。 */
@@ -313,6 +370,9 @@ public class EtpSettingsActivity extends AppCompatActivity {
         } catch (NumberFormatException ignored) {
             presets.maxResults = 0;
         }
+
+        // 快速检索
+        presets.quickSearchText = etQuickSearch.getText().toString();
     }
 
     // ---- 动态路径 ----

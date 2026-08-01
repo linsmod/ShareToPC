@@ -36,6 +36,7 @@ public class EtpSearchViewModel extends ViewModel {
     private String savedHost;
     private int savedPort;
     private String pendingQuery;
+    private boolean verified; // 是否已成功连接验证过（探测性连接完成）
 
     // 观察者
     private Consumer<SearchUiState> stateObserver;
@@ -61,11 +62,8 @@ public class EtpSearchViewModel extends ViewModel {
     /** 注册状态观察者，注册时立即回调当前状态。 */
     public void observe(Consumer<SearchUiState> observer) {
         this.stateObserver = observer;
-        if (!connecting && savedHost != null && !savedHost.isEmpty()) {
-            emit(new SearchUiState.Ready());
-        } else {
-            emit(new SearchUiState.Connecting());
-        }
+        // 未连接且未在连接中 → 直接就绪，等待用户发起搜索才建立连接
+        emit(connecting ? new SearchUiState.Connecting() : new SearchUiState.Ready());
     }
 
     /** 移除观察者（避免泄漏）。 */
@@ -80,6 +78,12 @@ public class EtpSearchViewModel extends ViewModel {
     }
 
     // ==================== 连接 ====================
+
+    /** 仅保存目标地址，不建立连接；首次搜索时才会真正连接。 */
+    public void init(String host, int port) {
+        this.savedHost = host;
+        this.savedPort = port;
+    }
 
     public void connect(String host, int port) {
         this.savedHost = host;
@@ -98,6 +102,7 @@ public class EtpSearchViewModel extends ViewModel {
                     App.get().settingsStore.setLastEtpHost(host);
                     App.get().settingsStore.setLastEtpPort(port);
                     connecting = false;
+                    verified = true;
 
                     String pq = pendingQuery;
                     pendingQuery = null;
@@ -108,11 +113,13 @@ public class EtpSearchViewModel extends ViewModel {
                     }
                 } else {
                     connecting = false;
+                    verified = false;
                     pendingQuery = null;
                     emit(new SearchUiState.Error("登录失败，请检查 ETP 服务是否开启"));
                 }
             } catch (IOException e) {
                 connecting = false;
+                verified = false;
                 pendingQuery = null;
                 emit(new SearchUiState.Error("连接失败: " + e.getMessage()));
             }
@@ -120,7 +127,7 @@ public class EtpSearchViewModel extends ViewModel {
     }
 
     public boolean isConnected() {
-        return !connecting && savedHost != null && !savedHost.isEmpty();
+        return verified && !connecting;
     }
 
     /** 使用上次保存的地址自动重连。 */
@@ -448,6 +455,7 @@ public class EtpSearchViewModel extends ViewModel {
     @Override
     protected void onCleared() {
         connecting = false;
+        verified = false;
         pendingQuery = null;
         cancelActiveQuery(); // 页面销毁时中断仍在进行中的查询
         super.onCleared();

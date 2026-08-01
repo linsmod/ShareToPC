@@ -15,8 +15,10 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
+import android.widget.PopupMenu;
 import android.widget.TextView;
 import android.widget.LinearLayout;
 import android.widget.Toast;
@@ -83,6 +85,10 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private LinearLayout layoutQueryParamRows;
     private View layoutEmptyScroll;
     private View layoutResultsFrame;
+
+    // 快速检索（设置页定义，点击即搜索）
+    private HorizontalScrollView layoutQuickSearch;
+    private ChipGroup cgQuickSearch;
 
     private boolean showingResults;
 
@@ -223,6 +229,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         layoutQueryParamRows = findViewById(R.id.layoutQueryParamRows);
         layoutEmptyScroll = findViewById(R.id.layoutEmptyScroll);
         layoutResultsFrame = findViewById(R.id.layoutResultsFrame);
+        layoutQuickSearch = findViewById(R.id.layoutQuickSearch);
+        cgQuickSearch = findViewById(R.id.cgQuickSearch);
 
         // 结果排序视图
         layoutResultSort = findViewById(R.id.layoutResultSort);
@@ -458,6 +466,31 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         if (chipMatchPath != null) chipMatchPath.setChecked(presets.matchPath != 0);
         if (chipRegex != null) chipRegex.setChecked(presets.matchRegex != 0);
         refreshSortIndicators();
+        refreshQuickSearches();
+    }
+
+    /** 渲染快速检索 chips：设置页每行"显示名 (过滤模式)"，点击后括号内模式直接作为 kw 搜索。 */
+    private void refreshQuickSearches() {
+        List<String[]> items =
+                EtpSettingsActivity.PathPresets.parseQuickSearches(presets.quickSearchText);
+        if (items.isEmpty()) {
+            layoutQuickSearch.setVisibility(View.GONE);
+            return;
+        }
+        layoutQuickSearch.setVisibility(View.VISIBLE);
+        cgQuickSearch.removeAllViews();
+        for (String[] item : items) {
+            Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
+            chip.setText(item[0]);
+            chip.setClickable(true);
+            chip.setCheckable(false);
+            chip.setOnClickListener(v -> {
+                // 与搜索历史一致：模式直接填入搜索框并作为 kw 发起搜索
+                etSearch.setText(item[1]);
+                viewModel.search(item[1]);
+            });
+            cgQuickSearch.addView(chip);
+        }
     }
 
     private void collectFromUI() {
@@ -511,7 +544,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             }
         });
 
-        viewModel.connect(host, port);
+        // 仅保存目标地址；首次发起搜索时才建立连接
+        viewModel.init(host, port);
     }
 
     // ==================== 状态渲染 ====================
@@ -823,14 +857,24 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
             chip.setText(q);
             chip.setClickable(true);
             chip.setCheckable(false);
-            chip.setCloseIconVisible(true);
             chip.setOnClickListener(v -> {
                 etSearch.setText(q);
                 viewModel.search(q);
             });
-            chip.setOnCloseIconClickListener(v -> {
-                viewModel.removeHistory(q);
-                if (etSearch.hasFocus()) refreshHistoryChips();
+            // 无删除按钮防误触：长按弹菜单（删除该条），点选即执行；清空走顶部按钮
+            chip.setOnLongClickListener(v -> {
+                PopupMenu popup = new PopupMenu(this, chip);
+                popup.getMenu().add(0, 1, 0, R.string.etp_history_delete_item);
+                popup.setOnMenuItemClickListener(item -> {
+                    if (item.getItemId() == 1) {
+                        viewModel.removeHistory(q);
+                        refreshHistoryChips();
+                        return true;
+                    }
+                    return false;
+                });
+                popup.show();
+                return true;
             });
             cgHistory.addView(chip);
         }
