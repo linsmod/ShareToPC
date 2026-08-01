@@ -75,6 +75,8 @@ public class EtpSettingsActivity extends AppCompatActivity {
         String quickSearchText;
         /** 结果排除：每行一个排除表达式，搜索时附加 ! 前缀。 */
         String excludeText;
+        /** 搜索页开关：查询时是否附加结果排除列表。 */
+        boolean excludeEnabled = true;
         // Search Syntax using paths: pathA | pathB | pathC {kw}
         static PathPresets defaults() {
             PathPresets p = new PathPresets();
@@ -270,6 +272,8 @@ public class EtpSettingsActivity extends AppCompatActivity {
 
         // 结果排除
         etExclude = findViewById(R.id.etExclude);
+        findViewById(R.id.btnRestoreExclude).setOnClickListener(v ->
+                etExclude.setText(PathPresets.defaults().excludeText));
 
         load();
         applyToUI();

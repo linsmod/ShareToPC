@@ -37,6 +37,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -78,7 +79,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private RecyclerView rvResults;
     private View layoutResultHeader, dividerResult;
     private TextView tvResultCount;
-    private TextView tvSearchQuery;
+    private MaterialButton btnToggleDetails;
     private View layoutQueryPaths;
     private LinearLayout layoutPathCheckboxes;
     private MaterialButton btnChangeSettings;
@@ -92,6 +93,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private ChipGroup cgQuickSearch;
 
     private boolean showingResults;
+    /** 是否正在查询（Searching 状态）：返回时撤销查询并提示。 */
+    private boolean querying;
 
     // 结果排序
     private View layoutResultSort;
@@ -100,6 +103,9 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private TextView tvSortName, tvSortSize, tvSortPath,
             tvSortExt, tvSortDateMod, tvSortDateCre;
 
+    // 搜索选项
+    private MaterialCheckBox cbExcludeList;
+
     private EtpSettingsActivity.PathPresets presets;
     private SortItem[] sortItems;
     private String currentSort;
@@ -107,16 +113,64 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private EtpResultAdapter resultAdapter;
 
+    /** 打开设置页前记录的查询参数快照（规范化 JSON），返回时对比是否变化。 */
+    private String settingsQuerySnapshot;
+
     private final ActivityResultLauncher<Intent> settingsLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
                     result -> {
-                        // 从设置页返回：重新加载预设并重新搜索
+                        // 从设置页返回：重新加载预设；生成的查询参数无变化时不发起新查询
+                        String before = settingsQuerySnapshot;
                         loadPresets();
                         initSortItems();
                         applyToUI();
+                        if (before != null && before.equals(queryParamsSnapshot())) return;
                         String q = etSearch.getText().toString().trim();
                         if (!q.isEmpty()) viewModel.search(q);
                     });
+
+    /** 打开设置页：先记录当前查询参数快照，返回时用于检测是否变化。 */
+    private void openSettings() {
+        settingsQuerySnapshot = queryParamsSnapshot();
+        settingsLauncher.launch(new Intent(this, EtpSettingsActivity.class));
+    }
+
+    /**
+     * 生成查询参数快照（规范化 JSON）：仅包含实际参与查询的参数
+     * （勾选路径、结果排除、匹配选项、排序、结果上限）。
+     * 与整体预设不同，快速检索、显示排序字段等纯 UI 配置变化不会触发重新查询。
+     */
+    private String queryParamsSnapshot() {
+        EtpSettingsActivity.PathPresets p = presets;
+        java.util.LinkedHashMap<String, Object> snap = new java.util.LinkedHashMap<>();
+
+        // 勾选路径：trim 后按顺序收集（与 buildPathFilter 拼接行为一致）
+        List<String> checkedPaths = new java.util.ArrayList<>();
+        if (p.paths != null) {
+            for (EtpSettingsActivity.PathEntry e : p.paths) {
+                if (e.checked) checkedPaths.add(e.path.trim());
+            }
+        }
+        snap.put("paths", checkedPaths);
+
+        // 结果排除：开关 + 排除表达式（与 buildPathFilter 附加 ! 的列表一致）
+        snap.put("excludeEnabled", p.excludeEnabled);
+        snap.put("excludes", EtpSettingsActivity.PathPresets.parseExcludes(p.excludeText));
+
+        // 匹配选项
+        snap.put("matchCase", p.matchCase);
+        snap.put("matchWholeWord", p.matchWholeWord);
+        snap.put("matchPath", p.matchPath);
+        snap.put("matchRegex", p.matchRegex);
+
+        // 排序（无排序字段时归一化为空串）
+        snap.put("sortName", p.sortName == null ? "" : p.sortName);
+        snap.put("sortAsc", p.sortAsc);
+
+        // 结果上限
+        snap.put("maxResults", Math.max(0, p.maxResults));
+        return gson.toJson(snap);
+    }
 
     // ---- SortItem ----
 
@@ -178,8 +232,12 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         }
     }
 
-    /** 从结果页回到搜索页。 */
+    /** 从结果页回到搜索页；正在查询时先撤销查询并提示已取消。 */
     private void backToSearch() {
+        if (querying) {
+            viewModel.cancelQuery();
+            Toast.makeText(this, R.string.etp_query_cancelled, Toast.LENGTH_SHORT).show();
+        }
         showingResults = false;
         renderResult(null); // 触发 renderReady
         etSearch.requestFocus();
@@ -201,7 +259,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         toolbar.inflateMenu(R.menu.etp_search_menu);
         toolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.action_etp_settings) {
-                settingsLauncher.launch(new Intent(this, EtpSettingsActivity.class));
+                openSettings();
                 return true;
             }
             return false;
@@ -221,14 +279,19 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         layoutProgressSearch = findViewById(R.id.layoutProgressSearch);
         rvResults = findViewById(R.id.rvResults);
         tvResultCount = findViewById(R.id.tvResultCount);
-        tvSearchQuery = findViewById(R.id.tvSearchQuery);
+        btnToggleDetails = findViewById(R.id.btnToggleDetails);
+        btnToggleDetails.setOnClickListener(v -> {
+            boolean show = layoutEmptyScroll.getVisibility() != View.VISIBLE;
+            layoutEmptyScroll.setVisibility(show ? View.VISIBLE : View.GONE);
+            btnToggleDetails.setText(show
+                    ? R.string.etp_details_hide : R.string.etp_details_show);
+        });
         layoutResultHeader = findViewById(R.id.layoutResultHeader);
         dividerResult = findViewById(R.id.dividerResult);
         layoutQueryPaths = findViewById(R.id.layoutQueryPaths);
         layoutPathCheckboxes = findViewById(R.id.layoutPathCheckboxes);
         btnChangeSettings = findViewById(R.id.btnChangeSettings);
-        btnChangeSettings.setOnClickListener(v ->
-                settingsLauncher.launch(new Intent(this, EtpSettingsActivity.class)));
+        btnChangeSettings.setOnClickListener(v -> openSettings());
         layoutQueryParams = findViewById(R.id.layoutQueryParams);
         layoutQueryParamRows = findViewById(R.id.layoutQueryParamRows);
         layoutEmptyScroll = findViewById(R.id.layoutEmptyScroll);
@@ -239,6 +302,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         // 结果排序视图
         layoutResultSort = findViewById(R.id.layoutResultSort);
         cgMatchOptions = findViewById(R.id.cgMatchOptions);
+        cbExcludeList = findViewById(R.id.cbExcludeList);
         tvSortName = findViewById(R.id.tvSortName);
         tvSortSize = findViewById(R.id.tvSortSize);
         tvSortPath = findViewById(R.id.tvSortPath);
@@ -294,6 +358,16 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         buildMatchChips();
         initSortItems();
         applyToUI();
+        initExcludeSwitch();
+    }
+
+    /** 搜索选项：查询时附加排除列表开关（先 applyToUI 同步状态，再注册监听避免误触发）。 */
+    private void initExcludeSwitch() {
+        cbExcludeList.setOnCheckedChangeListener((b, checked) -> {
+            if (presets.excludeEnabled == checked) return; // 状态同步触发，忽略
+            presets.excludeEnabled = checked;
+            commitFilter();
+        });
     }
 
     private void buildMatchChips() {
@@ -469,6 +543,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         if (chipWholeWord != null) chipWholeWord.setChecked(presets.matchWholeWord != 0);
         if (chipMatchPath != null) chipMatchPath.setChecked(presets.matchPath != 0);
         if (chipRegex != null) chipRegex.setChecked(presets.matchRegex != 0);
+        if (cbExcludeList != null) cbExcludeList.setChecked(presets.excludeEnabled);
         refreshSortIndicators();
         refreshQuickSearches();
     }
@@ -570,6 +645,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private void renderConnecting() {
         showingResults = false;
+        querying = false;
         setSearchEditable(true);
         searchArea.setVisibility(View.VISIBLE);
         showProgress();
@@ -586,6 +662,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private void renderReady() {
         showingResults = false;
+        querying = false;
         setSearchEditable(true);
         searchArea.setVisibility(View.VISIBLE);
         cgMatchOptions.setVisibility(View.GONE);
@@ -603,6 +680,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private void renderSearching(String query) {
         showingResults = true;
+        querying = true;
         setSearchEditable(false);
         searchArea.setVisibility(View.GONE);
         cgMatchOptions.setVisibility(View.VISIBLE);
@@ -617,6 +695,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private void renderResult(SearchUiState.HasResults r) {
         showingResults = true;
+        querying = false;
         setSearchEditable(false);
         searchArea.setVisibility(View.GONE);
         cgMatchOptions.setVisibility(View.VISIBLE);
@@ -641,18 +720,22 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
         tvResultCount.setVisibility(View.VISIBLE);
         tvResultCount.setText(getString(R.string.etp_result_count, r.totalCount));
-        tvSearchQuery.setVisibility(View.VISIBLE);
-        tvSearchQuery.setText(getString(R.string.etp_search_query_label, r.query));
+        btnToggleDetails.setVisibility(View.VISIBLE);
+        btnToggleDetails.setText(R.string.etp_details_show);
         resultAdapter.submitList(r.items);
         // footer：还有未传输的结果→“加载更多”；否则常驻“已加载全部 N 条”不消失
         resultAdapter.setFooterState(r.hasMore
                         ? EtpResultAdapter.FOOTER_LOAD_MORE
                         : EtpResultAdapter.FOOTER_ALL_LOADED,
                 r.items.size());
+        // 详情区内容总是渲染（默认收起，点击“详情”展开）
+        renderQueryPaths();
+        renderQueryParams(r.query);
     }
 
     private void renderEmpty(String query) {
         showingResults = true;
+        querying = false;
         setSearchEditable(false);
         searchArea.setVisibility(View.GONE);
         cgMatchOptions.setVisibility(View.VISIBLE);
@@ -663,14 +746,14 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         layoutResultSort.setVisibility(View.GONE);
         tvResultCount.setVisibility(View.VISIBLE);
         tvResultCount.setText(getString(R.string.etp_result_count, 0));
-        tvSearchQuery.setVisibility(View.VISIBLE);
-        tvSearchQuery.setText(getString(R.string.etp_search_query_label, query));
+        btnToggleDetails.setVisibility(View.VISIBLE);
+        btnToggleDetails.setText(R.string.etp_details_hide);
         resultAdapter.submitList(null);
         resultAdapter.setFooterState(EtpResultAdapter.FOOTER_HIDDEN, 0); // 无结果不显示 footer
         layoutResultsFrame.setVisibility(View.GONE);
         layoutEmptyScroll.setVisibility(View.VISIBLE);
 
-        // 渲染已选择的搜索位置（只读，按分组，每个分组带"更改设置"）
+        // 渲染已选择的搜索位置与查询语句详情
         renderQueryPaths();
         renderQueryParams(query);
     }
@@ -725,6 +808,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private void renderError(String message) {
         showingResults = false;
+        querying = false;
         setSearchEditable(true);
         searchArea.setVisibility(View.VISIBLE);
         cgMatchOptions.setVisibility(View.GONE);

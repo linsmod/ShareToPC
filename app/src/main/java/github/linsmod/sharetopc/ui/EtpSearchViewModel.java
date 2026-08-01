@@ -169,6 +169,16 @@ public class EtpSearchViewModel extends ViewModel {
         doQuery(query, 0, false);
     }
 
+    /** 撤销当前查询：关闭进行中的连接并清空查询状态（搜索页按返回取消时调用）。 */
+    public void cancelQuery() {
+        pendingQuery = null;
+        currentQuery = "";
+        allResults.clear();
+        hasMore = false;
+        loadMoreLoading = false;
+        cancelActiveQuery(); // 关闭后后台线程请求失败会静默退出（query 不匹配）
+    }
+
     /** 加载更多：从已显示条数开始拉取下一批。 */
     public void loadMore() {
         if (!hasMore || loadMoreLoading || currentQuery.isEmpty()) return;
@@ -308,14 +318,16 @@ public class EtpSearchViewModel extends ViewModel {
             }
         }
 
-        // 结果排除：query + ' ' + (items.join(' !'))
-        List<String> excludes = EtpSettingsActivity.PathPresets.parseExcludes(presets.excludeText);
-        if (!excludes.isEmpty()) {
-            StringBuilder sb = new StringBuilder(base);
-            for (String ex : excludes) {
-                sb.append(" !").append(ex);
+        // 结果排除：query + ' ' + (items.join(' !'))（仅搜索页开关开启时附加）
+        if (presets.excludeEnabled) {
+            List<String> excludes = EtpSettingsActivity.PathPresets.parseExcludes(presets.excludeText);
+            if (!excludes.isEmpty()) {
+                StringBuilder sb = new StringBuilder(base);
+                for (String ex : excludes) {
+                    sb.append(" !").append(ex);
+                }
+                base = sb.toString();
             }
-            base = sb.toString();
         }
         return base;
     }

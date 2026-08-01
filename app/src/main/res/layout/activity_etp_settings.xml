@@ -95,14 +95,14 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:gravity="left"
                 android:orientation="horizontal"
                 android:paddingVertical="4dp">
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipMatchCase"
                     style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
+                    android:layout_width="72dp"
                     android:layout_height="wrap_content"
                     android:text="Aa"
                     android:checkable="true" />
@@ -118,14 +118,14 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:gravity="left"
                 android:orientation="horizontal"
                 android:paddingVertical="4dp">
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipWholeWord"
                     style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
+                    android:layout_width="72dp"
                     android:layout_height="wrap_content"
                     android:text="Ab|"
                     android:checkable="true" />
@@ -141,16 +141,16 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:gravity="left"
                 android:orientation="horizontal"
                 android:paddingVertical="4dp">
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipMatchPath"
                     style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
+                    android:layout_width="72dp"
                     android:layout_height="wrap_content"
-                    android:text="路径"
+                    android:text="PATH"
                     android:checkable="true" />
 
                 <TextView
@@ -164,16 +164,16 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
+                android:gravity="left"
                 android:orientation="horizontal"
                 android:paddingVertical="4dp">
 
                 <com.google.android.material.chip.Chip
                     android:id="@+id/chipRegex"
                     style="@style/Widget.Material3.Chip.Filter"
-                    android:layout_width="wrap_content"
+                    android:layout_width="72dp"
                     android:layout_height="wrap_content"
-                    android:text=".*"
+                    android:text="Regex"
                     android:checkable="true" />
 
                 <TextView
@@ -282,9 +282,25 @@
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- 结果排除 -->
-            <TextView
-                style="@style/PathPresetSectionHeader"
-                android:text="@string/etp_exclude_title" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    style="@style/PathPresetSectionHeader"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/etp_exclude_title" />
+
+                <github.linsmod.sharetopc.ui.TextButton
+                    android:id="@+id/btnRestoreExclude"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/path_preset_restore_defaults" />
+            </LinearLayout>
 
             <com.google.android.material.textfield.TextInputLayout
                 style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
