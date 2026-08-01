@@ -1,24 +1,35 @@
-桌面遍历：
+
+可以排除的（使用时前面加!）
+path:regex:[A-Z]:\\Users\\.NET\sv2.0
+path:regex:[A-Z]:\\Users\\.NET\sv2.0\sClassic
+path:regex:[A-Z]:\\Users\\.NET\sv4.5
+path:regex:[A-Z]:\\Users\\.NET\sv4.5\sClassic
+path:regex:[A-Z]:\\Users\\Classic\s.NET\sAppPool
+path:regex:[A-Z]:\\Users\\DefaultAppPool
+path:regex:[A-Z]:\\Users\\Public
+path:regex:[A-Z]:\\Users\\([^\\]+)\\AppData
+path:regex:[A-Z]:\\Users\\DefaultAppPool
+path:regex:[A-Z]:\\Users\\Public\\
+path:regex:[A-Z]:\\Users\\Public\sUsers
+
+合并排除（使用时前面加!）
+path:regex:[A-Z]:\\Users\\(Public|\.NET|Classic|Default)[^\\]+
+
+桌面下的直接子目录
+regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+)$
+
+桌面下的递归子目录
 regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+)
 
-桌面直属 regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+)$
-文件夹 folder:regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+)$
-文件 file:regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+)$
+桌面下的文件夹
+folder:regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+)
 
-搜索用户目录一级内容
+桌面下的文件
+file:regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+)
+
+用户目录|一级
 regex:[A-Z]:\\Users\\([^\\]+)\\(Desktop|Documents|Musics|Videos|Downloads)\\([^\\]+)$
 
-regex:[A-Z]:\\Users\\([^\\]+)\\(Desktop|Documents|Musics|Videos|Downloads)\\([^\\]+)$ file:
-
-regex:[A-Z]:\\Users\\([^\\]+)\\(Desktop|Documents|Musics|Videos|Downloads)\\([^\\]+)$ folder:
-
-搜索用户目录,深度2
+用户目录|二级
 regex:[A-Z]:\\Users\\([^\\]+)\\(Desktop|Documents|Music|Videos|Downloads)\\([^\\]+(?:\\[^\\]+)?)$
-
-排除
-regex:[A-Z]:\\Users\\([^\\]+)\\(Desktop|Documents|Music|Videos|Downloads)\\([^\\]+(?:\\[^\\]+)?)$ !path:regex:[A-Z]:\\Users\\Public\\
-
-
-无结果
-(regex:[A-Z]:\\Users\\([^\\]+)\\Desktop\\([^\\]+) | regex:[A-Z]:\\Users\\([^\\]+)\\Documents\\([^\\]+) | regex:[A-Z]:\\Users\\([^\\]+)\\Downloads\\([^\\]+) | regex:[A-Z]:\\Users\\([^\\]+)\\Videos\\([^\\]+) | regex:[A-Z]:\\Users\\([^\\]+)\\Pictures\\([^\\]+) | regex:[A-Z]:\\Users\\([^\\]+)\\Musics\\([^\\]+)) 手机
 

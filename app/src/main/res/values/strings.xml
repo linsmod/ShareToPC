@@ -170,6 +170,7 @@
 
     <!-- 设备长按菜单 -->
     <string name="device_menu_etp_search">远程文件搜索</string>
+    <string name="device_menu_etp_explor">远程文件浏览</string>
     <string name="device_menu_device_props">设备属性</string>
 
     <!-- 路径预设 -->
@@ -216,6 +217,20 @@
     <string name="etp_exclude_enabled">使用排除列表</string>
     <string name="etp_details_show">详情</string>
     <string name="etp_details_hide">收起</string>
+
+    <!-- ETP 文件浏览 -->
+    <string name="etp_explorer_title_format">文件浏览 · %1$s</string>
+    <string name="etp_explorer_refresh">刷新</string>
+    <string name="etp_explorer_search">搜索</string>
+    <string name="etp_explorer_caching">正在初始化缓存…</string>
+    <string name="etp_explorer_refreshing">正在刷新缓存…</string>
+    <string name="etp_explorer_progress">正在搜索：%1$s（%2$d/%3$d）</string>
+    <string name="etp_explorer_cached_at">缓存于 %1$s，点击右上角刷新可更新</string>
+    <string name="etp_explorer_updated_at">已更新 %1$s</string>
+    <string name="etp_explorer_count">%1$d 个</string>
+    <string name="etp_explorer_empty">未在常用位置找到文件，试试搜索</string>
+    <string name="etp_explorer_retry">重试</string>
+    <string name="etp_explorer_go_search">去搜索</string>
 
     <string-array name="path_preset_sort_fields">
         <item>默认排序</item>

@@ -32,6 +32,7 @@ import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.ui.DevicesFragment;
+import github.linsmod.sharetopc.ui.EtpExplorerActivity;
 import github.linsmod.sharetopc.ui.EtpSearchActivity;
 import github.linsmod.sharetopc.ui.TaskFragment;
 import github.linsmod.sharetopc.ui.SettingsActivity;
@@ -139,6 +140,12 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(this, EtpSearchActivity.class);
         intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_NAME, device.displayName());
         intent.putExtra(EtpSearchActivity.EXTRA_HOST, device.host);
+        startActivity(intent);
+    }
+    public void showEtpExplorer(DiscoveredDevice device) {
+        Intent intent = new Intent(this, EtpExplorerActivity.class);
+        intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_NAME, device.displayName());
+        intent.putExtra(EtpExplorerActivity.EXTRA_HOST, device.host);
         startActivity(intent);
     }
 

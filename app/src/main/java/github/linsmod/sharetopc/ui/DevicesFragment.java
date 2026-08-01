@@ -72,6 +72,10 @@ public class DevicesFragment extends Fragment {
         popup.getMenuInflater().inflate(R.menu.device_context_menu, popup.getMenu());
         popup.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
+            if (id == R.id.action_etp_explorer) {
+                ((MainActivity) requireActivity()).showEtpExplorer(device);
+                return true;
+            }
             if (id == R.id.action_etp_search) {
                 ((MainActivity) requireActivity()).showEtpSearch(device);
                 return true;
