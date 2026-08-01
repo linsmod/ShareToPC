@@ -57,33 +57,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-        <!-- 常用位置 -->
-        <LinearLayout
-            android:id="@+id/layoutCommonPaths"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:visibility="gone"
-            tools:visibility="visible">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingHorizontal="16dp"
-                android:paddingTop="8dp"
-                android:text="@string/path_preset_common"
-                android:textAppearance="?attr/textAppearanceTitleSmall" />
-
-            <LinearLayout
-                android:id="@+id/layoutCommonPathCheckboxes"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:paddingHorizontal="16dp"
-                android:paddingTop="4dp"
-                android:paddingBottom="4dp" />
-        </LinearLayout>
-
         <!-- 搜索历史 -->
         <LinearLayout
             android:id="@+id/layoutHistory"

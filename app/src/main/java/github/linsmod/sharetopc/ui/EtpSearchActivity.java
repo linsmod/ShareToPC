@@ -3,7 +3,6 @@ package github.linsmod.sharetopc.ui;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
-import android.content.res.TypedArray;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -19,12 +18,12 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.CheckBox;
-import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -38,7 +37,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
-import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.divider.MaterialDividerItemDecoration;
 import com.google.android.material.textfield.TextInputEditText;
@@ -72,8 +70,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     // View 引用
     private View searchArea;
     private TextInputEditText etSearch;
-    private View layoutCommonPaths;
-    private LinearLayout layoutCommonPathCheckboxes;
     private View layoutHistory;
     private ChipGroup cgHistory;
     private ProgressBar progressSearch;
@@ -103,6 +99,16 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     private final Gson gson = new Gson();
 
     private EtpResultAdapter resultAdapter;
+
+    private final ActivityResultLauncher<Intent> settingsLauncher =
+            registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+                    result -> {
+                        // 从设置页返回：重新加载预设并重新搜索
+                        loadPresets();
+                        applyToUI();
+                        String q = etSearch.getText().toString().trim();
+                        if (!q.isEmpty()) viewModel.search(q);
+                    });
 
     // ---- SortItem ----
 
@@ -187,7 +193,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         toolbar.inflateMenu(R.menu.etp_search_menu);
         toolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.action_etp_settings) {
-                startActivity(new Intent(this, EtpSettingsActivity.class));
+                settingsLauncher.launch(new Intent(this, EtpSettingsActivity.class));
                 return true;
             }
             return false;
@@ -197,8 +203,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         searchArea = findViewById(R.id.searchArea);
         cgHistory = findViewById(R.id.cgRecentSearches);
         layoutHistory = findViewById(R.id.layoutHistory);
-        layoutCommonPaths = findViewById(R.id.layoutCommonPaths);
-        layoutCommonPathCheckboxes = findViewById(R.id.layoutCommonPathCheckboxes);
 
         // 清空搜索历史
         findViewById(R.id.tvClearHistory).setOnClickListener(v -> {
@@ -253,10 +257,8 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         // 激活输入框时显示常用位置和搜索历史，失焦时隐藏
         etSearch.setOnFocusChangeListener((v, hasFocus) -> {
             if (hasFocus && viewModel.isConnected()) {
-                refreshCommonPaths();
                 refreshHistoryChips();
             } else if (!hasFocus) {
-                layoutCommonPaths.setVisibility(View.GONE);
                 layoutHistory.setVisibility(View.GONE);
             }
         });
@@ -522,7 +524,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         tvResultCount.setVisibility(View.GONE);
         cgMatchOptions.setVisibility(View.GONE);
         layoutHistory.setVisibility(View.GONE);
-        layoutCommonPaths.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.GONE);
         layoutEmptyScroll.setVisibility(View.GONE);
         layoutResultsFrame.setVisibility(View.GONE);
@@ -608,23 +609,81 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         tvSearchQuery.setText(getString(R.string.etp_search_query_label, query));
         resultAdapter.submitList(null);
         layoutResultsFrame.setVisibility(View.GONE);
-
-        // 动态创建路径 CheckBox 列表
-        List<EtpSearchViewModel.PathItem> items = viewModel.getAllPathItems();
-        layoutPathCheckboxes.removeAllViews();
-        layoutQueryPaths.setVisibility(View.VISIBLE);
         layoutEmptyScroll.setVisibility(View.VISIBLE);
 
-        for (EtpSearchViewModel.PathItem item : items) {
-            CheckBox cb = new CheckBox(this);
-            cb.setText(item.label);
-            cb.setChecked(item.checked);
-            cb.setOnCheckedChangeListener((buttonView, isChecked) ->
-                    viewModel.togglePath(item.key, item.type, isChecked));
-            layoutPathCheckboxes.addView(cb);
+        // 渲染已选择的搜索位置（只读，按分组，每个分组带"更改设置"）
+        renderQueryPaths();
+        renderQueryParams(query);
+    }
+
+    /** 渲染空结果时的"查询了以下位置"：仅显示已勾选的路径，分组展示。 */
+    private void renderQueryPaths() {
+        layoutPathCheckboxes.removeAllViews();
+        List<EtpSearchViewModel.PathItem> all = viewModel.getAllPathItems();
+        List<EtpSearchViewModel.PathItem> selected = new java.util.ArrayList<>();
+        for (EtpSearchViewModel.PathItem item : all) {
+            if (item.checked) selected.add(item);
+        }
+        if (selected.isEmpty()) {
+            layoutQueryPaths.setVisibility(View.GONE);
+            return;
         }
 
-        renderQueryParams(query);
+        // 分组：common / drive / custom_path
+        String[][] groups = {
+                {"common", getString(R.string.path_preset_common)},
+                {"drive", getString(R.string.path_preset_drives)},
+                {"custom_path", getString(R.string.path_preset_custom)},
+        };
+        boolean hasAny = false;
+        for (String[] group : groups) {
+            List<EtpSearchViewModel.PathItem> items = new java.util.ArrayList<>();
+            for (EtpSearchViewModel.PathItem item : selected) {
+                if (group[0].equals(item.type)) items.add(item);
+            }
+            if (items.isEmpty()) continue;
+            hasAny = true;
+
+            // 分组标题 + "更改设置"
+            LinearLayout header = new LinearLayout(this);
+            header.setOrientation(LinearLayout.HORIZONTAL);
+            header.setGravity(Gravity.CENTER_VERTICAL);
+            header.setPadding(0, dp(4), 0, 0);
+
+            TextView title = new TextView(this);
+            title.setText(group[1]);
+            title.setTextAppearance(
+                    com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
+            title.setLayoutParams(new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            header.addView(title);
+
+            TextButton change = new TextButton(this);
+            change.setText(R.string.etp_change_settings);
+            TypedValue colorTv = new TypedValue();
+            getTheme().resolveAttribute(android.R.attr.colorPrimary, colorTv, true);
+            change.setTextColor(colorTv.data);
+            change.setOnClickListener(v ->
+                    settingsLauncher.launch(new Intent(this, EtpSettingsActivity.class)));
+            header.addView(change);
+
+            layoutPathCheckboxes.addView(header);
+
+            // 已选择的路径
+            for (EtpSearchViewModel.PathItem item : items) {
+                TextView tv = new TextView(this);
+                tv.setText(item.label);
+                tv.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
+                tv.setPadding(0, dp(2), 0, dp(2));
+                tv.setLayoutParams(new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT));
+                layoutPathCheckboxes.addView(tv);
+            }
+        }
+
+        layoutQueryPaths.setVisibility(View.VISIBLE);
+        if (!hasAny) layoutQueryPaths.setVisibility(View.GONE);
     }
 
     /** 渲染空结果时的"查询参数"小节。 */
@@ -712,7 +771,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         tvResultCount.setVisibility(View.GONE);
         resultAdapter.submitList(null);
         layoutHistory.setVisibility(View.GONE);
-        layoutCommonPaths.setVisibility(View.GONE);
         layoutResultSort.setVisibility(View.GONE);
         layoutEmptyScroll.setVisibility(View.GONE);
         layoutResultsFrame.setVisibility(View.GONE);
@@ -725,58 +783,6 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         etSearch.setFocusableInTouchMode(editable);
         etSearch.setCursorVisible(editable);
         etSearch.setClickable(!editable);
-    }
-
-    // ==================== 常用位置 CheckBox ====================
-
-    /** 渲染常用位置列表，样式与设置页一致。 */
-    private void refreshCommonPaths() {
-        layoutCommonPathCheckboxes.removeAllViews();
-        List<EtpSearchViewModel.PathItem> items = new java.util.ArrayList<>();
-        for (EtpSearchViewModel.PathItem item : viewModel.getAllPathItems()) {
-            if ("common".equals(item.type)) items.add(item);
-        }
-        if (items.isEmpty()) {
-            layoutCommonPaths.setVisibility(View.GONE);
-            return;
-        }
-        layoutCommonPaths.setVisibility(View.VISIBLE);
-
-        TypedArray a = obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackground});
-        int selectableItemBackground = a.getResourceId(0, 0);
-        a.recycle();
-
-        for (EtpSearchViewModel.PathItem item : items) {
-            LinearLayout wrapper = new LinearLayout(this);
-            LinearLayout.LayoutParams wlp = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-            wlp.setMargins(dp(2), dp(2), dp(2), dp(2));
-            wrapper.setLayoutParams(wlp);
-            wrapper.setBackgroundResource(selectableItemBackground);
-            wrapper.setClickable(true);
-            wrapper.setFocusable(true);
-            wrapper.setOrientation(LinearLayout.HORIZONTAL);
-            wrapper.setGravity(Gravity.CENTER_VERTICAL);
-
-            MaterialCheckBox cb = new MaterialCheckBox(this);
-            cb.setLayoutParams(new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT));
-            cb.setBackground(null);
-            cb.setText(item.label);
-            cb.setChecked(item.checked);
-            cb.setClickable(false);
-            cb.setFocusable(false);
-            cb.setGravity(Gravity.CENTER);
-
-            wrapper.setOnClickListener(v -> {
-                cb.toggle();
-                viewModel.togglePath(item.key, item.type, cb.isChecked());
-            });
-            wrapper.addView(cb);
-            layoutCommonPathCheckboxes.addView(wrapper);
-        }
     }
 
     // ==================== 搜索历史 Chips ====================
