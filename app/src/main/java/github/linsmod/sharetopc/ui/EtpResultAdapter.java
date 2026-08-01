@@ -163,22 +163,27 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
 
         // 位置标签：匹配 presets paths 获取标签，显示 C:\Users\{user}\Documents 等，或盘符
         String locationLabel = getLocationLabel(r);
-        if (locationLabel != null) {
-            ivh.tvLocation.setText(locationLabel);
-            ivh.tvLocation.setVisibility(View.VISIBLE);
-        } else {
-            ivh.tvLocation.setVisibility(View.GONE);
-        }
 
-        // 第二行：路径 + 日期
+        // 第二行：位置标签 + 路径 + 日期
+        boolean hasLocation = locationLabel != null;
         boolean hasPath = r.path != null && !r.path.isEmpty();
         boolean hasDate = r.dateModified > 0;
-        if (hasPath && !r.path.isEmpty()) {
+        if (hasLocation || hasPath || hasDate) {
             ivh.layoutPathRow.setVisibility(View.VISIBLE);
-            ivh.tvPath.setText(r.path + "\\" + r.name);
-        } else if (hasDate) {
-            ivh.layoutPathRow.setVisibility(View.VISIBLE);
-            ivh.tvPath.setVisibility(View.GONE);
+
+            if (hasLocation) {
+                ivh.tvLocation.setText(locationLabel);
+                ivh.tvLocation.setVisibility(View.VISIBLE);
+            } else {
+                ivh.tvLocation.setVisibility(View.GONE);
+            }
+
+            if (hasPath) {
+                ivh.tvPath.setVisibility(View.VISIBLE);
+                ivh.tvPath.setText(r.path + "\\" + r.name);
+            } else {
+                ivh.tvPath.setVisibility(View.GONE);
+            }
         } else {
             ivh.layoutPathRow.setVisibility(View.GONE);
         }

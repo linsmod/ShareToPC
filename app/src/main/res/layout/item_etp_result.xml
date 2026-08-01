@@ -36,20 +36,6 @@
             tools:text="document_report_2025.pdf" />
 
         <TextView
-            android:id="@+id/tvLocation"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:background="@drawable/bg_location_tag"
-            android:paddingStart="6dp"
-            android:paddingEnd="6dp"
-            android:paddingTop="2dp"
-            android:paddingBottom="2dp"
-            android:textColor="?attr/colorOnSecondaryContainer"
-            android:textSize="10sp"
-            android:visibility="gone" />
-
-        <TextView
             android:id="@+id/tvFileSize"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -59,16 +45,29 @@
             tools:text="2.5 MB" />
     </LinearLayout>
 
-    <!-- 第二行：路径（缩进与图标对齐） -->
+    <!-- 第二行：位置标签 + 路径 + 日期 -->
     <LinearLayout
         android:id="@+id/layoutPathRow"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="38dp"
         android:layout_marginTop="4dp"
         android:gravity="center_vertical"
         android:visibility="gone"
         tools:visibility="visible">
+
+        <TextView
+            android:id="@+id/tvLocation"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/bg_location_tag"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textColor="?attr/colorOnSecondaryContainer"
+            android:textSize="10sp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/tvPath"
