@@ -11,6 +11,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using static ShareToPcReciver.Net.TransferServer;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace ShareToPcReciver.Net
 {
@@ -204,18 +205,19 @@ namespace ShareToPcReciver.Net
             long time = header.TryGetProperty("time", out JsonElement ts) ? ts.GetInt64() : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             string jobId = header.TryGetProperty("jobId", out JsonElement jid) ? jid.GetString() ?? "" : "";
             Util.Log.Info($"TEXT from {clientDevice.DeviceName}: {text}");
+
+            string filePath = _storage.SaveTextContent(text);
+
             _server.OnTextReceived(new ReceivedText
             {
                 DeviceName = clientDevice.DeviceName,
                 Text = text,
                 Time = time,
-                JobId = jobId
+                JobId = jobId,
+                FilePath = filePath
             });
             await Protocol.WriteAckAsync(stream, true, "", _ct);
         }
-
-        public static int TEXT_OBJECT = 1;
-        public static int FILE_OBJECT = 2;
         private async Task HandleObjectStream(Stream stream, JsonElement header, long payloadLength)
         {
             if (authResult == null || !authResult.IsAccepted)

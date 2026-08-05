@@ -18,19 +18,20 @@ namespace ShareToPcReciver
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(MainForm));
             this.statusStrip = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabel1 = new System.Windows.Forms.ToolStripStatusLabel();
             this.lblStatus = new System.Windows.Forms.ToolStripStatusLabel();
             this.lblPort = new System.Windows.Forms.ToolStripStatusLabel();
             this.lblIp = new System.Windows.Forms.ToolStripStatusLabel();
             this.btnCopyIp = new System.Windows.Forms.ToolStripButton();
-            this.columnHeader1 = new System.Windows.Forms.ColumnHeader();
-            this.columnHeader2 = new System.Windows.Forms.ColumnHeader();
-            this.columnHeader3 = new System.Windows.Forms.ColumnHeader();
-            this.columnHeader6 = new System.Windows.Forms.ColumnHeader();
-            this.columnHeader7 = new System.Windows.Forms.ColumnHeader();
-            this.columnHeader4 = new System.Windows.Forms.ColumnHeader();
-            this.columnHeader5 = new System.Windows.Forms.ColumnHeader();
+            this.columnHeader1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader2 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader3 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader6 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader7 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader4 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader5 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.btnOpenDir = new System.Windows.Forms.Button();
             this.btnDevices = new System.Windows.Forms.Button();
             this.btnSettings = new System.Windows.Forms.Button();
@@ -53,48 +54,53 @@ namespace ShareToPcReciver
             this.menuSeparator2 = new System.Windows.Forms.ToolStripSeparator();
             this.menuDeleteRecord = new System.Windows.Forms.ToolStripMenuItem();
             this.menuDeleteWithFile = new System.Windows.Forms.ToolStripMenuItem();
+            this.statusStrip.SuspendLayout();
+            this.contextMenuStrip.SuspendLayout();
+            this.lvHistoryMenu.SuspendLayout();
             this.SuspendLayout();
             // 
             // statusStrip
             // 
+            this.statusStrip.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.statusStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripStatusLabel1,
             this.lblStatus,
             this.lblPort,
             this.lblIp,
             this.btnCopyIp});
-            this.statusStrip.Location = new System.Drawing.Point(0, 374);
+            this.statusStrip.Location = new System.Drawing.Point(0, 488);
             this.statusStrip.Name = "statusStrip";
-            this.statusStrip.Size = new System.Drawing.Size(784, 22);
+            this.statusStrip.Padding = new System.Windows.Forms.Padding(1, 0, 19, 0);
+            this.statusStrip.Size = new System.Drawing.Size(1045, 26);
             this.statusStrip.TabIndex = 0;
             this.statusStrip.Text = "statusStrip1";
             // 
             // toolStripStatusLabel1
             // 
             this.toolStripStatusLabel1.Name = "toolStripStatusLabel1";
-            this.toolStripStatusLabel1.Size = new System.Drawing.Size(114, 17);
+            this.toolStripStatusLabel1.Size = new System.Drawing.Size(129, 20);
             this.toolStripStatusLabel1.Text = "状态：服务未运行";
             // 
             // lblStatus
             // 
             this.lblStatus.Name = "lblStatus";
-            this.lblStatus.Size = new System.Drawing.Size(0, 17);
+            this.lblStatus.Size = new System.Drawing.Size(0, 20);
             // 
             // lblPort
             // 
             this.lblPort.Name = "lblPort";
-            this.lblPort.Size = new System.Drawing.Size(0, 17);
+            this.lblPort.Size = new System.Drawing.Size(0, 20);
             // 
             // lblIp
             // 
             this.lblIp.Name = "lblIp";
-            this.lblIp.Size = new System.Drawing.Size(0, 17);
+            this.lblIp.Size = new System.Drawing.Size(0, 20);
             // 
             // btnCopyIp
             // 
             this.btnCopyIp.DisplayStyle = System.Windows.Forms.ToolStripItemDisplayStyle.Text;
             this.btnCopyIp.Name = "btnCopyIp";
-            this.btnCopyIp.Size = new System.Drawing.Size(44, 17);
+            this.btnCopyIp.Size = new System.Drawing.Size(56, 24);
             this.btnCopyIp.Text = "复制IP";
             this.btnCopyIp.Click += new System.EventHandler(this.BtnCopyIp_Click);
             // 
@@ -116,7 +122,6 @@ namespace ShareToPcReciver
             // columnHeader6
             // 
             this.columnHeader6.Text = "扩展名";
-            this.columnHeader6.Width = 60;
             // 
             // columnHeader7
             // 
@@ -135,9 +140,10 @@ namespace ShareToPcReciver
             // 
             // btnOpenDir
             // 
-            this.btnOpenDir.Location = new System.Drawing.Point(12, 10);
+            this.btnOpenDir.Location = new System.Drawing.Point(16, 12);
+            this.btnOpenDir.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.btnOpenDir.Name = "btnOpenDir";
-            this.btnOpenDir.Size = new System.Drawing.Size(120, 25);
+            this.btnOpenDir.Size = new System.Drawing.Size(160, 31);
             this.btnOpenDir.TabIndex = 1;
             this.btnOpenDir.Text = "打开接收目录";
             this.btnOpenDir.UseVisualStyleBackColor = true;
@@ -145,9 +151,10 @@ namespace ShareToPcReciver
             // 
             // btnDevices
             // 
-            this.btnDevices.Location = new System.Drawing.Point(215, 10);
+            this.btnDevices.Location = new System.Drawing.Point(287, 12);
+            this.btnDevices.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.btnDevices.Name = "btnDevices";
-            this.btnDevices.Size = new System.Drawing.Size(75, 25);
+            this.btnDevices.Size = new System.Drawing.Size(100, 31);
             this.btnDevices.TabIndex = 3;
             this.btnDevices.Text = "设备管理";
             this.btnDevices.UseVisualStyleBackColor = true;
@@ -155,9 +162,10 @@ namespace ShareToPcReciver
             // 
             // btnSettings
             // 
-            this.btnSettings.Location = new System.Drawing.Point(140, 10);
+            this.btnSettings.Location = new System.Drawing.Point(187, 12);
+            this.btnSettings.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.btnSettings.Name = "btnSettings";
-            this.btnSettings.Size = new System.Drawing.Size(75, 25);
+            this.btnSettings.Size = new System.Drawing.Size(100, 31);
             this.btnSettings.TabIndex = 2;
             this.btnSettings.Text = "设置";
             this.btnSettings.UseVisualStyleBackColor = true;
@@ -166,9 +174,10 @@ namespace ShareToPcReciver
             // btnMinimize
             // 
             this.btnMinimize.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnMinimize.Location = new System.Drawing.Point(697, 10);
+            this.btnMinimize.Location = new System.Drawing.Point(929, 12);
+            this.btnMinimize.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.btnMinimize.Name = "btnMinimize";
-            this.btnMinimize.Size = new System.Drawing.Size(75, 25);
+            this.btnMinimize.Size = new System.Drawing.Size(100, 31);
             this.btnMinimize.TabIndex = 4;
             this.btnMinimize.Text = "最小化";
             this.btnMinimize.UseVisualStyleBackColor = true;
@@ -177,29 +186,30 @@ namespace ShareToPcReciver
             // notifyIcon
             // 
             this.notifyIcon.ContextMenuStrip = this.contextMenuStrip;
+            this.notifyIcon.Icon = ((System.Drawing.Icon)(resources.GetObject("notifyIcon.Icon")));
             this.notifyIcon.Text = "ShareToPcReciver";
-            this.notifyIcon.Visible = false;
             this.notifyIcon.DoubleClick += new System.EventHandler(this.NotifyIcon_DoubleClick);
             // 
             // contextMenuStrip
             // 
+            this.contextMenuStrip.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.contextMenuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripMenuItemOpen,
             this.toolStripMenuItemExit});
             this.contextMenuStrip.Name = "contextMenuStrip";
-            this.contextMenuStrip.Size = new System.Drawing.Size(115, 70);
+            this.contextMenuStrip.Size = new System.Drawing.Size(139, 52);
             // 
             // toolStripMenuItemOpen
             // 
             this.toolStripMenuItemOpen.Name = "toolStripMenuItemOpen";
-            this.toolStripMenuItemOpen.Size = new System.Drawing.Size(114, 22);
+            this.toolStripMenuItemOpen.Size = new System.Drawing.Size(138, 24);
             this.toolStripMenuItemOpen.Text = "打开窗口";
             this.toolStripMenuItemOpen.Click += new System.EventHandler(this.ToolStripMenuItemOpen_Click);
             // 
             // toolStripMenuItemExit
             // 
             this.toolStripMenuItemExit.Name = "toolStripMenuItemExit";
-            this.toolStripMenuItemExit.Size = new System.Drawing.Size(114, 22);
+            this.toolStripMenuItemExit.Size = new System.Drawing.Size(138, 24);
             this.toolStripMenuItemExit.Text = "退出";
             this.toolStripMenuItemExit.Click += new System.EventHandler(this.ToolStripMenuItemExit_Click);
             // 
@@ -224,11 +234,11 @@ namespace ShareToPcReciver
             this.lvHistory.FullRowSelect = true;
             this.lvHistory.GridLines = true;
             this.lvHistory.HideSelection = false;
-            this.lvHistory.Location = new System.Drawing.Point(12, 44);
-            this.lvHistory.MultiSelect = true;
+            this.lvHistory.Location = new System.Drawing.Point(16, 55);
+            this.lvHistory.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.lvHistory.Name = "lvHistory";
             this.lvHistory.OwnerDraw = true;
-            this.lvHistory.Size = new System.Drawing.Size(760, 345);
+            this.lvHistory.Size = new System.Drawing.Size(1012, 430);
             this.lvHistory.TabIndex = 0;
             this.lvHistory.UseCompatibleStateImageBehavior = false;
             this.lvHistory.View = System.Windows.Forms.View.Details;
@@ -236,6 +246,7 @@ namespace ShareToPcReciver
             // 
             // lvHistoryMenu
             // 
+            this.lvHistoryMenu.ImageScalingSize = new System.Drawing.Size(20, 20);
             this.lvHistoryMenu.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.menuOpenFile,
             this.menuOpenFolder,
@@ -248,93 +259,100 @@ namespace ShareToPcReciver
             this.menuDeleteRecord,
             this.menuDeleteWithFile});
             this.lvHistoryMenu.Name = "lvHistoryMenu";
-            this.lvHistoryMenu.Size = new System.Drawing.Size(181, 92);
+            this.lvHistoryMenu.Size = new System.Drawing.Size(188, 208);
             this.lvHistoryMenu.Opening += new System.ComponentModel.CancelEventHandler(this.LvHistoryMenu_Opening);
             // 
             // menuOpenFile
             // 
             this.menuOpenFile.Name = "menuOpenFile";
-            this.menuOpenFile.Size = new System.Drawing.Size(180, 22);
+            this.menuOpenFile.Size = new System.Drawing.Size(187, 24);
             this.menuOpenFile.Text = "打开文件";
             this.menuOpenFile.Click += new System.EventHandler(this.MenuOpenFile_Click);
             // 
             // menuOpenFolder
             // 
             this.menuOpenFolder.Name = "menuOpenFolder";
-            this.menuOpenFolder.Size = new System.Drawing.Size(180, 22);
+            this.menuOpenFolder.Size = new System.Drawing.Size(187, 24);
             this.menuOpenFolder.Text = "打开所在文件夹";
             this.menuOpenFolder.Click += new System.EventHandler(this.MenuOpenFolder_Click);
             // 
             // menuCopyContent
             // 
             this.menuCopyContent.Name = "menuCopyContent";
-            this.menuCopyContent.Size = new System.Drawing.Size(180, 22);
+            this.menuCopyContent.Size = new System.Drawing.Size(187, 24);
             this.menuCopyContent.Text = "复制内容";
             this.menuCopyContent.Click += new System.EventHandler(this.MenuCopyContent_Click);
             // 
             // menuViewDetail
             // 
             this.menuViewDetail.Name = "menuViewDetail";
-            this.menuViewDetail.Size = new System.Drawing.Size(180, 22);
+            this.menuViewDetail.Size = new System.Drawing.Size(187, 24);
             this.menuViewDetail.Text = "查看详情";
             this.menuViewDetail.Click += new System.EventHandler(this.MenuViewDetail_Click);
             // 
             // menuSeparator1
             // 
             this.menuSeparator1.Name = "menuSeparator1";
-            this.menuSeparator1.Size = new System.Drawing.Size(177, 6);
+            this.menuSeparator1.Size = new System.Drawing.Size(184, 6);
             // 
             // menuCancelTransfer
             // 
             this.menuCancelTransfer.Name = "menuCancelTransfer";
-            this.menuCancelTransfer.Size = new System.Drawing.Size(180, 22);
+            this.menuCancelTransfer.Size = new System.Drawing.Size(187, 24);
             this.menuCancelTransfer.Text = "取消传输";
             this.menuCancelTransfer.Click += new System.EventHandler(this.MenuCancelTransfer_Click);
             // 
             // menuContinueTransfer
             // 
             this.menuContinueTransfer.Name = "menuContinueTransfer";
-            this.menuContinueTransfer.Size = new System.Drawing.Size(180, 22);
+            this.menuContinueTransfer.Size = new System.Drawing.Size(187, 24);
             this.menuContinueTransfer.Text = "继续传输";
             this.menuContinueTransfer.Click += new System.EventHandler(this.MenuContinueTransfer_Click);
             // 
             // menuSeparator2
             // 
             this.menuSeparator2.Name = "menuSeparator2";
-            this.menuSeparator2.Size = new System.Drawing.Size(177, 6);
+            this.menuSeparator2.Size = new System.Drawing.Size(184, 6);
             // 
             // menuDeleteRecord
             // 
             this.menuDeleteRecord.Name = "menuDeleteRecord";
-            this.menuDeleteRecord.Size = new System.Drawing.Size(180, 22);
+            this.menuDeleteRecord.Size = new System.Drawing.Size(187, 24);
             this.menuDeleteRecord.Text = "删除记录";
             this.menuDeleteRecord.Click += new System.EventHandler(this.MenuDeleteRecord_Click);
             // 
             // menuDeleteWithFile
             // 
             this.menuDeleteWithFile.Name = "menuDeleteWithFile";
-            this.menuDeleteWithFile.Size = new System.Drawing.Size(180, 22);
+            this.menuDeleteWithFile.Size = new System.Drawing.Size(187, 24);
             this.menuDeleteWithFile.Text = "删除记录 + 文件";
             this.menuDeleteWithFile.Click += new System.EventHandler(this.MenuDeleteWithFile_Click);
             // 
             // MainForm
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 15F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(784, 411);
+            this.ClientSize = new System.Drawing.Size(1045, 514);
             this.Controls.Add(this.lvHistory);
             this.Controls.Add(this.btnOpenDir);
             this.Controls.Add(this.btnSettings);
             this.Controls.Add(this.btnDevices);
             this.Controls.Add(this.btnMinimize);
             this.Controls.Add(this.statusStrip);
-            this.MinimumSize = new System.Drawing.Size(400, 300);
+            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.MinimumSize = new System.Drawing.Size(527, 363);
             this.Name = "MainForm";
             this.Text = "ShareToPcReciver";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
             this.Load += new System.EventHandler(this.MainForm_Load);
+            this.statusStrip.ResumeLayout(false);
+            this.statusStrip.PerformLayout();
+            this.contextMenuStrip.ResumeLayout(false);
+            this.lvHistoryMenu.ResumeLayout(false);
             this.ResumeLayout(false);
             this.PerformLayout();
+
         }
 
         #endregion

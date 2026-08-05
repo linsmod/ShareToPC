@@ -1,3 +1,8 @@
+using ShareToPcReciver.Config;
+using ShareToPcReciver.Models;
+using ShareToPcReciver.Net;
+using ShareToPcReciver.Storage;
+using ShareToPcReciver.Util;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -9,12 +14,8 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using ShareToPcReciver.Config;
-using ShareToPcReciver.Models;
-using ShareToPcReciver.Net;
-using ShareToPcReciver.Storage;
-using ShareToPcReciver.Util;
 using static ShareToPcReciver.Net.TransferServer;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
 
 namespace ShareToPcReciver
 {
@@ -37,9 +38,14 @@ namespace ShareToPcReciver
         {
             InitializeComponent();
 
-            Icon appIcon = SystemIcons.Application;
-            this.Icon = appIcon;
-            notifyIcon.Icon = appIcon;
+            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app_icon.ico");
+            if (File.Exists(iconPath))
+            {
+                var icon = new System.Drawing.Icon(iconPath);
+                this.Icon = icon;
+                notifyIcon.Icon = icon;
+            }
+
             notifyIcon.Visible = true;
             notifyIcon.BalloonTipClicked += (s, ev) =>
             {
@@ -513,6 +519,7 @@ namespace ShareToPcReciver
             this.Invoke(new Action(() =>
             {
                 string preview = msg.Text.Length > 80 ? msg.Text.Substring(0, 80) + "..." : msg.Text;
+                _lastFilePath = msg.FilePath;
                 AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, "", msg.Text.Length + " 字符", msg.DeviceName, msg);
                 PerformTextAction(msg);
 
@@ -525,6 +532,8 @@ namespace ShareToPcReciver
             }));
         }
 
+        public static int TEXT_OBJECT = 1;
+        public static int FILE_OBJECT = 2;
         private void OnFileReceived(ReceivedFile msg)
         {
             lock (_historyLock)
@@ -555,14 +564,28 @@ namespace ShareToPcReciver
                     string ext = GetFileExtension(msg.FileName);
                     AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文件", msg.FileName, ext, FormatSize(msg.Size), msg.DeviceName, msg);
                 }
-                PerformFileAction(msg);
-
-                if (_config.ShowBalloon)
+                if (msg.ObjectType == TEXT_OBJECT)
                 {
-                    _lastFilePath = msg.FilePath;
-                    notifyIcon.BalloonTipTitle = "收到文件";
-                    notifyIcon.BalloonTipText = $"{msg.FileName} ({FormatSize(msg.Size)})";
-                    notifyIcon.ShowBalloonTip(5000);
+                    var content = File.ReadAllText(msg.FilePath);
+                    string preview = content.Length > 80 ? content.Substring(0, 80) + "..." : content;
+                    AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, "", content.Length + " 字符", msg.DeviceName, msg);
+                    PerformTextAction(new ReceivedText
+                    {
+                        DeviceName = msg.DeviceName,
+                        Text = content,
+                        Time = msg.Time,
+                        JobId = msg.JobId
+                    });
+                }
+                else { 
+                    PerformFileAction(msg);
+                    if (_config.ShowBalloon)
+                    {
+                        _lastFilePath = msg.FilePath;
+                        notifyIcon.BalloonTipTitle = "收到文件";
+                        notifyIcon.BalloonTipText = $"{msg.FileName} ({FormatSize(msg.Size)})";
+                        notifyIcon.ShowBalloonTip(5000);
+                    }
                 }
             }));
         }
@@ -908,8 +931,18 @@ namespace ShareToPcReciver
 
             if (action != ArrivalAction.CopyText)
                 return;
-            try { Clipboard.SetText(msg.Text); }
-            catch (Exception ex) { Log.Error("Copy text failed", ex); }
+            try {
+                Clipboard.SetText(msg.Text);
+                if (_config.ShowBalloon)
+                {
+                    notifyIcon.BalloonTipTitle = "SendToPC接收器";
+                    notifyIcon.BalloonTipText = "收到文本，可以粘贴";
+                    notifyIcon.ShowBalloonTip(3000);
+                }
+            }
+            catch (Exception ex) { 
+                Log.Error("Copy text failed", ex);
+            }
         }
 
         private void PerformFileAction(ReceivedFile msg)
@@ -1006,19 +1039,23 @@ namespace ShareToPcReciver
             bool singleSelect = selected.Count == 1;
             object record = selected[0];
             bool isFile = record is ReceivedFile;
+            bool isText = record is ReceivedText;
             bool isActiveTransfer = record is FileProgressInfo;
             bool fileExists = isFile
                 && !string.IsNullOrEmpty(((ReceivedFile)record).FilePath)
                 && File.Exists(((ReceivedFile)record).FilePath);
+            bool textFileExists = isText
+                && !string.IsNullOrEmpty(((ReceivedText)record).FilePath)
+                && File.Exists(((ReceivedText)record).FilePath);
 
             // 单条时显示操作类菜单（传输中不适用）
             menuOpenFile.Visible = singleSelect && isFile;
             menuOpenFile.Enabled = fileExists;
-            menuOpenFolder.Visible = singleSelect && isFile;
-            menuOpenFolder.Enabled = fileExists;
+            menuOpenFolder.Visible = singleSelect && (isFile || (isText && textFileExists));
+            menuOpenFolder.Enabled = fileExists || textFileExists;
             menuCopyContent.Text = singleSelect && isFile ? "复制文件路径" : "复制文本";
             menuCopyContent.Visible = singleSelect && !isActiveTransfer;
-            menuViewDetail.Visible = singleSelect && !isFile && !isActiveTransfer;
+            menuViewDetail.Visible = singleSelect && isText && !isActiveTransfer;
 
             // 取消/继续传输菜单
             bool isCancelledTransfer = isActiveTransfer && ((FileProgressInfo)record).Cancelled;
@@ -1044,8 +1081,15 @@ namespace ShareToPcReciver
 
         private void MenuOpenFolder_Click(object sender, EventArgs e)
         {
-            if (GetSelectedRecord() is ReceivedFile file && !string.IsNullOrEmpty(file.FilePath))
-                _storage.OpenFolder(file.FilePath);
+            switch (GetSelectedRecord())
+            {
+                case ReceivedFile file when !string.IsNullOrEmpty(file.FilePath):
+                    _storage.OpenFolder(file.FilePath);
+                    break;
+                case ReceivedText text when !string.IsNullOrEmpty(text.FilePath):
+                    _storage.OpenFolder(text.FilePath);
+                    break;
+            }
         }
 
         private void MenuCopyContent_Click(object sender, EventArgs e)

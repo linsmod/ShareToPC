@@ -183,10 +183,12 @@ namespace ShareToPcReciver.Storage
                 dir = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(dir) && Directory.Exists(dir))
                 {
+                    var openPath = File.Exists(path) ? path : dir;
                     System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                     {
-                        FileName = dir,
-                        UseShellExecute = true
+                        FileName = "explorer.exe",
+                        Arguments = $"/select,\"{openPath}\"",
+                        UseShellExecute = false
                     });
                 }
             }
@@ -194,6 +196,44 @@ namespace ShareToPcReciver.Storage
             {
                 Util.Log.Error($"Failed to open folder: {dir}", ex);
             }
+        }
+
+        /// <summary>将文本保存为 .txt 文件，文件名取自文本内容。返回最终文件路径。</summary>
+        public string SaveTextContent(string text)
+        {
+            string monthDir = Path.Combine(_baseDir, DateTime.Now.ToString("yyyy-MM"));
+            lock (_lock)
+            {
+                if (!Directory.Exists(monthDir))
+                    Directory.CreateDirectory(monthDir);
+            }
+
+            // 从文本生成文件名：取第一行（或前 60 字符），替换非法字符
+            string rawName = text.Trim();
+            rawName = rawName.Length > 60 ? rawName.Substring(0, 60) : rawName;
+            int lineBreak = rawName.IndexOfAny(new[] { '\r', '\n' });
+            if (lineBreak > 0) rawName = rawName.Substring(0, lineBreak);
+            string safeName = SanitizeFileName(rawName);
+            if (string.IsNullOrEmpty(safeName))
+                safeName = "text";
+            safeName += ".txt";
+
+            string finalPath;
+            lock (_lock)
+            {
+                var takenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (Directory.Exists(monthDir))
+                {
+                    foreach (var f in Directory.GetFiles(monthDir))
+                        takenNames.Add(Path.GetFileName(f));
+                }
+                string availableName = FindAvailableName(safeName, takenNames);
+                finalPath = Path.Combine(monthDir, availableName);
+                File.WriteAllText(finalPath, text, Encoding.UTF8);
+            }
+
+            Util.Log.Info($"TEXT saved: {finalPath}");
+            return finalPath;
         }
 
         private static string SanitizeTransferId(string transferId)

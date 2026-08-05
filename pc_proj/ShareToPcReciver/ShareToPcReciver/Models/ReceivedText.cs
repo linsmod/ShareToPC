@@ -8,6 +8,7 @@ namespace ShareToPcReciver.Models
         public string Text { get; set; } = "";
         public long Time { get; set; }
         public string JobId { get; set; } = "";
+        public string FilePath { get; set; } = "";
         public DateTime ReceivedAt => DateTimeOffset.FromUnixTimeMilliseconds(Time).LocalDateTime;
     }
 }
