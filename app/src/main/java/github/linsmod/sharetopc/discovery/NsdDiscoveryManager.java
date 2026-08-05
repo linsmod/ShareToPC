@@ -18,7 +18,7 @@ import github.linsmod.sharetopc.data.DeviceStore;
 import github.linsmod.sharetopc.data.SettingsStore;
 import github.linsmod.sharetopc.util.LogX;
 
-/** 封装 NsdManager 的服务发现/解析/停止。key = host:port 去重。 */
+/** 封装 NsdManager 的服务发现/解析/停止。按 deviceId 去重（host:port 变化视为同一台），deviceId 缺失时退化为 host:port。 */
 public class NsdDiscoveryManager {
 
     public static final String SERVICE_TYPE = "_mytransfer._tcp.";
@@ -65,10 +65,60 @@ public class NsdDiscoveryManager {
         devices.remove(host + ":" + port);
     }
 
-    /** 手动添加设备到缓存并持久化到数据库。 */
+    /** 手动添加设备到缓存并持久化到数据库。按 deviceId 去重，host:port 为兜底。 */
     public synchronized void addDevice(DiscoveredDevice device) {
-        devices.put(device.address(), device);
-        deviceStore.saveDevice(device);
+        DiscoveredDevice merged = mergeIncoming(device);
+        deviceStore.saveDevice(merged);
+        notifyChanged();
+    }
+
+    /**
+     * 将传入设备合并入内存缓存。
+     * 优先按 deviceId 查找已存在设备（host:port 变化也视为同一台），其次按 host:port 兜底。
+     * 若已存在：保留旧设备的传输状态（latestJobId/latestJob），合并身份信息，
+     * 若地址变化则换 key 重新放入。返回合并后的对象。
+     */
+    private synchronized DiscoveredDevice mergeIncoming(DiscoveredDevice incoming) {
+        DiscoveredDevice existing = findByDeviceId(incoming.deviceId);
+        if (existing == null) {
+            existing = devices.get(incoming.address());
+        }
+
+        if (existing == null) {
+            devices.put(incoming.address(), incoming);
+            return incoming;
+        }
+
+        boolean mergedOnline = existing.isOnline || incoming.isOnline;
+        DiscoveredDevice merged = new DiscoveredDevice(
+                incoming.name != null ? incoming.name : existing.name,
+                incoming.host,
+                incoming.port,
+                mergedOnline
+        );
+        merged.version = incoming.version != null ? incoming.version : existing.version;
+        merged.protoVersion = incoming.protoVersion != null ? incoming.protoVersion : existing.protoVersion;
+        merged.deviceId = incoming.deviceId != null ? incoming.deviceId : existing.deviceId;
+        merged.latestJobId = existing.latestJobId;
+        merged.latestJob = existing.latestJob;
+
+        // 地址变化（同 deviceId 但 host/port 不同）时，移除旧 key 重新放入
+        if (!existing.address().equals(merged.address())) {
+            devices.remove(existing.address());
+        }
+        devices.put(merged.address(), merged);
+        return merged;
+    }
+
+    /** 按 deviceId 在内存缓存中查找已存在设备。 */
+    private synchronized DiscoveredDevice findByDeviceId(String deviceId) {
+        if (deviceId == null) return null;
+        for (DiscoveredDevice d : devices.values()) {
+            if (deviceId.equals(d.deviceId)) {
+                return d;
+            }
+        }
+        return null;
     }
 
     public synchronized List<DiscoveredDevice> getDevices() {
@@ -86,12 +136,16 @@ public class NsdDiscoveryManager {
         return list;
     }
 
-    /** 加载已知设备到内存（离线状态），启动时调用。 */
+    /** 加载已知设备到内存（离线状态），启动时调用。按 deviceId 去重，host:port 兜底。 */
     private synchronized void loadKnownDevices() {
         for (DiscoveredDevice d : deviceStore.loadAll()) {
-            if (!devices.containsKey(d.address())) {
-                devices.put(d.address(), d);
+            if (d.deviceId != null) {
+                // 同 deviceId 已存在则跳过（DB v2 升级已清理，但防御性检查）
+                if (findByDeviceId(d.deviceId) != null) continue;
+            } else if (devices.containsKey(d.address())) {
+                continue;
             }
+            devices.put(d.address(), d);
         }
     }
 
@@ -222,24 +276,10 @@ public class NsdDiscoveryManager {
                         }
                         DiscoveredDevice toSave;
                         synchronized (NsdDiscoveryManager.this) {
-                            // 如果已存在同 key 的设备，更新在线状态和版本信息
-                            DiscoveredDevice existing = devices.get(device.address());
-                            if (existing != null) {
-                                existing.isOnline = true;
-                                if (device.version != null) {
-                                    existing.version = device.version;
-                                }
-                                if (device.protoVersion != null) {
-                                    existing.protoVersion = device.protoVersion;
-                                }
-                                if (device.deviceId != null) {
-                                    existing.deviceId = device.deviceId;
-                                }
-                                toSave = existing;
-                            } else {
-                                devices.put(device.address(), device);
-                                toSave = device;
-                            }
+                            // mergeIncoming 会按 deviceId 合并：地址变化时换 key 重新放入，
+                            // 保留 existing 的传输状态（latestJobId/latestJob），isOnline 取 OR。
+                            // mDNS 解析出的 device.isOnline=true，故合并后设备一定在线。
+                            toSave = mergeIncoming(device);
                         }
                         deviceStore.saveDevice(toSave);
                         notifyChanged();
@@ -253,20 +293,27 @@ public class NsdDiscoveryManager {
         }
     }
 
-    /** HELLO 握手完成时更新 PC 端身份信息（版本、协议版本、设备 ID），持久化并通知 UI。 */
+    /**
+     * HELLO 握手完成时更新 PC 端身份信息（版本、协议版本、设备 ID）。
+     * 走 mergeIncoming 路径，确保 deviceId 与已有设备冲突时自动合并（host:port 变化也视为同一台）。
+     */
     public void updateDeviceInfo(String host, int port, String version, int protoVersion, String deviceId) {
-        DiscoveredDevice device;
-        String key = host + ":" + port;
+        DiscoveredDevice current;
         synchronized (this) {
-            device = devices.get(key);
-            if (device == null) {
-                return;
-            }
-            device.version = version;
-            device.protoVersion = String.valueOf(protoVersion);
-            device.deviceId = deviceId;
+            current = devices.get(host + ":" + port);
         }
-        deviceStore.saveDevice(device);
+        String name = current != null ? current.name : "PC";
+        boolean online = current != null && current.isOnline;
+        DiscoveredDevice incoming = new DiscoveredDevice(name, host, port, online);
+        incoming.version = version;
+        incoming.protoVersion = String.valueOf(protoVersion);
+        incoming.deviceId = deviceId;
+
+        DiscoveredDevice merged;
+        synchronized (this) {
+            merged = mergeIncoming(incoming);
+        }
+        deviceStore.saveDevice(merged);
         notifyChanged();
     }
 

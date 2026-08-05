@@ -78,7 +78,11 @@ public class DeviceStore {
         return null;
     }
 
-    /** 记录一个设备（在线发现时调用），按 (host, port) 去重，并更新最后出现时间。 */
+    /**
+     * 记录一个设备（在线发现时调用）。
+     * 去重规则：deviceId 非空时按 deviceId 合并（旧 host:port 记录会被自动删除），
+     * deviceId 为 null 时退化为按主键 (host, port) 替换。
+     */
     public synchronized void saveDevice(DiscoveredDevice device) {
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_DEV_HOST, device.host);

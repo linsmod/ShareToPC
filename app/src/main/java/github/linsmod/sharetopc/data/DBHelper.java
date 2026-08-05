@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 1;
+    private static final int DB_VERSION = 2;
 
     // ---------- job_entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -135,10 +135,33 @@ public class DBHelper extends SQLiteOpenHelper {
         db.execSQL(CREATE_DEVICE_TABLE);
         db.execSQL(CREATE_JOB_TABLE);
         db.execSQL(CREATE_PAIR_SESSION_TABLE);
+        createDeviceIdUniqueIndex(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // 初始版本，无升级逻辑。后续升级在此填 ALTER。
+        if (oldVersion < 2) {
+            // v2: 添加 deviceId 唯一索引
+            // 建索引前先清理历史脏数据：若同一 deviceId 对应多条记录，仅保留最近出现的
+            db.execSQL("DELETE FROM " + TABLE_DEVICE +
+                    " WHERE " + COL_DEV_ID + " IS NOT NULL AND (" +
+                    COL_DEV_HOST + ", " + COL_DEV_PORT + ") NOT IN (" +
+                    "  SELECT " + COL_DEV_HOST + ", " + COL_DEV_PORT +
+                    "  FROM (" +
+                    "    SELECT " + COL_DEV_HOST + ", " + COL_DEV_PORT +
+                    "           , MAX(" + COL_DEV_LAST_SEEN + ") AS mx" +
+                    "    FROM " + TABLE_DEVICE +
+                    "    WHERE " + COL_DEV_ID + " IS NOT NULL" +
+                    "    GROUP BY " + COL_DEV_ID +
+                    "  )" +
+                    ")");
+            createDeviceIdUniqueIndex(db);
+        }
+    }
+
+    /** v2: deviceId 唯一索引，用于按设备身份去重（host:port 变化时合并为同一条记录）。 */
+    private void createDeviceIdUniqueIndex(SQLiteDatabase db) {
+        db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS idx_device_id ON " + TABLE_DEVICE +
+                "(" + COL_DEV_ID + ") WHERE " + COL_DEV_ID + " IS NOT NULL");
     }
 }
