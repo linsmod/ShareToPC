@@ -57,6 +57,8 @@ public class DevicesFragment extends Fragment {
                 ((MainActivity) requireActivity()).showManualDeviceDialog());
         deviceAdapter.setOnPcClientClickListener(() ->
                 ((MainActivity) requireActivity()).showPcClientDialog());
+        deviceAdapter.setOnShareClipboardClickListener(() ->
+                ((MainActivity) requireActivity()).showShareClipboardDialog());
 
         btnRefreshDevices.setOnClickListener(v -> viewModel.startDiscovery());
 

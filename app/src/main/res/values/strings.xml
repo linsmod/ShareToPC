@@ -93,6 +93,11 @@
     <string name="log_clear">清除</string>
     <string name="log_empty">暂无日志</string>
     <string name="log_loading">读取中…</string>
+    <string name="share_clipboard_title">分享剪贴板内容</string>
+    <string name="share_clipboard_desc">将手机剪贴板中的文本内容发送到电脑</string>
+    <string name="clipboard_empty">剪贴板为空</string>
+    <string name="clipboard_no_text">剪贴板中没有文本内容</string>
+
     <string name="service_channel_name">传输服务</string>
     <string name="service_channel_desc">用于保持网络连接和文件传输在后台正常运行</string>
     <string name="service_monitoring">正在监听传输连接…</string>

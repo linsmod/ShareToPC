@@ -28,6 +28,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     private static final int TYPE_DEVICE = 0;
     private static final int TYPE_ADD = 1;
     private static final int TYPE_PC_CLIENT = 2;
+    private static final int TYPE_SHARE_CLIPBOARD = 3;
 
     public interface OnDeviceClickListener {
         void onClick(DiscoveredDevice device);
@@ -36,11 +37,13 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     public interface OnAddDeviceClickListener { void onAddDevice(); }
     public interface OnPcClientClickListener { void onPcClient(); }
+    public interface OnShareClipboardClickListener { void onShareClipboard(); }
 
     private final List<DiscoveredDevice> displayItems = new ArrayList<>();
     private final OnDeviceClickListener clickListener;
     private OnAddDeviceClickListener addClickListener;
     private OnPcClientClickListener pcClientClickListener;
+    private OnShareClipboardClickListener shareClipboardClickListener;
 
     public DeviceAdapter(OnDeviceClickListener clickListener) {
         this.clickListener = clickListener;
@@ -48,6 +51,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     public void setOnAddDeviceClickListener(OnAddDeviceClickListener l) { this.addClickListener = l; }
     public void setOnPcClientClickListener(OnPcClientClickListener l) { this.pcClientClickListener = l; }
+    public void setOnShareClipboardClickListener(OnShareClipboardClickListener l) { this.shareClipboardClickListener = l; }
 
     public void submitList(List<DiscoveredDevice> discoveredDevices) {
         displayItems.clear();
@@ -67,8 +71,9 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     @Override
     public int getItemViewType(int position) {
-        if (position == displayItems.size()) return TYPE_ADD;
-        if (position > displayItems.size()) return TYPE_PC_CLIENT;
+        if (position == displayItems.size()) return TYPE_SHARE_CLIPBOARD;
+        if (position == displayItems.size() + 1) return TYPE_ADD;
+        if (position == displayItems.size() + 2) return TYPE_PC_CLIENT;
         return TYPE_DEVICE;
     }
 
@@ -84,6 +89,10 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             return new RecyclerView.ViewHolder(
                     inflater.inflate(R.layout.item_pc_client, parent, false)) {};
         }
+        if (viewType == TYPE_SHARE_CLIPBOARD) {
+            return new RecyclerView.ViewHolder(
+                    inflater.inflate(R.layout.item_share_clipboard, parent, false)) {};
+        }
         return new DeviceVH(inflater.inflate(R.layout.item_device, parent, false));
     }
 
@@ -98,6 +107,12 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         if (getItemViewType(position) == TYPE_PC_CLIENT) {
             holder.itemView.setOnClickListener(v -> {
                 if (pcClientClickListener != null) pcClientClickListener.onPcClient();
+            });
+            return;
+        }
+        if (getItemViewType(position) == TYPE_SHARE_CLIPBOARD) {
+            holder.itemView.setOnClickListener(v -> {
+                if (shareClipboardClickListener != null) shareClipboardClickListener.onShareClipboard();
             });
             return;
         }
@@ -187,7 +202,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
     }
 
     @Override
-    public int getItemCount() { return displayItems.size() + 2; }
+    public int getItemCount() { return displayItems.size() + 3; }
 
     /** 将字节数转为友好文案，如 "1.2 MB""340 KB"。 */
     @NonNull

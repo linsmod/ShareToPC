@@ -1,5 +1,7 @@
 package github.linsmod.sharetopc;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -28,9 +30,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 
-import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.service.ShareForegroundService;
+import github.linsmod.sharetopc.share.ShareReceiverActivity;
 import github.linsmod.sharetopc.ui.DevicesFragment;
 import github.linsmod.sharetopc.ui.EtpExplorerActivity;
 import github.linsmod.sharetopc.ui.EtpSearchActivity;
@@ -306,6 +308,27 @@ public class MainActivity extends AppCompatActivity {
             w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
                     ViewGroup.LayoutParams.WRAP_CONTENT);
         }
+    }
+
+    public void showShareClipboardDialog() {
+        // 复用分享文本/文件的对话框，将剪贴板文本作为 text/plain 转发给 ShareReceiverActivity
+        ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        ClipData clip = cm.getPrimaryClip();
+        if (clip == null || clip.getItemCount() == 0) {
+            Toast.makeText(this, R.string.clipboard_empty, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String text = clip.getItemAt(0).coerceToText(this).toString();
+        if (text.isEmpty()) {
+            Toast.makeText(this, R.string.clipboard_no_text, Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Intent intent = new Intent(this, ShareReceiverActivity.class);
+        intent.setAction(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_TEXT, text);
+        startActivity(intent);
     }
 
     private void sharePcClientZip() {
