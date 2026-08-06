@@ -78,6 +78,7 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
             };
 
     private OnItemClickListener onItemClickListener;
+    private OnItemLongClickListener onItemLongClickListener;
 
     // footer 状态：隐藏 / 可加载更多 / 加载中 / 失败重试 / 全部加载完成
     static final int FOOTER_HIDDEN = 0;
@@ -91,6 +92,10 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
 
     interface OnItemClickListener {
         void onItemClick(EtpClient.EtpSearchResult item);
+    }
+
+    interface OnItemLongClickListener {
+        boolean onItemLongClick(EtpClient.EtpSearchResult item);
     }
 
     /**
@@ -107,6 +112,10 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         super(DIFF);
         this.onItemClickListener = listener;
         this.showPathInfo = showPathInfo;
+    }
+
+    void setItemLongClickListener(OnItemLongClickListener listener) {
+        this.onItemLongClickListener = listener;
     }
 
     /** 更新 footer 状态（隐藏/可加载/加载中/失败重试/全部加载完成）。 */
@@ -225,6 +234,10 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
 
         ivh.itemView.setOnClickListener(v -> {
             if (onItemClickListener != null) onItemClickListener.onItemClick(r);
+        });
+        ivh.itemView.setOnLongClickListener(v -> {
+            if (onItemLongClickListener != null) return onItemLongClickListener.onItemLongClick(r);
+            return false;
         });
     }
 

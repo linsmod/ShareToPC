@@ -47,7 +47,12 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         void onItemClick(EtpClient.EtpSearchResult item);
     }
 
+    interface OnItemLongClickListener {
+        boolean onItemLongClick(EtpClient.EtpSearchResult item);
+    }
+
     private final OnItemClickListener onItemClickListener;
+    private OnItemLongClickListener onItemLongClickListener;
 
     // 本地搜索命中词（用于高亮），null/空表示不高亮
     private List<String> highlightTerms;
@@ -75,6 +80,10 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     EtpExplorerAdapter(OnItemClickListener listener) {
         this.onItemClickListener = listener;
+    }
+
+    void setOnItemLongClickListener(OnItemLongClickListener listener) {
+        this.onItemLongClickListener = listener;
     }
 
     /** 按分类顺序重建扁平列表（含 header 位置记录，供分类 chips 跳转）。 */
@@ -194,6 +203,10 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         vh.itemView.setOnClickListener(v -> {
             if (onItemClickListener != null) onItemClickListener.onItemClick(r);
+        });
+        vh.itemView.setOnLongClickListener(v -> {
+            if (onItemLongClickListener != null) return onItemLongClickListener.onItemLongClick(r);
+            return false;
         });
     }
 

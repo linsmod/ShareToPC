@@ -91,25 +91,7 @@ public final class EtpFileDialog {
 
         if (!r.isFolder) {
             root.addView(divider(ctx));
-            root.addView(actionRow(ctx, R.string.etp_pull_open, v -> {
-                if (dialogRef[0] != null) dialogRef[0].dismiss();
-                enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_OPEN);
-            }));
-            root.addView(actionRow(ctx, R.string.etp_pull_share, v -> {
-                if (dialogRef[0] != null) dialogRef[0].dismiss();
-                enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_SHARE);
-            }));
-            root.addView(actionRow(ctx, R.string.etp_pull_download_only, v -> {
-                if (dialogRef[0] != null) dialogRef[0].dismiss();
-                enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_NONE);
-            }));
-            // 流式转发仅在大文件（>100MB）或大小未知时显示
-            if (r.size < 0 || r.size > 100L * 1024 * 1024) {
-                root.addView(actionRow(ctx, R.string.etp_pull_stream, v -> {
-                    if (dialogRef[0] != null) dialogRef[0].dismiss();
-                    streamingShare(ctx, r, deviceId, host, port);
-                }));
-            }
+            addPullActions(root, dialogRef, r, deviceId, host, port);
         }
 
         Dialog dialog = new MaterialAlertDialogBuilder(ctx)
@@ -119,6 +101,58 @@ public final class EtpFileDialog {
                 .create();
         dialogRef[0] = dialog;
         dialog.show();
+    }
+
+    /**
+     * 仅操作菜单（点击文件时显示）：拉取并打开 / 转发 / 仅拉取 / 流式转发。
+     * 文件夹无可执行操作，直接展示完整属性对话框。
+     */
+    public static void showActions(Context ctx, EtpClient.EtpSearchResult r,
+                                   String deviceId, String host, int port) {
+        if (r.isFolder) {
+            show(ctx, r, deviceId, host, port);
+            return;
+        }
+        LinearLayout root = new LinearLayout(ctx);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(dp(ctx, 8), dp(ctx, 4), dp(ctx, 8), dp(ctx, 4));
+
+        final Dialog[] dialogRef = new Dialog[1];
+        addPullActions(root, dialogRef, r, deviceId, host, port);
+
+        Dialog dialog = new MaterialAlertDialogBuilder(ctx)
+                .setTitle(r.name)
+                .setView(root)
+                .setNegativeButton("关闭", null)
+                .create();
+        dialogRef[0] = dialog;
+        dialog.show();
+    }
+
+    /** 拉取/转发操作行（文件非文件夹时展示）。 */
+    private static void addPullActions(LinearLayout root, Dialog[] dialogRef,
+                                       EtpClient.EtpSearchResult r,
+                                       String deviceId, String host, int port) {
+        Context ctx = root.getContext();
+        root.addView(actionRow(ctx, R.string.etp_pull_open, v -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+            enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_OPEN);
+        }));
+        root.addView(actionRow(ctx, R.string.etp_pull_share, v -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+            enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_SHARE);
+        }));
+        root.addView(actionRow(ctx, R.string.etp_pull_download_only, v -> {
+            if (dialogRef[0] != null) dialogRef[0].dismiss();
+            enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_NONE);
+        }));
+        // 流式转发仅在大文件（>100MB）或大小未知时显示
+        if (r.size < 0 || r.size > 100L * 1024 * 1024) {
+            root.addView(actionRow(ctx, R.string.etp_pull_stream, v -> {
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                streamingShare(ctx, r, deviceId, host, port);
+            }));
+        }
     }
 
     private static String buildBodyTail(Context ctx, EtpClient.EtpSearchResult r) {

@@ -319,7 +319,11 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
                 MaterialDividerItemDecoration.VERTICAL));
         rvResults.setItemAnimator(null);
 
-        resultAdapter = new EtpResultAdapter(this::showFilePropertiesDialog);
+        resultAdapter = new EtpResultAdapter(this::onResultItemClick);
+        resultAdapter.setItemLongClickListener(item -> {
+            showFilePropertiesDialog(item);
+            return true;
+        });
         // 列表底部“加载更多” → ViewModel 下载下一批
         resultAdapter.setOnLoadMoreListener(() -> viewModel.loadMore());
         rvResults.setAdapter(resultAdapter);
@@ -878,6 +882,16 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     // ==================== 文件属性对话框 ====================
 
+    /** 点击文件：直接显示操作菜单；文件夹无可执行操作，显示完整属性。 */
+    private void onResultItemClick(EtpClient.EtpSearchResult r) {
+        if (r.isFolder) {
+            showFilePropertiesDialog(r);
+        } else {
+            EtpFileDialog.showActions(this, r, deviceId, deviceHost, devicePort);
+        }
+    }
+
+    /** 长按文件：完整属性 + 操作对话框。 */
     private void showFilePropertiesDialog(EtpClient.EtpSearchResult r) {
         EtpFileDialog.show(this, r, deviceId, deviceHost, devicePort);
     }

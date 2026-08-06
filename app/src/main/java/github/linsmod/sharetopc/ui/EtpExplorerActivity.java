@@ -227,6 +227,10 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutBrowseQuick = findViewById(R.id.layoutBrowseQuick);
         cgBrowseQuick = findViewById(R.id.cgBrowseQuick);
         browseAdapter = new EtpResultAdapter(this::onBrowseItemClick, false /* showPathInfo */);
+        browseAdapter.setItemLongClickListener(item -> {
+            showFilePropertiesDialog(item);
+            return true;
+        });
         browseAdapter.setOnLoadMoreListener(() -> browseViewModel.loadMore());
 
         rvExplorer = findViewById(R.id.rvExplorer);
@@ -241,8 +245,12 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
                 // 常用文件里点文件夹 → 切到位置浏览并进入该目录
                 enterBrowseAt(item.fullPath());
             } else {
-                showFilePropertiesDialog(item);
+                EtpFileDialog.showActions(this, item, deviceId, deviceHost, devicePort);
             }
+        });
+        adapter.setOnItemLongClickListener(item -> {
+            showFilePropertiesDialog(item);
+            return true;
         });
         rvExplorer.setAdapter(adapter);
 
@@ -505,14 +513,14 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutError.setVisibility(View.VISIBLE);
     }
 
-    /** 浏览模式点击：文件夹进入（磁盘行用 fileListFilename 携带真实盘符路径），文件弹属性。 */
+    /** 浏览模式点击：文件夹进入（磁盘行用 fileListFilename 携带真实盘符路径），文件弹操作菜单。 */
     private void onBrowseItemClick(EtpClient.EtpSearchResult item) {
         if (item.isFolder) {
             String drivePath = item.fileListFilename;
             browseViewModel.openFolder(drivePath != null && !drivePath.isEmpty()
                     ? drivePath : item.fullPath());
         } else {
-            showFilePropertiesDialog(item);
+            EtpFileDialog.showActions(this, item, deviceId, deviceHost, devicePort);
         }
     }
 
