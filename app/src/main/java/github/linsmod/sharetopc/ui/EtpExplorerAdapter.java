@@ -163,9 +163,18 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             vh.tvFileSize.setVisibility(View.GONE);
         }
 
-        String locationLabel = getLocationLabel(r);
+        String[] loc = getLocationInfo(r);
+        String locationLabel = loc != null ? loc[0] : null;
         boolean hasLocation = locationLabel != null;
-        boolean hasPath = r.path != null && !r.path.isEmpty();
+
+        // 路径文本：常见目录显示其下的相对子路径；其他显示完整路径
+        String pathText = null;
+        if (loc != null && loc[1] != null) {
+            pathText = loc[1].isEmpty() ? null : loc[1] + "\\" + r.name;
+        } else if (r.path != null && !r.path.isEmpty()) {
+            pathText = r.path + "\\" + r.name;
+        }
+        boolean hasPath = pathText != null;
         boolean hasDate = r.dateModified > 0;
 
         if (hasLocation || hasPath || hasDate) {
@@ -185,7 +194,7 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         }
             if (hasPath) {
                 vh.tvPath.setVisibility(View.VISIBLE);
-                vh.tvPath.setText(highlight(r.path + "\\" + r.name, highlightTerms));
+                vh.tvPath.setText(highlight(pathText, highlightTerms));
             } else {
                 vh.tvPath.setVisibility(View.GONE);
             }
@@ -210,24 +219,34 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         });
     }
 
-    private static String getLocationLabel(EtpClient.EtpSearchResult r) {
+    /**
+     * 位置信息：{标签, 相对路径}。
+     * 常见用户目录（桌面/文档等）时返回标签 + 该目录下的相对子路径（可直接展示）；
+     * 盘符时返回盘符 + null（相对路径保持完整）；其他返回 null。
+     */
+    private static String[] getLocationInfo(EtpClient.EtpSearchResult r) {
         String path = r.path != null ? r.path : (r.name != null ? r.name : "");
         if (path.isEmpty()) return null;
 
         Matcher m = PATTERN_USER_FOLDER.matcher(path);
         if (m.find()) {
             String folder = m.group(1).toLowerCase(Locale.getDefault());
+            String label;
             switch (folder) {
-                case "desktop":   return "桌面";
-                case "documents": return "文档";
-                case "downloads": return "下载";
-                case "videos":    return "视频";
-                case "pictures":  return "图片";
-                case "music":     return "音乐";
+                case "desktop":   label = "桌面"; break;
+                case "documents": label = "文档"; break;
+                case "downloads": label = "下载"; break;
+                case "videos":    label = "视频"; break;
+                case "pictures":  label = "图片"; break;
+                case "music":     label = "音乐"; break;
+                default:          label = null; break;
+            }
+            if (label != null) {
+                return new String[]{label, path.substring(m.end())};
             }
         }
         if (path.length() >= 2 && path.charAt(1) == ':') {
-            return path.substring(0, 2);
+            return new String[]{path.substring(0, 2), null};
         }
         return null;
     }

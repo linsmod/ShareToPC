@@ -36,26 +36,36 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
             "\\\\users\\\\[^\\\\]+\\\\(desktop|documents|downloads|videos|pictures|music)(\\\\|$)",
             Pattern.CASE_INSENSITIVE);
 
-    private static String getLocationLabel(EtpClient.EtpSearchResult r) {
+    /**
+     * 位置信息：{标签, 相对路径}。
+     * 常见用户目录（桌面/文档等）时返回标签 + 该目录下的相对子路径（可直接展示）；
+     * 盘符时返回盘符 + null（相对路径保持完整）；其他返回 null。
+     */
+    private static String[] getLocationInfo(EtpClient.EtpSearchResult r) {
         String path = r.path != null ? r.path : (r.name != null ? r.name : "");
         if (path.isEmpty()) return null;
 
         java.util.regex.Matcher m = PATTERN_USER_FOLDER.matcher(path);
         if (m.find()) {
             String folder = m.group(1).toLowerCase(Locale.getDefault());
+            String label;
             switch (folder) {
-                case "desktop":  return "桌面";
-                case "documents": return "文档";
-                case "downloads": return "下载";
-                case "videos":   return "视频";
-                case "pictures": return "图片";
-                case "music":    return "音乐";
+                case "desktop":   label = "桌面"; break;
+                case "documents": label = "文档"; break;
+                case "downloads": label = "下载"; break;
+                case "videos":    label = "视频"; break;
+                case "pictures":  label = "图片"; break;
+                case "music":     label = "音乐"; break;
+                default:          label = null; break;
+            }
+            if (label != null) {
+                return new String[]{label, path.substring(m.end())};
             }
         }
 
         // 否则显示盘符
         if (path.length() >= 2 && path.charAt(1) == ':') {
-            return path.substring(0, 2);
+            return new String[]{path.substring(0, 2), null};
         }
         return null;
     }
@@ -185,11 +195,20 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         }
 
         // 位置标签：匹配 presets paths 获取标签，显示 C:\Users\{user}\Documents 等，或盘符
-        String locationLabel = getLocationLabel(r);
+        String[] loc = getLocationInfo(r);
+        String locationLabel = loc != null ? loc[0] : null;
+
+        // 路径文本：常见目录显示其下的相对子路径；其他显示完整路径
+        String pathText = null;
+        if (loc != null && loc[1] != null) {
+            pathText = loc[1].isEmpty() ? null : loc[1] + "\\" + r.name;
+        } else if (r.path != null && !r.path.isEmpty()) {
+            pathText = r.path + "\\" + r.name;
+        }
 
         // 第二行：位置标签 + 路径 + 日期；浏览模式下只保留日期
         boolean hasLocation = locationLabel != null;
-        boolean hasPath = r.path != null && !r.path.isEmpty();
+        boolean hasPath = pathText != null;
         boolean hasDate = r.dateModified > 0;
         if (showPathInfo) {
             if (hasLocation || hasPath || hasDate) {
@@ -211,7 +230,7 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
 
                 if (hasPath) {
                     ivh.tvPath.setVisibility(View.VISIBLE);
-                    ivh.tvPath.setText(r.path + "\\" + r.name);
+                    ivh.tvPath.setText(pathText);
                 } else {
                     ivh.tvPath.setVisibility(View.GONE);
                 }
