@@ -196,7 +196,7 @@ namespace ShareToPcReciver.Net
                 LastSeen = DateTime.UtcNow
             });
             if(!oneway)
-                await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _config.HeartbeatIntervalMs, _ct);
+                await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _config.HeartbeatIntervalMs, KnownFolder.GetAll(), Drives.GetAll(), _ct);
         }
 
         private async Task HandleText(Stream stream, JsonElement header)

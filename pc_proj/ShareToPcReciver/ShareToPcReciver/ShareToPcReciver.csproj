@@ -62,6 +62,8 @@
     <Compile Include="Net\BlockingQueue.cs" />
     <Compile Include="Net\ClientSession.cs" />
     <Compile Include="Net\DeviceInfo.cs" />
+    <Compile Include="Net\Drives.cs" />
+    <Compile Include="Net\KnownFolder.cs" />
     <Compile Include="Net\Messages.cs" />
     <Compile Include="Net\Protocol.cs" />
     <Compile Include="Net\ServiceAdvertiser.cs" />

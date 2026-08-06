@@ -1,5 +1,6 @@
 using ShareToPcReciver.Storage;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Reflection;
@@ -102,10 +103,15 @@ namespace ShareToPcReciver.Net
             await stream.FlushAsync(ct);
         }
 
-        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本、协议版本、设备 ID、心跳间隔。</summary>
-        public static async Task WriteHelloAckAsync(Stream stream, string deviceId, int hbIntervalMs, CancellationToken ct)
+        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本、协议版本、设备 ID、心跳间隔、登录用户名、真实用户目录及磁盘列表。</summary>
+        public static async Task WriteHelloAckAsync(Stream stream, string deviceId, int hbIntervalMs,
+            Dictionary<string, string> userFolders, List<Drives.DriveData> drives, CancellationToken ct)
         {
-            var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion, deviceId, hbInterval = hbIntervalMs }; 
+            var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion,
+                deviceId, hbInterval = hbIntervalMs, userName = Environment.UserName,
+                machineName = Environment.MachineName,
+                userFolders = userFolders ?? new Dictionary<string, string>(),
+                drives = drives ?? new List<Drives.DriveData>() }; 
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

@@ -13,6 +13,8 @@ import android.text.format.DateUtils;
 import android.text.style.ImageSpan;
 import android.util.TypedValue;
 import android.view.View;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -27,6 +29,8 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -58,7 +62,25 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
     private EtpExplorerViewModel viewModel;
     private EtpExplorerAdapter adapter;
+    private EtpBrowseViewModel browseViewModel;
+    private EtpResultAdapter browseAdapter;
     private LinearLayoutManager layoutManager;
+
+    // 当前模式：false = 常用文件（缓存+搜索），true = 位置浏览（逐级目录）
+    private boolean browseMode;
+    private boolean modeSwitchGuard;
+    /** 是否已渲染过浏览内容（用于加载中决定保留旧列表还是全屏转圈）。 */
+    private boolean browseRendered;
+    /** 缓存模式最近一次状态快照（切回时用于重渲染）。 */
+    private EtpExplorerViewModel.State cacheState;
+
+    // 模式切换与浏览 UI
+    private MaterialButtonToggleGroup tgExplorerMode;
+    private MaterialButton btnModeCommon, btnModeBrowse;
+    private android.widget.HorizontalScrollView layoutBreadcrumb;
+    private LinearLayout llBreadcrumb;
+    private View layoutBrowseQuick;
+    private ChipGroup cgBrowseQuick;
 
     private String deviceName;
     private String deviceHost;
@@ -98,6 +120,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     }
 
     private RecyclerView rvExplorer;
+    private ProgressBar pbBrowseLoading;
     private View layoutLoading;
     private TextView tvLoadingTitle, tvLoadingDetail;
     private View layoutError;
@@ -137,6 +160,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     protected void onDestroy() {
         super.onDestroy();
         viewModel.removeObserver();
+        browseViewModel.removeObserver();
     }
 
     // ==================== 初始化 ====================
@@ -145,12 +169,22 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         androidx.appcompat.widget.Toolbar toolbar = findViewById(R.id.toolbarEtpExplorer);
         toolbar.setTitle(getString(R.string.etp_explorer_title_format,
                 deviceName != null ? deviceName : ""));
-        toolbar.setNavigationOnClickListener(v -> finish());
+        toolbar.setNavigationOnClickListener(v -> {
+            if (browseMode && !browseViewModel.isAtRoot()) {
+                browseViewModel.goUp();
+            } else {
+                finish();
+            }
+        });
         toolbar.inflateMenu(R.menu.etp_explorer_menu);
         toolbar.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
             if (id == R.id.action_explorer_refresh) {
-                viewModel.refresh();
+                if (browseMode) {
+                    browseViewModel.refreshCurrent();
+                } else {
+                    viewModel.refresh();
+                }
                 return true;
             }
             if (id == R.id.action_explorer_search) {
@@ -178,6 +212,23 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutExplorerSort = findViewById(R.id.layoutExplorerSort);
         initSortItems();
 
+        // 模式切换
+        tgExplorerMode = findViewById(R.id.tgExplorerMode);
+        btnModeCommon = findViewById(R.id.btnModeCommon);
+        btnModeBrowse = findViewById(R.id.btnModeBrowse);
+        tgExplorerMode.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked || modeSwitchGuard) return;
+            applyMode(checkedId == R.id.btnModeBrowse);
+        });
+
+        // 浏览模式：面包屑 + 目录列表适配器
+        layoutBreadcrumb = findViewById(R.id.layoutBreadcrumb);
+        llBreadcrumb = findViewById(R.id.llBreadcrumb);
+        layoutBrowseQuick = findViewById(R.id.layoutBrowseQuick);
+        cgBrowseQuick = findViewById(R.id.cgBrowseQuick);
+        browseAdapter = new EtpResultAdapter(this::onBrowseItemClick, false /* showPathInfo */);
+        browseAdapter.setOnLoadMoreListener(() -> browseViewModel.loadMore());
+
         rvExplorer = findViewById(R.id.rvExplorer);
         layoutManager = new LinearLayoutManager(this);
         rvExplorer.setLayoutManager(layoutManager);
@@ -185,17 +236,31 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
                 MaterialDividerItemDecoration.VERTICAL));
         rvExplorer.setItemAnimator(null);
 
-        adapter = new EtpExplorerAdapter(this::showFilePropertiesDialog);
+        adapter = new EtpExplorerAdapter(item -> {
+            if (item.isFolder) {
+                // 常用文件里点文件夹 → 切到位置浏览并进入该目录
+                enterBrowseAt(item.fullPath());
+            } else {
+                showFilePropertiesDialog(item);
+            }
+        });
         rvExplorer.setAdapter(adapter);
 
         layoutLoading = findViewById(R.id.layoutLoading);
+        pbBrowseLoading = findViewById(R.id.pbBrowseLoading);
         tvLoadingTitle = findViewById(R.id.tvLoadingTitle);
         tvLoadingDetail = findViewById(R.id.tvLoadingDetail);
         layoutError = findViewById(R.id.layoutError);
         tvError = findViewById(R.id.tvError);
         layoutEmpty = findViewById(R.id.layoutEmpty);
         tvEmpty = findViewById(R.id.tvEmpty);
-        findViewById(R.id.btnRetry).setOnClickListener(v -> viewModel.refresh());
+        findViewById(R.id.btnRetry).setOnClickListener(v -> {
+            if (browseMode) {
+                browseViewModel.refreshCurrent();
+            } else {
+                viewModel.refresh();
+            }
+        });
         findViewById(R.id.btnGoSearch).setOnClickListener(v -> openSearch());
     }
 
@@ -203,11 +268,17 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         viewModel = new ViewModelProvider(this).get(EtpExplorerViewModel.class);
         viewModel.observe(this::render);
         viewModel.init(deviceId, deviceHost, App.get().settingsStore.getEtpPort());
+
+        browseViewModel = new ViewModelProvider(this).get(EtpBrowseViewModel.class);
+        browseViewModel.observe(this::renderBrowseState);
+        browseViewModel.init(deviceHost, App.get().settingsStore.getEtpPort());
     }
 
     // ==================== 状态渲染 ====================
 
     private void render(EtpExplorerViewModel.State state) {
+        cacheState = state;
+        if (browseMode) return;
         if (state instanceof EtpExplorerViewModel.Initializing) {
             renderInitializing((EtpExplorerViewModel.Initializing) state);
         } else if (state instanceof EtpExplorerViewModel.Ready) {
@@ -219,6 +290,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
     /** 初始化/刷新缓存：全屏进度界面，提示当前正在搜索的分类。 */
     private void renderInitializing(EtpExplorerViewModel.Initializing s) {
+        if (browseMode) return;
         rvExplorer.setVisibility(View.GONE);
         layoutError.setVisibility(View.GONE);
         layoutEmpty.setVisibility(View.GONE);
@@ -240,6 +312,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     }
 
     private void renderReady(EtpExplorerViewModel.Ready r) {
+        if (browseMode) return;
         layoutLoading.setVisibility(View.GONE);
         layoutError.setVisibility(View.GONE);
 
@@ -273,6 +346,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     }
 
     private void renderError(EtpExplorerViewModel.Error e) {
+        if (browseMode) return;
         rvExplorer.setVisibility(View.GONE);
         layoutLoading.setVisibility(View.GONE);
         layoutEmpty.setVisibility(View.GONE);
@@ -284,11 +358,246 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutError.setVisibility(View.VISIBLE);
     }
 
+    // ==================== 双模式：常用文件 / 位置浏览 ====================
+
+    @Override
+    public void onBackPressed() {
+        if (browseMode && !browseViewModel.isAtRoot()) {
+            browseViewModel.goUp();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    /** 应用指定模式：切换 rvExplorer 的 adapter 与顶部区块。 */
+    private void applyMode(boolean browse) {
+        if (browseMode == browse) return;
+        browseMode = browse;
+        if (browse) {
+            showBrowseMode();
+        } else {
+            showCacheMode();
+        }
+    }
+
+    private void showCacheMode() {
+        modeSwitchGuard = true;
+        btnModeCommon.setChecked(true);
+        modeSwitchGuard = false;
+        layoutBreadcrumb.setVisibility(View.GONE);
+        pbBrowseLoading.setVisibility(View.GONE);
+        rvExplorer.setAdapter(adapter);
+        if (cacheState != null) {
+            render(cacheState);
+        }
+    }
+
+    private void showBrowseMode() {
+        modeSwitchGuard = true;
+        btnModeBrowse.setChecked(true);
+        modeSwitchGuard = false;
+        layoutCategories.setVisibility(View.GONE);
+        tvCacheInfo.setVisibility(View.GONE);
+        tilExplorerSearch.setVisibility(View.GONE);
+        layoutExplorerSort.setVisibility(View.GONE);
+        rvExplorer.setAdapter(browseAdapter);
+        renderBrowseState(browseViewModel.snapshot());
+    }
+
+    /** 从"常用文件"点击文件夹 → 进入浏览模式并打开该目录。 */
+    private void enterBrowseAt(String path) {
+        if (!browseMode) applyMode(true);
+        browseViewModel.openFolder(path);
+    }
+
+    // ---- 浏览模式渲染 ----
+
+    private void renderBrowseState(EtpBrowseViewModel.State s) {
+        if (!browseMode || s == null) return;
+        buildBreadcrumb();
+        layoutBrowseQuick.setVisibility(View.GONE);
+        pbBrowseLoading.setVisibility(View.GONE);
+        if (s instanceof EtpBrowseViewModel.Root) {
+            renderBrowseRoot((EtpBrowseViewModel.Root) s);
+        } else if (s instanceof EtpBrowseViewModel.Loading) {
+            renderBrowseLoading();
+        } else if (s instanceof EtpBrowseViewModel.Folder) {
+            renderBrowseFolder((EtpBrowseViewModel.Folder) s);
+        } else if (s instanceof EtpBrowseViewModel.LoadMoreState) {
+            renderBrowseLoadMore((EtpBrowseViewModel.LoadMoreState) s);
+        } else if (s instanceof EtpBrowseViewModel.Error) {
+            renderBrowseError((EtpBrowseViewModel.Error) s);
+        }
+    }
+
+    private void renderBrowseRoot(EtpBrowseViewModel.Root r) {
+        browseRendered = true;
+        layoutLoading.setVisibility(View.GONE);
+        layoutError.setVisibility(View.GONE);
+        buildQuickChips(r.quickLocations);
+        if (r.drives.isEmpty()) {
+            rvExplorer.setVisibility(View.GONE);
+            browseAdapter.submitList(new ArrayList<>());
+            browseAdapter.setFooterState(EtpResultAdapter.FOOTER_HIDDEN, 0);
+            tvEmpty.setText(R.string.etp_browse_no_drive);
+            layoutEmpty.setVisibility(View.VISIBLE);
+            return;
+        }
+        layoutEmpty.setVisibility(View.GONE);
+        List<EtpClient.EtpSearchResult> drives = new ArrayList<>();
+        for (EtpBrowseViewModel.DriveItem d : r.drives) {
+            // 磁盘行：把真实盘符路径放进 fileListFilename（该列在浏览查询中未使用），供点击进入
+            drives.add(new EtpClient.EtpSearchResult(
+                    true, d.label, d.path, -1, -1, -1, -1, d.path, -1));
+        }
+        browseAdapter.submitList(drives);
+        browseAdapter.setFooterState(EtpResultAdapter.FOOTER_HIDDEN, 0);
+        rvExplorer.setVisibility(View.VISIBLE);
+    }
+
+    private void renderBrowseLoading() {
+        if (browseRendered) {
+            // 保留当前内容，顶部细进度条示意加载中，请求完成后再整体替换
+            layoutLoading.setVisibility(View.GONE);
+            pbBrowseLoading.setVisibility(View.VISIBLE);
+            return;
+        }
+        layoutError.setVisibility(View.GONE);
+        layoutEmpty.setVisibility(View.GONE);
+        rvExplorer.setVisibility(View.GONE);
+        tvLoadingTitle.setText(R.string.etp_browse_loading);
+        tvLoadingDetail.setVisibility(View.GONE);
+        layoutLoading.setVisibility(View.VISIBLE);
+    }
+
+    private void renderBrowseFolder(EtpBrowseViewModel.Folder f) {
+        browseRendered = true;
+        layoutLoading.setVisibility(View.GONE);
+        layoutError.setVisibility(View.GONE);
+        if (f.items.isEmpty()) {
+            rvExplorer.setVisibility(View.GONE);
+            browseAdapter.submitList(new ArrayList<>());
+            browseAdapter.setFooterState(EtpResultAdapter.FOOTER_HIDDEN, 0);
+            tvEmpty.setText(R.string.etp_browse_empty);
+            layoutEmpty.setVisibility(View.VISIBLE);
+            return;
+        }
+        layoutEmpty.setVisibility(View.GONE);
+        browseAdapter.submitList(f.items);
+        browseAdapter.setFooterState(f.hasMore
+                        ? EtpResultAdapter.FOOTER_LOAD_MORE : EtpResultAdapter.FOOTER_ALL_LOADED,
+                (int) f.totalCount);
+        rvExplorer.setVisibility(View.VISIBLE);
+    }
+
+    private void renderBrowseLoadMore(EtpBrowseViewModel.LoadMoreState s) {
+        browseAdapter.setFooterState(s.loading
+                        ? EtpResultAdapter.FOOTER_LOADING
+                        : s.failed ? EtpResultAdapter.FOOTER_ERROR : EtpResultAdapter.FOOTER_LOAD_MORE,
+                0);
+    }
+
+    private void renderBrowseError(EtpBrowseViewModel.Error e) {
+        layoutLoading.setVisibility(View.GONE);
+        layoutEmpty.setVisibility(View.GONE);
+        rvExplorer.setVisibility(View.GONE);
+        tvError.setText(e.message);
+        layoutError.setVisibility(View.VISIBLE);
+    }
+
+    /** 浏览模式点击：文件夹进入（磁盘行用 fileListFilename 携带真实盘符路径），文件弹属性。 */
+    private void onBrowseItemClick(EtpClient.EtpSearchResult item) {
+        if (item.isFolder) {
+            String drivePath = item.fileListFilename;
+            browseViewModel.openFolder(drivePath != null && !drivePath.isEmpty()
+                    ? drivePath : item.fullPath());
+        } else {
+            showFilePropertiesDialog(item);
+        }
+    }
+
+    /** 渲染根视图常用位置 chips：点击直接进入对应目录。 */
+    private void buildQuickChips(List<EtpBrowseViewModel.QuickLocation> locations) {
+        cgBrowseQuick.removeAllViews();
+        if (locations == null || locations.isEmpty()) {
+            layoutBrowseQuick.setVisibility(View.GONE);
+            return;
+        }
+        layoutBrowseQuick.setVisibility(View.VISIBLE);
+        for (EtpBrowseViewModel.QuickLocation loc : locations) {
+            Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
+            chip.setText(loc.label);
+            chip.setCheckable(false);
+            chip.setClickable(true);
+            chip.setOnClickListener(v -> browseViewModel.openFolder(loc.path));
+            cgBrowseQuick.addView(chip);
+        }
+    }
+
+    /**
+     * 渲染面包屑：此电脑 › C: › Users › Desktop（当前段加粗主色，其余可点击跳转）。
+     * 内容可能超宽，渲染后自动滚动到最右使当前段可见。
+     */
+    private void buildBreadcrumb() {
+        List<String> labels = browseViewModel.getBreadcrumbLabels();
+        llBreadcrumb.removeAllViews();
+        layoutBreadcrumb.setVisibility(View.VISIBLE);
+
+        float density = getResources().getDisplayMetrics().density;
+        int vPad = (int) (density * 6);
+        int sepPad = (int) (density * 5);
+        int selBg = 0;
+        TypedValue tv = new TypedValue();
+        if (getTheme().resolveAttribute(android.R.attr.selectableItemBackground, tv, true)) {
+            selBg = tv.resourceId;
+        }
+
+        for (int i = 0; i < labels.size(); i++) {
+            boolean isLast = i == labels.size() - 1;
+            if (i > 0) {
+                TextView sep = new TextView(this);
+                sep.setText("›");
+                sep.setTextSize(14);
+                sep.setTextColor(getThemeColor(android.R.attr.textColorTertiary));
+                sep.setPadding(sepPad, vPad, sepPad, vPad);
+                llBreadcrumb.addView(sep);
+            }
+
+            TextView seg = new TextView(this);
+            seg.setText(labels.get(i) == null
+                    ? getString(R.string.etp_browse_root) : labels.get(i));
+            seg.setTextSize(14);
+            seg.setSingleLine(true);
+            seg.setPadding(0, vPad, 0, vPad);
+            if (isLast) {
+                seg.setTextColor(getThemeColor(com.google.android.material.R.attr.colorPrimary));
+                seg.setTypeface(null, Typeface.BOLD);
+            } else {
+                seg.setTextColor(getThemeColor(android.R.attr.textColorSecondary));
+                if (selBg != 0) {
+                    seg.setBackgroundResource(selBg);
+                }
+                seg.setClickable(true);
+                final int segment = i - 1; // -1 = 此电脑
+                seg.setOnClickListener(v -> {
+                    if (segment < 0) {
+                        browseViewModel.openRoot();
+                    } else {
+                        browseViewModel.openSegment(segment);
+                    }
+                });
+            }
+            llBreadcrumb.addView(seg);
+        }
+
+        layoutBreadcrumb.post(() -> layoutBreadcrumb.fullScroll(View.FOCUS_RIGHT));
+    }
+
     // ==================== 分类筛选 / 本地搜索 / 排序 ====================
 
     /** 根据 分类选中 + 搜索词 + 排序 重算列表与 chips。 */
     private void rebuildView() {
-        if (fullCategories == null) return;
+        if (browseMode || fullCategories == null) return;
         List<String> terms = EtpExplorerViewModel.parseTerms(searchQuery);
         adapter.setHighlightTerms(terms);
 

@@ -251,6 +251,12 @@
     <string name="etp_explorer_no_match">没有匹配的文件</string>
     <string name="etp_explorer_retry">重试</string>
     <string name="etp_explorer_go_search">去搜索</string>
+    <string name="etp_explorer_mode_common">用户文件</string>
+    <string name="etp_explorer_mode_browse">位置浏览</string>
+    <string name="etp_browse_root">此电脑</string>
+    <string name="etp_browse_loading">正在加载目录…</string>
+    <string name="etp_browse_empty">此文件夹为空</string>
+    <string name="etp_browse_no_drive">正在获取磁盘…</string>
 
     <string-array name="path_preset_sort_fields">
         <item>默认排序</item>

@@ -93,9 +93,20 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         void onItemClick(EtpClient.EtpSearchResult item);
     }
 
+    /**
+     * 是否显示"位置标签 + 完整路径"信息行（第二行）。
+     * 搜索结果页为 true；按目录浏览时当前目录已由面包屑展示，整行只保留日期。
+     */
+    private final boolean showPathInfo;
+
     EtpResultAdapter(OnItemClickListener listener) {
+        this(listener, true);
+    }
+
+    EtpResultAdapter(OnItemClickListener listener, boolean showPathInfo) {
         super(DIFF);
         this.onItemClickListener = listener;
+        this.showPathInfo = showPathInfo;
     }
 
     /** 更新 footer 状态（隐藏/可加载/加载中/失败重试/全部加载完成）。 */
@@ -167,35 +178,41 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         // 位置标签：匹配 presets paths 获取标签，显示 C:\Users\{user}\Documents 等，或盘符
         String locationLabel = getLocationLabel(r);
 
-        // 第二行：位置标签 + 路径 + 日期
+        // 第二行：位置标签 + 路径 + 日期；浏览模式下只保留日期
         boolean hasLocation = locationLabel != null;
         boolean hasPath = r.path != null && !r.path.isEmpty();
         boolean hasDate = r.dateModified > 0;
-        if (hasLocation || hasPath || hasDate) {
-            ivh.layoutPathRow.setVisibility(View.VISIBLE);
+        if (showPathInfo) {
+            if (hasLocation || hasPath || hasDate) {
+                ivh.layoutPathRow.setVisibility(View.VISIBLE);
 
-            if (hasLocation) {
-                ivh.tvLocation.setText(locationLabel);
-                android.content.Context ctx = ivh.itemView.getContext();
-                int color = CategoryColors.color(ctx, locationLabel);
-                if (color != 0) {
-                    ivh.tvLocation.setBackground(CategoryColors.tagBackground(ctx, color));
+                if (hasLocation) {
+                    ivh.tvLocation.setText(locationLabel);
+                    android.content.Context ctx = ivh.itemView.getContext();
+                    int color = CategoryColors.color(ctx, locationLabel);
+                    if (color != 0) {
+                        ivh.tvLocation.setBackground(CategoryColors.tagBackground(ctx, color));
+                    } else {
+                        ivh.tvLocation.setBackgroundResource(R.drawable.bg_location_tag);
+                    }
+                    ivh.tvLocation.setVisibility(View.VISIBLE);
                 } else {
-                    ivh.tvLocation.setBackgroundResource(R.drawable.bg_location_tag);
+                    ivh.tvLocation.setVisibility(View.GONE);
                 }
-                ivh.tvLocation.setVisibility(View.VISIBLE);
-            } else {
-                ivh.tvLocation.setVisibility(View.GONE);
-            }
 
-            if (hasPath) {
-                ivh.tvPath.setVisibility(View.VISIBLE);
-                ivh.tvPath.setText(r.path + "\\" + r.name);
+                if (hasPath) {
+                    ivh.tvPath.setVisibility(View.VISIBLE);
+                    ivh.tvPath.setText(r.path + "\\" + r.name);
+                } else {
+                    ivh.tvPath.setVisibility(View.GONE);
+                }
             } else {
-                ivh.tvPath.setVisibility(View.GONE);
+                ivh.layoutPathRow.setVisibility(View.GONE);
             }
         } else {
-            ivh.layoutPathRow.setVisibility(View.GONE);
+            ivh.tvLocation.setVisibility(View.GONE);
+            ivh.tvPath.setVisibility(View.GONE);
+            ivh.layoutPathRow.setVisibility(hasDate ? View.VISIBLE : View.GONE);
         }
 
         if (hasDate) {

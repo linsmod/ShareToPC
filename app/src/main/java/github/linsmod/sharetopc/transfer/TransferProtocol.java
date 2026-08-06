@@ -1,6 +1,7 @@
 package github.linsmod.sharetopc.transfer;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -10,6 +11,10 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import github.linsmod.sharetopc.BuildConfig;
 import github.linsmod.sharetopc.data.SendEntry;
@@ -177,6 +182,45 @@ public final class TransferProtocol {
 
     public static String optString(JsonObject obj, String key) {
         return obj.has(key) && !obj.get(key).isJsonNull() ? obj.get(key).getAsString() : null;
+    }
+
+    /**
+     * 读取一个字符串映射字段（如 HELLO ACK 的 userFolders），
+     * 缺失/非对象/值为空字符串时忽略该项；字段整体不存在时返回 null。
+     */
+    public static Map<String, String> optStringMap(JsonObject obj, String key) {
+        if (obj == null || !obj.has(key) || obj.get(key).isJsonNull()
+                || !obj.get(key).isJsonObject()) {
+            return null;
+        }
+        Map<String, String> map = new HashMap<>();
+        JsonObject jo = obj.get(key).getAsJsonObject();
+        for (Map.Entry<String, JsonElement> e : jo.entrySet()) {
+            if (e.getValue().isJsonPrimitive()) {
+                String v = e.getValue().getAsString();
+                if (v != null && !v.isEmpty()) {
+                    map.put(e.getKey(), v);
+                }
+            }
+        }
+        return map;
+    }
+
+    /** 读取磁盘列表字段（HELLO ACK 的 drives）；字段整体缺失/非数组时返回 null。 */
+    public static List<RemoteDrive> optDriveList(JsonObject obj, String key) {
+        if (obj == null || !obj.has(key) || obj.get(key).isJsonNull()
+                || !obj.get(key).isJsonArray()) {
+            return null;
+        }
+        List<RemoteDrive> list = new ArrayList<>();
+        for (JsonElement el : obj.get(key).getAsJsonArray()) {
+            if (!el.isJsonObject()) continue;
+            JsonObject o = el.getAsJsonObject();
+            list.add(new RemoteDrive(
+                    optString(o, "name"), optString(o, "type"),
+                    optString(o, "label"), optString(o, "format")));
+        }
+        return list;
     }
 
     public static boolean isEof(Throwable t) {

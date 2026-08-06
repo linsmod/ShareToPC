@@ -22,6 +22,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import github.linsmod.sharetopc.App;
+import github.linsmod.sharetopc.transfer.DeviceUserInfo;
+import github.linsmod.sharetopc.transfer.RemoteDrive;
 import github.linsmod.sharetopc.transfer.TransferProtocol;
 import github.linsmod.sharetopc.util.LogX;
 
@@ -182,6 +184,23 @@ public class HeartbeatManager {
             long hbInterval = DEFAULT_HB_INTERVAL_MS;
             if (ack.has("hbInterval") && !ack.get("hbInterval").isJsonNull()) {
                 hbInterval = ack.get("hbInterval").getAsLong();
+            }
+            // 记录 PC 端上报的当前登录用户名、计算机名、真实用户目录与磁盘列表（供 ETP 浏览使用，避免猜测）
+            String userName = TransferProtocol.optString(ack, "userName");
+            if (userName != null && !userName.isEmpty()) {
+                DeviceUserInfo.putUserName(device.host, userName);
+            }
+            String machineName = TransferProtocol.optString(ack, "machineName");
+            if (machineName != null && !machineName.isEmpty()) {
+                DeviceUserInfo.putMachineName(device.host, machineName);
+            }
+            Map<String, String> folders = TransferProtocol.optStringMap(ack, "userFolders");
+            if (folders != null && !folders.isEmpty()) {
+                DeviceUserInfo.putUserFolders(device.host, folders);
+            }
+            List<RemoteDrive> drives = TransferProtocol.optDriveList(ack, "drives");
+            if (drives != null && !drives.isEmpty()) {
+                DeviceUserInfo.putDrives(device.host, drives);
             }
             int beatReadTimeout = (int) (hbInterval + BEAT_TIMEOUT_MARGIN_MS);
             LogX.d("Hb-" + device.address() + ": HELLO OK, hbInterval=" + hbInterval + "ms");

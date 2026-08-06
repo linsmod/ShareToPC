@@ -265,8 +265,25 @@ public class TransferClient implements Closeable {
                 ? ack.get("protoVersion").getAsInt() : 0;
         rdi.deviceId = ack.has("deviceId") && !ack.get("deviceId").isJsonNull()
                 ? ack.get("deviceId").getAsString() : "";
+        rdi.userName = ack.has("userName") && !ack.get("userName").isJsonNull()
+                ? ack.get("userName").getAsString() : "";
+        DeviceUserInfo.putUserName(host, rdi.userName);
+        rdi.machineName = TransferProtocol.optString(ack, "machineName");
+        if (rdi.machineName != null && !rdi.machineName.isEmpty()) {
+            DeviceUserInfo.putMachineName(host, rdi.machineName);
+        }
+        rdi.userFolders = TransferProtocol.optStringMap(ack, "userFolders");
+        if (rdi.userFolders != null && !rdi.userFolders.isEmpty()) {
+            DeviceUserInfo.putUserFolders(host, rdi.userFolders);
+        }
+        rdi.drives = TransferProtocol.optDriveList(ack, "drives");
+        if (rdi.drives != null && !rdi.drives.isEmpty()) {
+            DeviceUserInfo.putDrives(host, rdi.drives);
+        }
         android.util.Log.d("TransferClient",
                 "HELLO OK: " + rdi.clientVersion + " proto v" + rdi.protoVer + " id=" + rdi.deviceId
+                + " user=" + rdi.userName + " machine=" + rdi.machineName
+                + " folders=" + rdi.userFolders + " drives=" + (rdi.drives != null ? rdi.drives.size() : 0)
                 + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
         this.rdi = new RemoteDeviceInfo();
     }

@@ -318,7 +318,7 @@ public class EtpExplorerViewModel extends ViewModel {
         return new ArrayList<>();
     }
 
-    private static EtpSettingsActivity.PathPresets loadPresets() {
+    static EtpSettingsActivity.PathPresets loadPresets() {
         String json = App.get().settingsStore.getString("etp_path_presets", null);
         if (json != null) {
             try {

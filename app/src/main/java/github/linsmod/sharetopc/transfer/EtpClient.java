@@ -154,6 +154,31 @@ public class EtpClient implements Closeable {
                 sortName, sortAscending, 0 /* offset */, 0 /* count */).items;
     }
 
+    // ---- 目录浏览（Everything parent: 查询） ----
+
+    /**
+     * 构造"列目录"搜索串：{@code parent:"<path>"}。
+     * Everything 的 parent: 函数返回指定路径内的直接子项（文件+文件夹，不含递归子文件夹），
+     * 适合逐级浏览。路径含空格时用双引号包裹。
+     */
+    public static String buildParentSearch(String path) {
+        String p = path != null ? path : "";
+        return "parent:\"" + p + "\"";
+    }
+
+    /**
+     * 列出指定目录的直接子项（文件夹/文件），支持翻页。
+     * 与 {@link #query} 相同参数语义，仅搜索串固定为 {@code parent:"<path>"}。
+     */
+    public QueryResult queryChildren(String path, int columns,
+                                     int matchCase, int matchPath, int matchRegex,
+                                     int matchWholeWord,
+                                     String sortName, boolean sortAscending,
+                                     int offset, int count) throws IOException {
+        return query(buildParentSearch(path), columns, matchCase, matchPath, matchRegex,
+                matchWholeWord, sortName, sortAscending, offset, count);
+    }
+
     /**
      * 执行搜索并返回结果列表（完整参数 + 翻页）。
      *
