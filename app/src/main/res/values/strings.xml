@@ -90,9 +90,9 @@
     <string name="pref_qq_group_summary">378352638（点击复制群号）</string>
     <string name="pref_contact_dev_title">联系开发者</string>
     <string name="pref_contact_dev_summary">linsmod@qq.com（点击复制邮箱）</string>
-    <string name="pref_pc_client_title">设置接收程序</string>
-    <string name="pref_pc_client_summary">如何设置接收程序：\n
-1、点击分享按钮，用微信或QQ发送到电脑上\n
+    <string name="pref_pc_client_title">设置电脑端</string>
+    <string name="pref_pc_client_summary">如何设置电脑端：\n
+1、点击下面按钮，用微信或QQ发送到电脑上\n
 2、在电脑上解压ShareToPCReceiver.zip\n
 3、在电脑上启动ShareToPCReceiver.exe\n
 4、然后手机上就能通过ShareToPC分享内容了</string>
@@ -269,6 +269,9 @@
     <string name="task_tab_pull">下载</string>
     <string name="task_empty_send">暂无发送任务</string>
     <string name="task_empty_pull">暂无下载任务</string>
+    <string name="task_clear_title">清空任务记录</string>
+    <string name="task_clear_message">确定要清空当前分类的%1$s任务记录吗？</string>
+    <string name="task_cleared_format">%1$s任务已清空</string>
 
     <string-array name="path_preset_sort_fields">
         <item>默认排序</item>

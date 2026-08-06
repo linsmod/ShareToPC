@@ -338,6 +338,21 @@ public class JobStore {
         db.delete(DBHelper.TABLE_JOB, null, null);
     }
 
+    /**
+     * 仅清空指定方向（SendEntry.DIRECTION_SEND / DIRECTION_PULL）的记录，
+     * 并删除已无剩余条目的 job 聚合行。
+     */
+    public synchronized void clearByDirection(int direction) {
+        db.delete(DBHelper.TABLE_JOB_ENTRY,
+                DBHelper.COL_DIRECTION + "=?",
+                new String[]{String.valueOf(direction)});
+        db.delete(DBHelper.TABLE_JOB,
+                DBHelper.COL_JOB_ID_PK + " NOT IN (SELECT " + DBHelper.COL_JOB_ID
+                        + " FROM " + DBHelper.TABLE_JOB_ENTRY + " WHERE "
+                        + DBHelper.COL_JOB_ID + " IS NOT NULL)",
+                null);
+    }
+
     public synchronized SendEntry getSendEntry(String id) {
         if (id == null) return null;
         Cursor c = db.query(DBHelper.TABLE_JOB_ENTRY, null,

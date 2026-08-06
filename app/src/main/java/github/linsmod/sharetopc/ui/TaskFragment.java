@@ -213,13 +213,19 @@ public class TaskFragment extends Fragment {
     }
 
     private void showClearTasksDialog() {
+        // 当前 tab：0=发送, 1=下载 → 只清空对应方向的记录
+        boolean pull = taskTypeTab == 1;
+        int direction = pull ? SendEntry.DIRECTION_PULL : SendEntry.DIRECTION_SEND;
+        String label = getString(pull ? R.string.task_tab_pull : R.string.task_tab_send);
         new AlertDialog.Builder(requireContext())
-                .setTitle("清空任务记录")
-                .setMessage("确定要清空所有传输任务记录吗？")
+                .setTitle(R.string.task_clear_title)
+                .setMessage(getString(R.string.task_clear_message, label))
                 .setPositiveButton(R.string.ok, (d, which) -> {
-                    App.get().jobStore.clear();
+                    App.get().jobStore.clearByDirection(direction);
                     viewModel.refreshHistory();
-                    Toast.makeText(requireContext(), R.string.task_cleared, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(requireContext(),
+                            getString(R.string.task_cleared_format, label),
+                            Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton(R.string.cancel, null)
                 .show();
