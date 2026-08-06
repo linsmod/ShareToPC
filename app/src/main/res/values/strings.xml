@@ -268,7 +268,7 @@
     <string name="task_tab_send">发送</string>
     <string name="task_tab_pull">下载</string>
     <string name="task_empty_send">暂无发送任务</string>
-    <string name="task_empty_pull">暂无远程读取任务</string>
+    <string name="task_empty_pull">暂无下载任务</string>
 
     <string-array name="path_preset_sort_fields">
         <item>默认排序</item>

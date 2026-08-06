@@ -52,7 +52,7 @@ public class TaskFragment extends Fragment {
     private int filterPort;
     @Nullable private String filterDeviceName;
 
-    /** 类型 tab：0=发送, 1=远程读取。 */
+    /** 类型 tab：0=发送, 1=下载。 */
     private int taskTypeTab;
     @Nullable private List<TaskGroup> latestTasks;
 
@@ -180,7 +180,7 @@ public class TaskFragment extends Fragment {
         tvTaskEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
     }
 
-    /** 按类型 tab 过滤：0=仅发送, 1=仅远程读取。 */
+    /** 按类型 tab 过滤：0=仅发送, 1=仅下载。 */
     @NonNull
     private List<TaskGroup> applyTypeFilter(@NonNull List<TaskGroup> tasks) {
         boolean wantPull = taskTypeTab == 1;
