@@ -148,6 +148,7 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(this, EtpExplorerActivity.class);
         intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_NAME, device.displayName());
         intent.putExtra(EtpExplorerActivity.EXTRA_HOST, device.host);
+        intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_ID, device.deviceId);
         startActivity(intent);
     }
 

@@ -1,5 +1,8 @@
 package github.linsmod.sharetopc.ui;
 
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.BackgroundColorSpan;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,6 +34,9 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private static final int TYPE_HEADER = 0;
     private static final int TYPE_ITEM = 1;
 
+    // 搜索命中高亮背景色（半透明黄）
+    private static final int HIGHLIGHT_COLOR = 0x66FFEB3B;
+
     // 匹配 C:\Users\{username}\Desktop\ 等已知文件夹路径
     private static final Pattern PATTERN_USER_FOLDER = Pattern.compile(
             "\\\\users\\\\[^\\\\]+\\\\(desktop|documents|downloads|videos|pictures|music)(\\\\|$)",
@@ -41,6 +47,9 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     private final OnItemClickListener onItemClickListener;
+
+    // 本地搜索命中词（用于高亮），null/空表示不高亮
+    private List<String> highlightTerms;
 
     private final List<Row> rows = new ArrayList<>();
     private final List<Integer> headerPositions = new ArrayList<>();
@@ -87,6 +96,12 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return new ArrayList<>(headerPositions);
     }
 
+    /** 设置本地搜索命中词；null/空清除高亮。 */
+    void setHighlightTerms(List<String> terms) {
+        this.highlightTerms = (terms != null && !terms.isEmpty()) ? terms : null;
+        notifyDataSetChanged();
+    }
+
     @Override
     public int getItemViewType(int position) {
         return rows.get(position).header ? TYPE_HEADER : TYPE_ITEM;
@@ -123,7 +138,7 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         ItemViewHolder vh = (ItemViewHolder) holder;
         EtpClient.EtpSearchResult r = row.item;
-        vh.tvName.setText(r.name);
+        vh.tvName.setText(highlight(r.name, highlightTerms));
         vh.ivIcon.setImageResource(r.isFolder ? R.drawable.ic_folder : R.drawable.ic_file);
 
         if (r.size >= 0) {
@@ -148,7 +163,7 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             }
             if (hasPath) {
                 vh.tvPath.setVisibility(View.VISIBLE);
-                vh.tvPath.setText(r.path + "\\" + r.name);
+                vh.tvPath.setText(highlight(r.path + "\\" + r.name, highlightTerms));
             } else {
                 vh.tvPath.setVisibility(View.GONE);
             }
@@ -199,6 +214,25 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         String pattern = cal.get(Calendar.YEAR) == currentYear
                 ? "MM-dd HH:mm" : "yyyy-MM-dd";
         return new SimpleDateFormat(pattern, Locale.getDefault()).format(new Date(millis));
+    }
+
+    /** 对命中的关键字加背景高亮（大小写不敏感，可多词多次命中）。 */
+    private static CharSequence highlight(String text, List<String> terms) {
+        if (text == null || terms == null || terms.isEmpty()) return text;
+        String lower = text.toLowerCase();
+        SpannableString ss = new SpannableString(text);
+        for (String t : terms) {
+            if (t == null || t.isEmpty()) continue;
+            int from = 0;
+            while (true) {
+                int idx = lower.indexOf(t, from);
+                if (idx < 0) break;
+                ss.setSpan(new BackgroundColorSpan(HIGHLIGHT_COLOR),
+                        idx, idx + t.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                from = idx + t.length();
+            }
+        }
+        return ss;
     }
 
     static class HeaderViewHolder extends RecyclerView.ViewHolder {

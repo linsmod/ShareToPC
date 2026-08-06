@@ -9,7 +9,9 @@ import com.google.gson.Gson;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -27,7 +29,8 @@ public class EtpExplorerViewModel extends ViewModel {
 
     /** 每个分类最多缓存条数（控制加载耗时与缓存体积）。 */
     private static final int CATEGORY_LIMIT = 100;
-    private static final String CACHE_KEY = "etp_explorer_cache";
+    /** 缓存前缀，实际 key 为 {@code prefix + deviceId}（无 deviceId 时回退 host）。 */
+    private static final String CACHE_KEY_PREFIX = "etp_explorer_cache_";
 
     private static final int COLUMNS = EtpClient.SIZE_COLUMN | EtpClient.PATH_COLUMN
             | EtpClient.DATE_MODIFIED_COLUMN | EtpClient.DATE_CREATED_COLUMN
@@ -39,6 +42,7 @@ public class EtpExplorerViewModel extends ViewModel {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private volatile boolean cancelled;
 
+    private String savedDeviceId;
     private String savedHost;
     private int savedPort;
 
@@ -144,7 +148,8 @@ public class EtpExplorerViewModel extends ViewModel {
     // ==================== 初始化 / 刷新 ====================
 
     /** 打开页面入口：有缓存直接就绪，否则开始初始化缓存。 */
-    public void init(String host, int port) {
+    public void init(String deviceId, String host, int port) {
+        this.savedDeviceId = deviceId;
         this.savedHost = host;
         this.savedPort = port;
         ExplorerCache cache = readCache();
@@ -233,7 +238,7 @@ public class EtpExplorerViewModel extends ViewModel {
             cache.port = savedPort;
             cache.cachedAt = System.currentTimeMillis();
             cache.categories = results;
-            App.get().settingsStore.putString(CACHE_KEY, gson.toJson(cache));
+            App.get().settingsStore.putString(cacheKey(), gson.toJson(cache));
 
             running.set(false);
             loaded = true;
@@ -251,18 +256,17 @@ public class EtpExplorerViewModel extends ViewModel {
         }
     }
 
-    /** 构造 Everything 查询：`(位置1 | 位置2) (分类模式) !排除1 !排除2`。 */
+    /** 构造 Everything 查询：`位置1 | 位置2 分类模式 !排除1 !排除2`，与搜索页 buildPathFilter 一致。 */
     private static String buildQuery(String pattern, List<String> paths, List<String> excludes) {
         StringBuilder sb = new StringBuilder();
         if (!paths.isEmpty()) {
-            sb.append("(");
             for (int i = 0; i < paths.size(); i++) {
                 if (i > 0) sb.append(" | ");
                 sb.append(paths.get(i));
             }
-            sb.append(") ");
+            sb.append(" ");
         }
-        sb.append("(").append(pattern).append(")");
+        sb.append(pattern);
         for (String ex : excludes) {
             sb.append(" !").append(ex);
         }
@@ -325,8 +329,17 @@ public class EtpExplorerViewModel extends ViewModel {
         return EtpSettingsActivity.PathPresets.defaults();
     }
 
+    /** 按设备缓存：优先 deviceId，缺失时回退 host（兼容无 ID 的旧设备/手动设备）。 */
+    private String cacheKey() {
+        String id = savedDeviceId;
+        if (id == null || id.trim().isEmpty()) {
+            id = savedHost != null ? savedHost : "";
+        }
+        return CACHE_KEY_PREFIX + id;
+    }
+
     private ExplorerCache readCache() {
-        String json = App.get().settingsStore.getString(CACHE_KEY, null);
+        String json = App.get().settingsStore.getString(cacheKey(), null);
         if (json == null || json.isEmpty()) return null;
         try {
             return gson.fromJson(json, ExplorerCache.class);
@@ -344,6 +357,112 @@ public class EtpExplorerViewModel extends ViewModel {
             }
         }
         return out;
+    }
+
+    /**
+     * 基于缓存数据应用 分类选中 + 关键字 + 排序 生成展示列表。
+     * selectedLabels 为空表示不筛选分类（显示全部）；query 为空表示不搜索；
+     * sortName 为空表示保持缓存原始顺序。
+     */
+    public static List<CategoryResult> applyView(List<CategoryResult> all,
+            Set<String> selectedLabels, String query,
+            String sortName, boolean sortAsc) {
+        List<CategoryResult> out = new ArrayList<>();
+        if (all == null) return out;
+        List<String> terms = parseTerms(query);
+        for (CategoryResult c : all) {
+            if (selectedLabels != null && !selectedLabels.isEmpty()
+                    && !selectedLabels.contains(c.label)) {
+                continue;
+            }
+            List<EtpClient.EtpSearchResult> items = filterItems(c.items, terms);
+            if (items.isEmpty()) continue;
+            sortItems(items, sortName, sortAsc, terms);
+            CategoryResult copy = new CategoryResult(c.label, c.pattern);
+            copy.items = items;
+            out.add(copy);
+        }
+        return out;
+    }
+
+    /** 空格拆分关键字（小写）；空/纯空白返回空列表（不过滤）。 */
+    static List<String> parseTerms(String query) {
+        List<String> terms = new ArrayList<>();
+        if (query == null) return terms;
+        for (String t : query.trim().split("\\s+")) {
+            if (!t.isEmpty()) terms.add(t.toLowerCase());
+        }
+        return terms;
+    }
+
+    /** 匹配关键字数：全部命中 = AND 结果，部分命中 = OR 结果；至少命中一个才保留。 */
+    static int matchCount(EtpClient.EtpSearchResult it, List<String> terms) {
+        if (terms == null || terms.isEmpty()) return 1;
+        String name = str(it.name).toLowerCase();
+        String path = str(it.fullPath()).toLowerCase();
+        int count = 0;
+        for (String t : terms) {
+            if (name.contains(t) || path.contains(t)) count++;
+        }
+        return count;
+    }
+
+    private static List<EtpClient.EtpSearchResult> filterItems(
+            List<EtpClient.EtpSearchResult> items, List<String> terms) {
+        List<EtpClient.EtpSearchResult> out = new ArrayList<>();
+        if (items == null) return out;
+        for (EtpClient.EtpSearchResult it : items) {
+            if (matchCount(it, terms) > 0) out.add(it);
+        }
+        return out;
+    }
+
+    /** 排序：先按关键字匹配数降序（AND 结果在前，OR 结果靠后），再按所选字段。 */
+    private static void sortItems(List<EtpClient.EtpSearchResult> items,
+                                  String sortName, boolean sortAsc, List<String> terms) {
+        if (items == null) return;
+        Comparator<EtpClient.EtpSearchResult> fieldComp = comparatorFor(sortName);
+        if (!sortAsc && fieldComp != null) fieldComp = fieldComp.reversed();
+        Comparator<EtpClient.EtpSearchResult> comp;
+        if (fieldComp == null) {
+            comp = (a, b) -> Integer.compare(matchCount(b, terms), matchCount(a, terms));
+        } else {
+            comp = Comparator
+                    .comparingInt((EtpClient.EtpSearchResult a) -> -matchCount(a, terms))
+                    .thenComparing(fieldComp);
+        }
+        items.sort(comp);
+    }
+
+    private static Comparator<EtpClient.EtpSearchResult> comparatorFor(String sortName) {
+        if (sortName == null) return null;
+        switch (sortName) {
+            case "name": return (a, b) -> cmpStr(str(a.name), str(b.name));
+            case "size": return (a, b) -> {
+                int c = Long.compare(a.size, b.size);
+                return c != 0 ? c : cmpStr(str(a.name), str(b.name));
+            };
+            case "path": return (a, b) -> cmpStr(str(a.fullPath()), str(b.fullPath()));
+            case "extension": return (a, b) -> {
+                int c = cmpStr(extension(a.name), extension(b.name));
+                return c != 0 ? c : cmpStr(str(a.name), str(b.name));
+            };
+            case "date_modified": return Comparator.comparingLong(a -> a.dateModified);
+            case "date_created": return Comparator.comparingLong(a -> a.dateCreated);
+            default: return null;
+        }
+    }
+
+    private static String str(String s) { return s != null ? s : ""; }
+
+    private static String extension(String name) {
+        if (name == null) return "";
+        int i = name.lastIndexOf('.');
+        return (i >= 0 && i < name.length() - 1) ? name.substring(i + 1).toLowerCase() : "";
+    }
+
+    private static int cmpStr(String a, String b) {
+        return String.CASE_INSENSITIVE_ORDER.compare(a, b);
     }
 
     // ==================== 生命周期 ====================

@@ -33,6 +33,108 @@
             android:visibility="gone"
             tools:text="缓存于 14:32" />
 
+        <!-- 本地筛选：搜索框 -->
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/tilExplorerSearch"
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="16dp"
+            android:layout_marginTop="4dp"
+            android:hint="@string/etp_search_hint"
+            android:visibility="gone"
+            app:endIconMode="clear_text">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etExplorerSearch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:singleLine="true" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <!-- 排序（本地对缓存结果排序） -->
+        <LinearLayout
+            android:id="@+id/layoutExplorerSort"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:visibility="gone">
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:divider="@drawable/divider_sort_gap"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:showDividers="middle">
+
+                    <TextView
+                        android:id="@+id/tvSortName"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="文件名" />
+
+                    <TextView
+                        android:id="@+id/tvSortSize"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="大小" />
+
+                    <TextView
+                        android:id="@+id/tvSortPath"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="路径" />
+
+                    <TextView
+                        android:id="@+id/tvSortExt"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="扩展名" />
+
+                    <TextView
+                        android:id="@+id/tvSortDateMod"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="修改日期" />
+
+                    <TextView
+                        android:id="@+id/tvSortDateCre"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:text="创建日期" />
+                </LinearLayout>
+            </HorizontalScrollView>
+        </LinearLayout>
+
         <!-- 分类入口 chips -->
         <HorizontalScrollView
             android:id="@+id/layoutCategories"

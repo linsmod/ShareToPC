@@ -3,9 +3,14 @@ package github.linsmod.sharetopc.ui;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.text.SpannableString;
+import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+import android.text.style.ImageSpan;
 import android.util.TypedValue;
 import android.view.View;
 import android.widget.TextView;
@@ -13,7 +18,9 @@ import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.core.graphics.Insets;
+import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -24,11 +31,15 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.divider.MaterialDividerItemDecoration;
+import com.google.android.material.textfield.TextInputEditText;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
@@ -43,6 +54,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
+    public static final String EXTRA_DEVICE_ID = "device_id";
 
     private EtpExplorerViewModel viewModel;
     private EtpExplorerAdapter adapter;
@@ -50,11 +62,40 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
     private String deviceName;
     private String deviceHost;
+    private String deviceId;
 
     // 分类入口
     private View layoutCategories;
     private ChipGroup cgCategories;
     private TextView tvCacheInfo;
+
+    // 本地筛选/排序（数据源为缓存，全部在内存中完成）
+    private View tilExplorerSearch;
+    private TextInputEditText etExplorerSearch;
+    private View layoutExplorerSort;
+    private TextView tvEmpty;
+    private List<EtpExplorerViewModel.CategoryResult> fullCategories;
+    private final Set<String> selectedCategories = new HashSet<>();
+    private String searchQuery = "";
+    private String currentSort;
+    private boolean sortAsc = true;
+    private SortItem[] sortItems;
+
+    private static final String[] SORT_NAMES = {
+            "name", "size", "path", "extension", "date_modified", "date_created"};
+
+    private static class SortItem {
+        final TextView view;
+        final String sortName;
+        final CharSequence label;
+        int state; // 0=none, 1=asc, 2=desc
+
+        SortItem(TextView view, String sortName) {
+            this.view = view;
+            this.sortName = sortName;
+            this.label = view.getText();
+        }
+    }
 
     private RecyclerView rvExplorer;
     private View layoutLoading;
@@ -81,6 +122,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         Intent intent = getIntent();
         deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
         deviceHost = intent.getStringExtra(EXTRA_HOST);
+        deviceId = intent.getStringExtra(EXTRA_DEVICE_ID);
         if (TextUtils.isEmpty(deviceHost)) {
             Toast.makeText(this, "未指定设备", Toast.LENGTH_SHORT).show();
             finish();
@@ -122,6 +164,20 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         cgCategories = findViewById(R.id.cgCategories);
         tvCacheInfo = findViewById(R.id.tvCacheInfo);
 
+        tilExplorerSearch = findViewById(R.id.tilExplorerSearch);
+        etExplorerSearch = findViewById(R.id.etExplorerSearch);
+        etExplorerSearch.addTextChangedListener(new android.text.TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
+            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
+            @Override public void afterTextChanged(android.text.Editable s) {
+                searchQuery = s != null ? s.toString() : "";
+                rebuildView();
+            }
+        });
+
+        layoutExplorerSort = findViewById(R.id.layoutExplorerSort);
+        initSortItems();
+
         rvExplorer = findViewById(R.id.rvExplorer);
         layoutManager = new LinearLayoutManager(this);
         rvExplorer.setLayoutManager(layoutManager);
@@ -138,6 +194,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutError = findViewById(R.id.layoutError);
         tvError = findViewById(R.id.tvError);
         layoutEmpty = findViewById(R.id.layoutEmpty);
+        tvEmpty = findViewById(R.id.tvEmpty);
         findViewById(R.id.btnRetry).setOnClickListener(v -> viewModel.refresh());
         findViewById(R.id.btnGoSearch).setOnClickListener(v -> openSearch());
     }
@@ -145,7 +202,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private void initViewModel() {
         viewModel = new ViewModelProvider(this).get(EtpExplorerViewModel.class);
         viewModel.observe(this::render);
-        viewModel.init(deviceHost, App.get().settingsStore.getEtpPort());
+        viewModel.init(deviceId, deviceHost, App.get().settingsStore.getEtpPort());
     }
 
     // ==================== 状态渲染 ====================
@@ -167,6 +224,8 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutEmpty.setVisibility(View.GONE);
         layoutCategories.setVisibility(View.GONE);
         tvCacheInfo.setVisibility(View.GONE);
+        tilExplorerSearch.setVisibility(View.GONE);
+        layoutExplorerSort.setVisibility(View.GONE);
 
         tvLoadingTitle.setText(s.firstLoad
                 ? R.string.etp_explorer_caching : R.string.etp_explorer_refreshing);
@@ -184,22 +243,28 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutLoading.setVisibility(View.GONE);
         layoutError.setVisibility(View.GONE);
 
-        List<EtpExplorerViewModel.CategoryResult> categories =
-                EtpExplorerViewModel.nonEmpty(r.categories);
+        fullCategories = EtpExplorerViewModel.nonEmpty(r.categories);
+        // 数据刷新后清理已失效的分类选中
+        Set<String> labels = new HashSet<>();
+        for (EtpExplorerViewModel.CategoryResult c : fullCategories) labels.add(c.label);
+        selectedCategories.retainAll(labels);
 
-        if (categories.isEmpty()) {
+        if (fullCategories.isEmpty()) {
             // 全部分类无结果 → 空界面
             rvExplorer.setVisibility(View.GONE);
             layoutCategories.setVisibility(View.GONE);
             tvCacheInfo.setVisibility(View.GONE);
+            tilExplorerSearch.setVisibility(View.GONE);
+            layoutExplorerSort.setVisibility(View.GONE);
+            tvEmpty.setText(R.string.etp_explorer_empty);
             layoutEmpty.setVisibility(View.VISIBLE);
             return;
         }
 
         layoutEmpty.setVisibility(View.GONE);
-        buildCategoryChips(categories);
-        adapter.submitCategories(categories);
-        rvExplorer.setVisibility(View.VISIBLE);
+        tilExplorerSearch.setVisibility(View.VISIBLE);
+        layoutExplorerSort.setVisibility(View.VISIBLE);
+        rebuildView();
 
         tvCacheInfo.setVisibility(View.VISIBLE);
         String time = timeFormat.format(new Date(r.cachedAt));
@@ -213,30 +278,151 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutEmpty.setVisibility(View.GONE);
         layoutCategories.setVisibility(View.GONE);
         tvCacheInfo.setVisibility(View.GONE);
+        tilExplorerSearch.setVisibility(View.GONE);
+        layoutExplorerSort.setVisibility(View.GONE);
         tvError.setText(e.message);
         layoutError.setVisibility(View.VISIBLE);
     }
 
-    // ==================== 分类 chips ====================
+    // ==================== 分类筛选 / 本地搜索 / 排序 ====================
 
-    /** 渲染分类入口 chips（仅非空分类），点击滚动到对应分节。 */
+    /** 根据 分类选中 + 搜索词 + 排序 重算列表与 chips。 */
+    private void rebuildView() {
+        if (fullCategories == null) return;
+        List<String> terms = EtpExplorerViewModel.parseTerms(searchQuery);
+        adapter.setHighlightTerms(terms);
+
+        // chips 始终展示全部可用分类（仅受搜索影响，不受选中影响），便于多选
+        List<EtpExplorerViewModel.CategoryResult> chipView =
+                EtpExplorerViewModel.applyView(fullCategories, null,
+                        searchQuery, currentSort, sortAsc);
+        List<EtpExplorerViewModel.CategoryResult> view =
+                EtpExplorerViewModel.applyView(fullCategories, selectedCategories,
+                        searchQuery, currentSort, sortAsc);
+
+        if (chipView.isEmpty()) {
+            layoutCategories.setVisibility(View.GONE);
+        } else {
+            buildCategoryChips(chipView);
+        }
+
+        if (view.isEmpty()) {
+            rvExplorer.setVisibility(View.GONE);
+            adapter.submitCategories(new ArrayList<>());
+            tvEmpty.setText(searchQuery.isEmpty() && selectedCategories.isEmpty()
+                    ? R.string.etp_explorer_empty : R.string.etp_explorer_no_match);
+            layoutEmpty.setVisibility(View.VISIBLE);
+            return;
+        }
+        layoutEmpty.setVisibility(View.GONE);
+        adapter.submitCategories(view);
+        rvExplorer.setVisibility(View.VISIBLE);
+    }
+
+    /** 渲染分类筛选 chips（可多选）：勾选后仅显示选中分类，全部不勾选时显示全部。 */
     private void buildCategoryChips(List<EtpExplorerViewModel.CategoryResult> categories) {
         cgCategories.removeAllViews();
-        List<Integer> headerPositions = adapter.getHeaderPositions();
         layoutCategories.setVisibility(View.VISIBLE);
-        for (int i = 0; i < categories.size(); i++) {
-            EtpExplorerViewModel.CategoryResult c = categories.get(i);
+        for (EtpExplorerViewModel.CategoryResult c : categories) {
             Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
             chip.setText(c.label + " " + c.items.size());
-            chip.setCheckable(false);
-            final int section = i;
-            chip.setOnClickListener(v -> {
-                if (section < headerPositions.size()) {
-                    layoutManager.scrollToPosition(headerPositions.get(section));
-                }
+            chip.setCheckable(true);
+            chip.setChecked(selectedCategories.contains(c.label));
+            chip.setOnCheckedChangeListener((button, isChecked) -> {
+                if (isChecked) selectedCategories.add(c.label);
+                else selectedCategories.remove(c.label);
+                rebuildView();
             });
             cgCategories.addView(chip);
         }
+    }
+
+    // ---- 排序（参考搜索页：点击排序字段，单选中，再点切换升降序） ----
+
+    private void initSortItems() {
+        TextView[] allViews = {
+                findViewById(R.id.tvSortName), findViewById(R.id.tvSortSize),
+                findViewById(R.id.tvSortPath), findViewById(R.id.tvSortExt),
+                findViewById(R.id.tvSortDateMod), findViewById(R.id.tvSortDateCre)};
+        List<SortItem> items = new ArrayList<>();
+        for (int i = 0; i < SORT_NAMES.length; i++) {
+            TextView view = allViews[i];
+            SortItem item = new SortItem(view, SORT_NAMES[i]);
+            items.add(item);
+            final int idx = items.size() - 1;
+            view.setOnClickListener(v -> onSortItemClicked(idx));
+        }
+        sortItems = items.toArray(new SortItem[0]);
+        refreshSortIndicators();
+    }
+
+    private void onSortItemClicked(int index) {
+        SortItem clicked = sortItems[index];
+        if (clicked.state == 0) {
+            // 单选：取消其他项激活，激活当前项并沿用当前方向
+            for (SortItem item : sortItems) {
+                if (item != clicked && item.state != 0) item.state = 0;
+            }
+            clicked.state = sortAsc ? 1 : 2;
+            currentSort = clicked.sortName;
+        } else {
+            // 已激活：切换升/降序
+            clicked.state = clicked.state == 1 ? 2 : 1;
+        }
+        sortAsc = clicked.state == 1;
+        refreshSortIndicators();
+        rebuildView();
+    }
+
+    private void refreshSortIndicators() {
+        TypedValue tv = new TypedValue();
+        getTheme().resolveAttribute(
+                com.google.android.material.R.attr.colorPrimary, tv, true);
+        int accent = tv.data;
+        tv = new TypedValue();
+        getTheme().resolveAttribute(
+                com.google.android.material.R.attr.colorOnSurface, tv, true);
+        int subtle = (tv.data & 0x00FFFFFF) | 0x60000000;
+
+        float density = getResources().getDisplayMetrics().density;
+        float textHeight = sortItems[0].view.getPaint().getFontMetrics().descent
+                - sortItems[0].view.getPaint().getFontMetrics().ascent;
+        int iconSize = (int) (textHeight * 0.6f);
+
+        for (SortItem item : sortItems) {
+            int resId;
+            int iconColor;
+            if (item.state == 1) {
+                resId = R.drawable.ic_sort_asc; iconColor = accent;
+            } else if (item.state == 2) {
+                resId = R.drawable.ic_sort_desc; iconColor = accent;
+            } else {
+                resId = R.drawable.ic_sort_both; iconColor = subtle;
+            }
+
+            item.view.setTextColor(item.state != 0 ? accent : subtle);
+            item.view.setTypeface(null, item.state != 0 ? Typeface.BOLD : Typeface.NORMAL);
+            item.view.setBackground(null);
+            int vPad = (int) (density * 2);
+            item.view.setPadding(0, vPad, 0, vPad);
+
+            Drawable icon = makeIcon(resId, iconColor, iconSize);
+            SpannableString ss = new SpannableString(item.label + "  ");
+            if (icon != null) {
+                ImageSpan span = new ImageSpan(icon, ImageSpan.ALIGN_CENTER);
+                ss.setSpan(span, ss.length() - 1, ss.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+            item.view.setText(ss);
+        }
+    }
+
+    private Drawable makeIcon(int resId, int color, int size) {
+        Drawable d = ContextCompat.getDrawable(this, resId);
+        if (d == null) return null;
+        d = DrawableCompat.wrap(d).mutate();
+        DrawableCompat.setTint(d, color);
+        d.setBounds(0, 0, size, size);
+        return d;
     }
 
     // ==================== 跳转搜索 ====================

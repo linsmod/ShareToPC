@@ -234,6 +234,7 @@
     <string name="etp_explorer_updated_at">已更新 %1$s</string>
     <string name="etp_explorer_count">%1$d 个</string>
     <string name="etp_explorer_empty">未在常用位置找到文件，试试搜索</string>
+    <string name="etp_explorer_no_match">没有匹配的文件</string>
     <string name="etp_explorer_retry">重试</string>
     <string name="etp_explorer_go_search">去搜索</string>
 
