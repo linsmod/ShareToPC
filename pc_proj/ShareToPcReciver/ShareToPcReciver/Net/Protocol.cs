@@ -132,10 +132,10 @@ namespace ShareToPcReciver.Net
             await stream.FlushAsync(ct);
         }
 
-        /// <summary>PULL_REQUEST 响应：status=OK 时携带文件大小与 MIME（PC 注册表为准），ERROR 时 msg 为拒绝原因。</summary>
-        public static async Task WritePullAckAsync(Stream stream, bool ok, string msg, long size, string mime, CancellationToken ct)
+        /// <summary>PULL_REQUEST 响应：status=OK（携带 size/seek/mime）或 status=REJECTED（msg 为拒绝原因），显式协议状态。</summary>
+        public static async Task WritePullAckAsync(Stream stream, bool ok, string msg, long size, long seek, string mime, CancellationToken ct)
         {
-            var ack = new { type = "PULL_ACK", status = ok ? "OK" : "ERROR", msg = msg ?? "", size, mime = mime ?? "" };
+            var ack = new { type = "PULL_ACK", status = ok ? "OK" : "REJECTED", msg = msg ?? "", size, seek, mime = mime ?? "" };
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

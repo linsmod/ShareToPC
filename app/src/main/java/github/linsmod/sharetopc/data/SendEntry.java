@@ -123,10 +123,17 @@ public class SendEntry {
     public static final int DIRECTION_SEND = 0;   // 发送到 PC
     public static final int DIRECTION_PULL = 1;   // 从 PC 拉取到手机
 
+    // 拉取完成后的动作
+    public static final int POST_PULL_NONE = 0;   // 仅下载，不自动处理
+    public static final int POST_PULL_OPEN = 1;   // 拉取完成弹"打开方式"
+    public static final int POST_PULL_SHARE = 2;  // 拉取完成弹"转发"
+
     /** 任务方向：DIRECTION_SEND / DIRECTION_PULL。 */
     public int direction;
     /** 拉取任务：远端文件路径（发送任务为空）。 */
     public String remotePath;
+    /** 拉取任务：完成后动作（POST_PULL_*），仅本次进程有效。 */
+    public int postPullAction;
 
     public boolean isPull() {
         return direction == DIRECTION_PULL;

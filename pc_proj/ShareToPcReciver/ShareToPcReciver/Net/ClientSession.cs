@@ -211,7 +211,7 @@ namespace ShareToPcReciver.Net
         {
             if (clientDevice == null)
             {
-                await Protocol.WritePullAckAsync(stream, false, "未完成握手", 0, "", _ct);
+                await Protocol.WritePullAckAsync(stream, false, "未完成握手", 0, 0, "", _ct);
                 return;
             }
             string path = header.TryGetProperty("path", out JsonElement pp) ? pp.GetString() ?? "" : "";
@@ -220,16 +220,20 @@ namespace ShareToPcReciver.Net
             if (!TryAllowPull(path, name, out string reason))
             {
                 Util.Log.Warn($"PULL_REQUEST rejected for {clientDevice.DeviceName}: {reason} ({path})");
-                await Protocol.WritePullAckAsync(stream, false, reason, 0, "", _ct);
+                await Protocol.WritePullAckAsync(stream, false, reason, 0, 0, "", _ct);
                 return;
             }
 
             Util.Log.Info($"PULL_REQUEST accepted for {clientDevice.DeviceName}: {path}");
             var fi = new FileInfo(path);
-            await Protocol.WritePullAckAsync(stream, true, "", fi.Length, Mime.FromFileName(path), _ct);
+            // 断点续传：客户端上报已有分片长度，校验后从该偏移继续（超出则从头）
+            long seek = header.TryGetProperty("seek", out JsonElement sp) ? sp.GetInt64() : 0L;
+            if (seek < 0 || seek > fi.Length) seek = 0;
+            await Protocol.WritePullAckAsync(stream, true, "", fi.Length, seek, Mime.FromFileName(path), _ct);
 
             using var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.SequentialScan);
+            if (seek > 0) fs.Seek(seek, SeekOrigin.Begin);
             byte[] buf = new byte[64 * 1024];
             int n;
             while ((n = await fs.ReadAsync(buf, 0, buf.Length, _ct)) > 0)
@@ -238,7 +242,7 @@ namespace ShareToPcReciver.Net
                 await Protocol.WritePullChunkAsync(stream, buf, n, _ct);
             }
             await Protocol.WritePullEndAsync(stream, _ct);
-            Util.Log.Info($"PULL_REQUEST done for {clientDevice.DeviceName}: {path}");
+            Util.Log.Info($"PULL_REQUEST done for {clientDevice.DeviceName}: {path} (seek={seek})");
         }
 
         /// <summary>

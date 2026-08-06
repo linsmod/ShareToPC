@@ -84,6 +84,13 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- 流式分享：目标应用读取时边拉边灌（不落盘），URI 需先注册随机 nonce -->
+        <provider
+            android:name=".transfer.StreamingShareProvider"
+            android:authorities="${applicationId}.streaming"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".service.ShareForegroundService"
             android:exported="false"

@@ -11,6 +11,8 @@ public final class Listeners {
     public interface TaskActionListener {
         /** 分组长按 → 弹出上下文菜单 */
         void onGroupMenuRequested(TaskGroup group, View anchor, float touchX);
+        /** 已完成的拉取条目长按 → 弹出打开/转发菜单 */
+        default void onPullEntryMenuRequested(SendEntry entry, View anchor) {}
         /** 暂停整个分组 */
         default void onGroupPauseRequested(TaskGroup group) {}
         /** 继续整个分组 */

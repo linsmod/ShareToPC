@@ -1,7 +1,5 @@
 package github.linsmod.sharetopc.ui;
 
-import android.content.ClipData;
-import android.content.ClipboardManager;
 import android.content.Intent;
 import android.graphics.Paint;
 import android.graphics.Typeface;
@@ -40,13 +38,10 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.divider.MaterialDividerItemDecoration;
 import com.google.android.material.textfield.TextInputEditText;
 import com.google.gson.Gson;
 
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -63,12 +58,19 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
+    public static final String EXTRA_DEVICE_ID = "device_id";
+    public static final String EXTRA_PORT = "port";
 
     private static final String PREF_KEY = "etp_path_presets";
     private static final String[] SORT_NAMES = {
             "name", "size", "path", "extension", "date_modified", "date_created"};
 
     private EtpSearchViewModel viewModel;
+
+    // 拉取所需：设备标识 + 接收端口
+    private String deviceHost;
+    private String deviceId;
+    private int devicePort;
 
     // View 引用
     private View searchArea;
@@ -203,13 +205,15 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
         Intent intent = getIntent();
         String deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
-        String deviceHost = intent.getStringExtra(EXTRA_HOST);
+        deviceHost = intent.getStringExtra(EXTRA_HOST);
         int etpPort = App.get().settingsStore.getEtpPort();
         if (TextUtils.isEmpty(deviceHost)) {
             Toast.makeText(this, "未指定设备", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
+        deviceId = intent.getStringExtra(EXTRA_DEVICE_ID);
+        devicePort = intent.getIntExtra(EXTRA_PORT, 0);
 
         initViews(deviceName);
         initFilter();
@@ -875,72 +879,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
     // ==================== 文件属性对话框 ====================
 
     private void showFilePropertiesDialog(EtpClient.EtpSearchResult r) {
-        StringBuilder body = new StringBuilder();
-        body.append("路径：").append(r.fullPath()).append("\n\n");
-        body.append("类型：").append(r.isFolder ? "文件夹" : "文件").append("\n\n");
-
-        if (r.size >= 0) {
-            body.append("大小：").append(EtpClient.EtpSearchResult.formatSize(r.size));
-            if (r.size >= 1024) {
-                body.append("（").append(String.format("%,d 字节", r.size)).append("）");
-            }
-            body.append("\n\n");
-        }
-        if (r.dateModified > 0) {
-            long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateModified);
-            body.append("修改时间：")
-                    .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                            .format(new Date(millis)))
-                    .append("\n\n");
-        }
-        if (r.dateCreated > 0) {
-            long millis = EtpClient.EtpSearchResult.filetimeToMillis(r.dateCreated);
-            body.append("创建时间：")
-                    .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-                            .format(new Date(millis)))
-                    .append("\n\n");
-        }
-        if (r.attributes >= 0) {
-            body.append("属性：").append(formatFileAttributes(r.attributes));
-        }
-
-        TextView tv = new TextView(this);
-        tv.setText(body.toString());
-        tv.setTextSize(14);
-        tv.setTextColor(getThemeColor(android.R.attr.textColorPrimary));
-        tv.setPadding(dp(16), dp(16), dp(16), dp(8));
-        tv.setTextIsSelectable(true);
-
-        new MaterialAlertDialogBuilder(this)
-                .setTitle(r.name)
-                .setView(tv)
-                .setPositiveButton("复制路径", (d, w) -> {
-                    ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-                    cm.setPrimaryClip(ClipData.newPlainText("file_path", r.fullPath()));
-                    Toast.makeText(this, getString(R.string.etp_copied, r.fullPath()),
-                            Toast.LENGTH_SHORT).show();
-                })
-                .setNegativeButton("关闭", null)
-                .show();
-    }
-
-    private static String formatFileAttributes(int attrs) {
-        StringBuilder sb = new StringBuilder();
-        if ((attrs & 0x01) != 0) sb.append("只读 ");
-        if ((attrs & 0x02) != 0) sb.append("隐藏 ");
-        if ((attrs & 0x04) != 0) sb.append("系统 ");
-        if ((attrs & 0x10) != 0) sb.append("目录 ");
-        if ((attrs & 0x20) != 0) sb.append("存档 ");
-        if ((attrs & 0x80) != 0) sb.append("普通 ");
-        if ((attrs & 0x100) != 0) sb.append("临时 ");
-        if ((attrs & 0x200) != 0) sb.append("稀疏 ");
-        if ((attrs & 0x400) != 0) sb.append("重解析点 ");
-        if ((attrs & 0x800) != 0) sb.append("压缩 ");
-        if ((attrs & 0x1000) != 0) sb.append("脱机 ");
-        if ((attrs & 0x2000) != 0) sb.append("未索引 ");
-        if ((attrs & 0x4000) != 0) sb.append("加密 ");
-        if (sb.length() == 0) sb.append("无");
-        return sb.toString().trim();
+        EtpFileDialog.show(this, r, deviceId, deviceHost, devicePort);
     }
 
     private int dp(int dp) {

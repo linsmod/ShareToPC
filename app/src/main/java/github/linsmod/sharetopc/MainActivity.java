@@ -136,6 +136,8 @@ public class MainActivity extends AppCompatActivity implements TaskFragment.Devi
         Intent intent = new Intent(this, EtpSearchActivity.class);
         intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_NAME, device.displayName());
         intent.putExtra(EtpSearchActivity.EXTRA_HOST, device.host);
+        intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_ID, device.deviceId);
+        intent.putExtra(EtpSearchActivity.EXTRA_PORT, device.port);
         startActivity(intent);
     }
     public void showEtpExplorer(DiscoveredDevice device) {

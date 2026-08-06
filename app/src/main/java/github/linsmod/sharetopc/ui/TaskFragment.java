@@ -109,6 +109,11 @@ public class TaskFragment extends Fragment {
             public void onGroupMenuRequested(TaskGroup group, View anchor, float touchX) {
                 showGroupMenu(group, anchor, touchX);
             }
+
+            @Override
+            public void onPullEntryMenuRequested(SendEntry entry, View anchor) {
+                showPullEntryMenu(entry, anchor);
+            }
         }, transferId -> viewModel.hasPfd(transferId));
         rvTask.setAdapter(taskAdapter);
 
@@ -269,5 +274,46 @@ public class TaskFragment extends Fragment {
         });
 
         popup.show();
+    }
+
+    /** 已完成的拉取条目：打开 / 转发 / 保存 / 删除。 */
+    private void showPullEntryMenu(SendEntry entry, View anchor) {
+        PopupMenu popup = new PopupMenu(requireActivity(), anchor);
+        popup.getMenu().add(0, 1, 0, "打开");
+        popup.getMenu().add(0, 2, 0, "转发");
+        popup.getMenu().add(0, 3, 0, "保存到下载");
+        popup.getMenu().add(0, 4, 0, "删除");
+        popup.setOnMenuItemClickListener(item -> {
+            int id = item.getItemId();
+            if (id == 1) {
+                App.get().transferManager.openPulledFile(entry);
+                return true;
+            } else if (id == 2) {
+                App.get().transferManager.sharePulledFile(entry);
+                return true;
+            } else if (id == 3) {
+                savePullEntry(entry);
+                return true;
+            } else if (id == 4) {
+                App.get().transferManager.deletePulledFile(entry);
+                viewModel.refreshTasks();
+                Toast.makeText(requireContext(), "已删除", Toast.LENGTH_SHORT).show();
+                return true;
+            }
+            return false;
+        });
+        popup.show();
+    }
+
+    /** 保存到下载目录，完成后弹 dialog 告知路径。 */
+    private void savePullEntry(SendEntry entry) {
+        App.get().transferManager.savePulledFile(entry,
+                path -> new AlertDialog.Builder(requireContext())
+                        .setTitle("已保存")
+                        .setMessage("已保存到下载目录：\n" + path)
+                        .setPositiveButton(R.string.ok, null)
+                        .show(),
+                err -> Toast.makeText(requireContext(),
+                        "保存失败：" + err, Toast.LENGTH_SHORT).show());
     }
 }

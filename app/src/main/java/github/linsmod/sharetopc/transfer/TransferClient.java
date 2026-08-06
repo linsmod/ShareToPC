@@ -8,6 +8,7 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
@@ -97,40 +98,130 @@ public class TransferClient implements Closeable {
         }
     }
 
-    /**
-     * 拉取文件：向 PC 请求指定远端路径，按 PULL_CHUNK 分块写入缓存目录（不落 inbox），
-     * 供打开/转发。PC 端按安全规则决定是否允许，拒绝时抛出带原因的 IOException。
-     */
-    public void pullFile(TransferManager.SendJob job, SendEntry entry,
-                         TransferProtocol.Progress progress) throws IOException {
-        TransferProtocol.writePullRequest(out, job.deviceId, entry.name, entry.remotePath,
-                entry.size >= 0 ? entry.size : 0, job.id);
+    /** PULL_ACK 解析结果：status=OK 时 ok=true 并携带 size/seek/mime；status=REJECTED 时 ok=false 并携带 msg 原因。 */
+    public static class PullAck {
+        public final boolean ok;
+        public final String msg;
+        public final long size;
+        public final long seek;
+        public final String mime;
 
+        public PullAck(boolean ok, String msg, long size, long seek, String mime) {
+            this.ok = ok;
+            this.msg = msg != null ? msg : "";
+            this.size = size;
+            this.seek = seek;
+            this.mime = mime != null ? mime : "";
+        }
+
+        public boolean rejected() {
+            return !ok;
+        }
+    }
+
+    /** 探测结果：远端是否允许、拒绝原因、文件大小与 MIME。 */
+    public static class PullProbe {
+        public final boolean ok;
+        public final String msg;
+        public final long size;
+        public final String mime;
+        public PullProbe(boolean ok, String msg, long size, String mime) {
+            this.ok = ok;
+            this.msg = msg != null ? msg : "";
+            this.size = size;
+            this.mime = mime != null ? mime : "";
+        }
+    }
+
+    /** 发送 PULL_REQUEST（seek=0）并仅读 ACK，用于流式分享前获取真实大小与 MIME。拒绝时 ok=false。 */
+    public PullProbe probePull(String deviceId, String name, String path, long estSize) throws IOException {
+        TransferProtocol.writePullRequest(out, deviceId, name, path, estSize, 0, "");
+        PullAck ack = expectPullAck();
+        return new PullProbe(ack.ok, ack.msg,
+                ack.ok && ack.size >= 0 ? ack.size : estSize, ack.mime);
+    }
+
+    /**
+     * 流式拉取：把远端文件内容写入给定 OutputStream（不落盘，只经过管道/内存缓冲）。
+     * 调用前需已 connect + hello(oneway)。返回已写入字节数；PC 明确拒绝时返回 0（不抛异常）。
+     */
+    public long pullToStream(String deviceId, String name, String path, long estSize,
+                             OutputStream os) throws IOException {
+        TransferProtocol.writePullRequest(out, deviceId, name, path, estSize, 0, "");
+        PullAck ack = expectPullAck();
+        if (ack.rejected()) {
+            return 0;
+        }
+        long received = 0;
+        while (true) {
+            JsonObject h = TransferProtocol.readHeader(in);
+            String type = TransferProtocol.optString(h, "type");
+            if ("PULL_END".equals(type)) break;
+            if ("PULL_CHUNK".equals(type)) {
+                int len = h.has("len") && !h.get("len").isJsonNull() ? h.get("len").getAsInt() : 0;
+                if (len < 0 || len > 16 * 1024 * 1024) {
+                    throw new IOException("invalid chunk len: " + len);
+                }
+                byte[] buf = new byte[len];
+                in.readFully(buf);
+                os.write(buf);
+                received += len;
+            } else if ("ACK".equals(type)) {
+                throw new IOException("拉取中断: " + TransferProtocol.ackError(h));
+            } else {
+                throw new IOException("unexpected frame: " + type);
+            }
+        }
+        os.flush();
+        return received;
+    }
+
+    /** 读取并解析 PULL_ACK：status=OK→ok=true；status=REJECTED→ok=false（显式协议状态，非异常）。 */
+    private PullAck expectPullAck() throws IOException {
         JsonObject ack = TransferProtocol.readHeader(in);
         if (!"PULL_ACK".equals(TransferProtocol.optString(ack, "type"))) {
             throw new IOException("expected PULL_ACK, got: " + ack);
         }
-        if (!"OK".equals(TransferProtocol.optString(ack, "status"))) {
-            String reason = TransferProtocol.optString(ack, "msg");
-            throw new IOException("拉取被拒绝: " + (reason == null ? "unknown" : reason));
-        }
-        long total = ack.has("size") && !ack.get("size").isJsonNull()
-                ? ack.get("size").getAsLong() : entry.size;
-        // 优先用 PC 端注册表提供的 MIME（比本机按扩展名猜测更准）
+        boolean ok = "OK".equals(TransferProtocol.optString(ack, "status"));
+        String msg = TransferProtocol.optString(ack, "msg");
+        long size = ack.has("size") && !ack.get("size").isJsonNull() ? ack.get("size").getAsLong() : -1;
+        long seek = ack.has("seek") && !ack.get("seek").isJsonNull() ? ack.get("seek").getAsLong() : 0;
         String mime = TransferProtocol.optString(ack, "mime");
-        if (mime != null && !mime.isEmpty()) {
-            entry.mime = mime;
-        }
-
+        return new PullAck(ok, msg, size, seek, mime != null ? mime : "");
+    }
+    public PullAck pullFile(TransferManager.SendJob job, SendEntry entry,
+                            TransferProtocol.Progress progress) throws IOException {
         File cacheDir = new File(App.get().getCacheDir(), "pulled");
         if (!cacheDir.exists()) {
             cacheDir.mkdirs();
         }
         File outFile = new File(cacheDir, FileUtils.sanitizeFileName(entry.name));
+        long partialLen = outFile.exists() ? outFile.length() : 0L;
+
+        TransferProtocol.writePullRequest(out, job.deviceId, entry.name, entry.remotePath,
+                entry.size >= 0 ? entry.size : 0, partialLen, job.id);
+
+        PullAck ack = expectPullAck();
+        // 显式协议拒绝（status=REJECTED）：不流式，返回结果让上层标记"远程拒绝"
+        if (ack.rejected()) {
+            return ack;
+        }
+        long total = ack.size >= 0 ? ack.size : entry.size;
+        long seek = ack.seek;
+        // 优先用 PC 端注册表提供的 MIME（比本机按扩展名猜测更准）
+        if (ack.mime != null && !ack.mime.isEmpty()) {
+            entry.mime = ack.mime;
+        }
+
+        // 续传：仅当 PC 确认的 seek 与本地分片一致时追加写入，否则从头覆盖
+        boolean append = seek > 0 && outFile.exists() && outFile.length() == seek;
+        if (!append && outFile.exists()) {
+            outFile.delete();
+        }
         entry.localPath = outFile.getAbsolutePath();
 
-        long received = 0;
-        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile)) {
+        long received = seek;
+        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile, append)) {
             while (true) {
                 if (job.isCancelRequested()) break;
                 JsonObject h = TransferProtocol.readHeader(in);
@@ -157,9 +248,10 @@ public class TransferClient implements Closeable {
         if (job.isCancelRequested()) {
             outFile.delete();
             if (progress != null) progress.onCanceled(entry, received, total);
-            return;
+            return ack;
         }
         if (progress != null) progress.onFinish(entry, received, total);
+        return ack;
     }
 
     /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */

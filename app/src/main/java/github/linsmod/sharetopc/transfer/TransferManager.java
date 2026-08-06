@@ -1,13 +1,16 @@
 package github.linsmod.sharetopc.transfer;
 
 import android.content.ActivityNotFoundException;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.net.http.NetworkException;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.provider.MediaStore;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -20,6 +23,7 @@ import java.io.FileInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.SocketException;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
@@ -36,6 +40,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.function.Consumer;
 
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.data.DeviceStore;
@@ -440,33 +445,157 @@ public class TransferManager implements TransferProtocol.Progress {
         }
     }
 
-    /** 打开已拉取成功的文件（FileProvider 授权 + ACTION_VIEW），无应用可打开时提示。 */
+    /** 打开已拉取成功的文件：按条目的 postPullAction 决定打开/转发/仅下载。 */
     private void openPulledFiles(SendJob job) {
         for (SendEntry item : job.items) {
             if (!item.isSuccess() || item.localPath == null) continue;
             File f = new File(item.localPath);
             if (!f.exists()) continue;
-            try {
-                Uri uri = FileProvider.getUriForFile(appContext,
-                        appContext.getPackageName() + ".fileprovider", f);
-                Intent intent = new Intent(Intent.ACTION_VIEW);
-                // 优先用 PC 端上报的 MIME；缺失/兜底类型再按扩展名猜测
-                String mime = item.mime;
-                if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
-                    mime = FileUtils.guessMimeType(item.name);
-                }
-                intent.setDataAndType(uri, mime);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-                appContext.startActivity(intent);
-                LogX.d("Opened pulled file: " + f.getAbsolutePath());
-            } catch (ActivityNotFoundException e) {
-                LogX.e("No app to open pulled file: " + f.getAbsolutePath(), e);
-                mainHandler.post(() -> Toast.makeText(appContext,
-                        "没有应用能打开 " + item.name, Toast.LENGTH_SHORT).show());
-            } catch (Exception e) {
-                LogX.e("Failed to open pulled file: " + f.getAbsolutePath(), e);
+            if (item.postPullAction == SendEntry.POST_PULL_SHARE) {
+                sharePulledFile(f, item);
+            } else if (item.postPullAction == SendEntry.POST_PULL_NONE) {
+                // 仅拉取到缓存，不自动处理
+            } else {
+                openPulledFile(f, item);
             }
         }
+    }
+
+    /** 供任务列表/外部调用：以"打开方式"选择器打开已拉取的文件。 */
+    public void openPulledFile(SendEntry item) {
+        if (item == null || item.localPath == null) return;
+        File f = new File(item.localPath);
+        if (f.exists()) openPulledFile(f, item);
+    }
+
+    /** 供任务列表/外部调用：转发已拉取的文件。 */
+    public void sharePulledFile(SendEntry item) {
+        if (item == null || item.localPath == null) return;
+        File f = new File(item.localPath);
+        if (f.exists()) sharePulledFile(f, item);
+    }
+
+    /** 解析条目 MIME：优先用 PC 上报的，缺失/兜底再按扩展名猜测。 */
+    private String resolveMime(SendEntry item) {
+        String mime = item.mime;
+        if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
+            return FileUtils.guessMimeType(item.name);
+        }
+        return mime;
+    }
+
+    /** 打开文件：优先"打开方式"选择器；无应用可打开时回退为分享，避免静默无响应。 */
+    private void openPulledFile(File f, SendEntry item) {
+        try {
+            Uri uri = FileProvider.getUriForFile(appContext,
+                    appContext.getPackageName() + ".fileprovider", f);
+            Intent view = new Intent(Intent.ACTION_VIEW);
+            view.setDataAndType(uri, resolveMime(item));
+            view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if (hasHandler(view)) {
+                Intent chooser = Intent.createChooser(view, "打开方式");
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                appContext.startActivity(chooser);
+            } else {
+                // 无应用可打开 → 分享（转发/存到其他应用），并提示
+                sharePulledFile(f, item, "没有可打开的应用，请选择其他方式");
+            }
+            LogX.d("Opened pulled file chooser: " + f.getAbsolutePath());
+        } catch (ActivityNotFoundException e) {
+            LogX.e("No app to open pulled file: " + f.getAbsolutePath(), e);
+            mainHandler.post(() -> Toast.makeText(appContext,
+                    "没有应用能打开 " + item.name, Toast.LENGTH_SHORT).show());
+        } catch (Exception e) {
+            LogX.e("Failed to open pulled file: " + f.getAbsolutePath(), e);
+        }
+    }
+
+    /** 转发文件（分享选择器）。 */
+    private void sharePulledFile(File f, SendEntry item) {
+        sharePulledFile(f, item, "转发文件");
+    }
+
+    private void sharePulledFile(File f, SendEntry item, String title) {
+        try {
+            Uri uri = FileProvider.getUriForFile(appContext,
+                    appContext.getPackageName() + ".fileprovider", f);
+            Intent share = new Intent(Intent.ACTION_SEND);
+            share.setType(resolveMime(item));
+            share.putExtra(Intent.EXTRA_STREAM, uri);
+            share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(share, title);
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            appContext.startActivity(chooser);
+            LogX.d("Shared pulled file: " + f.getAbsolutePath());
+        } catch (ActivityNotFoundException e) {
+            LogX.e("No app to share pulled file: " + f.getAbsolutePath(), e);
+            mainHandler.post(() -> Toast.makeText(appContext,
+                    "没有应用能转发 " + item.name, Toast.LENGTH_SHORT).show());
+        } catch (Exception e) {
+            LogX.e("Failed to share pulled file: " + f.getAbsolutePath(), e);
+        }
+    }
+
+    /** 是否存在能处理该 intent 的应用。 */
+    private boolean hasHandler(Intent intent) {
+        return !appContext.getPackageManager()
+                .queryIntentActivities(intent, 0).isEmpty();
+    }
+
+    /**
+     * 把已拉取的文件保存到系统"下载/ShareToPC"目录（MediaStore，无需存储权限）。
+     * @param onSaved 成功回调（主线程），参数为展示用路径
+     * @param onError 失败回调（主线程）
+     */
+    public void savePulledFile(SendEntry item, Consumer<String> onSaved, Consumer<String> onError) {
+        if (item == null || item.localPath == null) {
+            onError.accept("文件不存在");
+            return;
+        }
+        File f = new File(item.localPath);
+        if (!f.exists()) {
+            onError.accept("文件不存在");
+            return;
+        }
+        App.get().ioExecutor.execute(() -> {
+            try {
+                String savedPath = copyToDownloads(f, item);
+                mainHandler.post(() -> onSaved.accept(savedPath));
+            } catch (Exception e) {
+                LogX.e("save pulled file failed", e);
+                mainHandler.post(() -> onError.accept(e.getMessage()));
+            }
+        });
+    }
+
+    /** 复制到 下载/ShareToPC，返回展示路径。 */
+    private String copyToDownloads(File src, SendEntry item) throws IOException {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.MediaColumns.DISPLAY_NAME, src.getName());
+        values.put(MediaStore.MediaColumns.MIME_TYPE, resolveMime(item));
+        values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ShareToPC");
+        Uri uri = appContext.getContentResolver().insert(
+                MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+        if (uri == null) {
+            throw new IOException("无法在下载目录创建文件");
+        }
+        try (OutputStream os = appContext.getContentResolver().openOutputStream(uri);
+             InputStream in = new FileInputStream(src)) {
+            if (os == null) {
+                throw new IOException("无法写入下载目录");
+            }
+            FileUtils.copy(in, os);
+        }
+        return "下载/ShareToPC/" + src.getName();
+    }
+
+    /** 删除已拉取文件的本地缓存，并删除对应任务记录。 */
+    public void deletePulledFile(SendEntry item) {
+        if (item == null) return;
+        if (item.localPath != null) {
+            FileUtils.deleteQuietly(new File(item.localPath));
+        }
+        jobStore.deleteEntry(item.id);
     }
 
     private void clearFlayingState(SendJob job, SendEntry item) {
@@ -610,21 +739,34 @@ public class TransferManager implements TransferProtocol.Progress {
         job.updateMillis = System.currentTimeMillis();
         updateJob(job, item);
         lastProgressNotifyMs = 0;
-        client.pullFile(job, item, this);
+        TransferClient.PullAck ack = client.pullFile(job, item, this);
+        // PC 显式拒绝（PULL_ACK status=REJECTED）：标记"远程拒绝"，不重试
+        if (ack != null && ack.rejected()) {
+            item.status = SendEntry.STATUS_IDLE;
+            item.idleReason = SendEntry.IDLE_REASON_REMOTE_REJECTED;
+            if (item.errorMsg == null) {
+                item.errorMsg = ack.msg;
+            }
+            updateJob(job, item);
+            job.cancel();
+        }
     }
 
     /**
      * 提交一个"从 PC 拉取文件"的任务（复用发送队列/状态机/任务记录，direction=拉取）。
+     * @param postPullAction 完成后动作：POST_PULL_OPEN / POST_PULL_SHARE / POST_PULL_NONE。
      * @return 新建的任务；enqueue 失败时返回 null。
      */
     @Nullable
     public SendJob enqueuePull(String deviceId, String host, int port,
-                               String name, long size, String mime, String remotePath) {
+                               String name, long size, String mime, String remotePath,
+                               int postPullAction) {
         if (deviceId == null || host == null || remotePath == null) return null;
         SendEntry e = new SendEntry();
         e.id = UUID.randomUUID().toString();
         e.objectType = SendEntry.TYPE_FILE;
         e.direction = SendEntry.DIRECTION_PULL;
+        e.postPullAction = postPullAction;
         e.name = name;
         e.size = Math.max(0, size);
         e.mime = mime != null ? mime : FileUtils.guessMimeType(name);
@@ -749,9 +891,15 @@ public class TransferManager implements TransferProtocol.Progress {
 
         /**
          * 重置文件位置到 0 并返回新的 InputStream（不关闭底层 channel）。
+         * 管道（流式 content，不可 seek）跳过 seek：新管道数据天然从 0 开始。
          */
         InputStream newInputStream() throws IOException {
-            channel.position(0);
+            try {
+                channel.position(0);
+            } catch (IOException e) {
+                // 非可 seek 管道（如流式分享 content）：不 seek，直接从当前位置读
+                LogX.d("Pfd not seekable, reading stream as-is");
+            }
             InputStream raw = Channels.newInputStream(channel);
             return new FilterInputStream(raw) {
                 @Override

@@ -204,7 +204,18 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     // ── 条目绑定 ────────────────────────────────────────
 
     private void bindEntry(EntryVH vh, DisplayItem di) {
-        vh.item.bind(di.entry);
+        SendEntry r = di.entry;
+        vh.item.bind(r);
+        // 已完成的拉取任务：长按可打开/转发本机缓存文件
+        vh.itemView.setOnLongClickListener(v -> {
+            if (r.isPull() && r.isSuccess() && r.localPath != null
+                    && new java.io.File(r.localPath).exists()
+                    && actionListener != null) {
+                actionListener.onPullEntryMenuRequested(r, vh.itemView);
+                return true;
+            }
+            return false;
+        });
     }
 
     /** 将毫秒时间戳转为对人友好文案，如"今天 14:30""昨天 09:15""7月25日 16:00"。 */

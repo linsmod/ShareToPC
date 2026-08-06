@@ -86,6 +86,8 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         Intent intent = new Intent(this, EtpSearchActivity.class);
         intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_NAME, device.displayName());
         intent.putExtra(EtpSearchActivity.EXTRA_HOST, device.host);
+        intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_ID, device.deviceId);
+        intent.putExtra(EtpSearchActivity.EXTRA_PORT, device.port);
         startActivity(intent);
     }
 

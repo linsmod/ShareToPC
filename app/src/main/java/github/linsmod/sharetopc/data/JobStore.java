@@ -195,6 +195,27 @@ public class JobStore {
                 DBHelper.COL_JOB_ID + "=?", new String[]{jobId});
     }
 
+    /** 删除单条 entry 记录；若其 job 已无任何 entry，一并删除 job 聚合记录。 */
+    public synchronized void deleteEntry(String id) {
+        if (id == null) return;
+        SendEntry e = getSendEntry(id);
+        if (e == null) return;
+        db.delete(DBHelper.TABLE_JOB_ENTRY,
+                DBHelper.COL_ID + "=?", new String[]{id});
+        Cursor c = db.rawQuery("SELECT COUNT(*) FROM " + DBHelper.TABLE_JOB_ENTRY
+                + " WHERE " + DBHelper.COL_JOB_ID + "=?",
+                new String[]{e.jobId});
+        long remaining = 0;
+        if (c != null) {
+            if (c.moveToFirst()) remaining = c.getLong(0);
+            c.close();
+        }
+        if (remaining == 0) {
+            db.delete(DBHelper.TABLE_JOB,
+                    DBHelper.COL_JOB_ID_PK + "=?", new String[]{e.jobId});
+        }
+    }
+
     /** 删除指定设备的所有传输记录（entry + job 聚合记录）。 */
     public synchronized void deleteByDevice(String host, int port) {
         if (host == null) return;
