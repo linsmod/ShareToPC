@@ -107,7 +107,7 @@ public class EtpSettingsActivity extends AppCompatActivity {
                     + "文本文档(ext:txt | ext:md)\n"
                     + "压缩包 (ext:zip | ext:rar | ext:7z | ext:tar.gz)\n"
                     + "图片 (image:)\n"
-                    + "视频 (video:)\n"
+                    + "视频 (video: size:>10mb)\n"
                     + "音频 (audio:)\n"
                     + "思维导图 (ext:xmind)\n"
                     + "电脑程序 (ext:exe | ext:msi | ext:msix)\n"

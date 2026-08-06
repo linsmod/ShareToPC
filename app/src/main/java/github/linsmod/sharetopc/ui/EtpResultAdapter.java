@@ -153,7 +153,8 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
         ItemViewHolder ivh = (ItemViewHolder) holder;
         EtpClient.EtpSearchResult r = getItem(position);
         ivh.tvName.setText(r.name);
-        ivh.ivIcon.setImageResource(r.isFolder ? R.drawable.ic_folder : R.drawable.ic_file);
+        ivh.ivIcon.setImageResource(r.isFolder
+                ? R.drawable.ic_folder : FileTypeIcon.forName(r.name));
 
         // 文件大小
         if (r.size >= 0) {
@@ -175,6 +176,13 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
 
             if (hasLocation) {
                 ivh.tvLocation.setText(locationLabel);
+                android.content.Context ctx = ivh.itemView.getContext();
+                int color = CategoryColors.color(ctx, locationLabel);
+                if (color != 0) {
+                    ivh.tvLocation.setBackground(CategoryColors.tagBackground(ctx, color));
+                } else {
+                    ivh.tvLocation.setBackgroundResource(R.drawable.bg_location_tag);
+                }
                 ivh.tvLocation.setVisibility(View.VISIBLE);
             } else {
                 ivh.tvLocation.setVisibility(View.GONE);

@@ -1,5 +1,6 @@
 package github.linsmod.sharetopc.ui;
 
+import android.content.Context;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.BackgroundColorSpan;
@@ -133,13 +134,18 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             hh.tvLabel.setText(row.category.label);
             hh.tvCount.setText(hh.itemView.getContext().getString(
                     R.string.etp_explorer_count, row.category.items.size()));
+            Context ctx = hh.itemView.getContext();
+            int color = CategoryColors.color(ctx, row.category.label);
+            hh.tvLabel.setTextColor(color != 0
+                    ? color : CategoryColors.headerDefault(ctx));
             return;
         }
 
         ItemViewHolder vh = (ItemViewHolder) holder;
         EtpClient.EtpSearchResult r = row.item;
         vh.tvName.setText(highlight(r.name, highlightTerms));
-        vh.ivIcon.setImageResource(r.isFolder ? R.drawable.ic_folder : R.drawable.ic_file);
+        vh.ivIcon.setImageResource(r.isFolder
+                ? R.drawable.ic_folder : FileTypeIcon.forName(r.name));
 
         if (r.size >= 0) {
             vh.tvFileSize.setVisibility(View.VISIBLE);
@@ -155,12 +161,19 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         if (hasLocation || hasPath || hasDate) {
             vh.layoutPathRow.setVisibility(View.VISIBLE);
-            if (hasLocation) {
-                vh.tvLocation.setText(locationLabel);
-                vh.tvLocation.setVisibility(View.VISIBLE);
+        if (hasLocation) {
+            vh.tvLocation.setText(locationLabel);
+            Context ctx = vh.itemView.getContext();
+            int color = CategoryColors.color(ctx, locationLabel);
+            if (color != 0) {
+                vh.tvLocation.setBackground(CategoryColors.tagBackground(ctx, color));
             } else {
-                vh.tvLocation.setVisibility(View.GONE);
+                vh.tvLocation.setBackgroundResource(R.drawable.bg_location_tag);
             }
+            vh.tvLocation.setVisibility(View.VISIBLE);
+        } else {
+            vh.tvLocation.setVisibility(View.GONE);
+        }
             if (hasPath) {
                 vh.tvPath.setVisibility(View.VISIBLE);
                 vh.tvPath.setText(highlight(r.path + "\\" + r.name, highlightTerms));

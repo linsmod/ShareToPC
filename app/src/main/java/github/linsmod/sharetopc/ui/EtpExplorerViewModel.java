@@ -282,7 +282,7 @@ public class EtpExplorerViewModel extends ViewModel {
         if (!items.isEmpty()) return items;
 
         String[] labels = {"图片", "视频", "音频", "文档", "压缩包", "安装程序"};
-        String[] patterns = {"image:", "video:", "audio:",
+        String[] patterns = {"image:", "video: size:>10mb", "audio:",
                 "ext:doc | ext:docx | ext:pdf | ext:txt",
                 "ext:zip | ext:rar | ext:7z | ext:tar.gz",
                 "ext:exe | ext:msi"};

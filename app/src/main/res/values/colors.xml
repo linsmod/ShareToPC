@@ -2,4 +2,14 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- 文件浏览分类配色（Material 600 系，深浅主题下均可读） -->
+    <color name="category_image">#FF388E3C</color>
+    <color name="category_video">#FF8E24AA</color>
+    <color name="category_audio">#FF5E35B1</color>
+    <color name="category_document">#FF1E88E5</color>
+    <color name="category_archive">#FFEF6C00</color>
+    <color name="category_app">#FFD81B60</color>
+    <color name="category_desktop">#FFFFA000</color>
+    <color name="category_download">#FF00ACC1</color>
 </resources>
