@@ -22,6 +22,8 @@ public class DiscoveredDevice {
     public boolean isOnline;
     /** 该设备最近一次发送的 jobId。 */
     public String latestJobId;
+    /** 设备加入时间（首次被发现/添加时记录，毫秒时间戳），0 表示未知。 */
+    public long addedTimeMillis;
     /** 当前传输进度，由 ViewModel 在刷新设备列表时填充。 */
     @Nullable
     public TransferManager.SendJob latestJob = null;

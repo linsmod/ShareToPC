@@ -177,8 +177,9 @@ public class MainViewModel extends AndroidViewModel {
         this.deviceProgressListener = l;
     }
 
+    /** 刷新设备列表：强制重启 NSD 扫描，删除设备后点刷新可重新发现在线设备。 */
     public void startDiscovery() {
-        refreshDevices();
+        app.discoveryManager.forceRescan();
     }
 
     // ── 设备进度 ──────────────────────────────────────────

@@ -36,11 +36,13 @@ public class DeviceStore {
                 String protoVersion = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PROTO_VERSION));
                 String latestJobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_LAST_SEND_ID));
                 String deviceId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_ID));
+                long addedTime = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_DEV_ADD_TIME));
                 DiscoveredDevice d = new DiscoveredDevice(name, host, port, false);
                 d.version = version;
                 d.protoVersion = protoVersion;
                 d.deviceId = deviceId;
                 d.latestJobId = latestJobId;
+                d.addedTimeMillis = addedTime;
                 result.add(d);
             }
             c.close();
@@ -64,12 +66,14 @@ public class DeviceStore {
                 String protoVersion = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_PROTO_VERSION));
                 String latestJobId = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_LAST_SEND_ID));
                 String id = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_DEV_ID));
+                long addedTime = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_DEV_ADD_TIME));
 
                 DiscoveredDevice device = new DiscoveredDevice(name, host, port, false);
                 device.version = version;
                 device.protoVersion = protoVersion;
                 device.deviceId = id;
                 device.latestJobId = latestJobId;
+                device.addedTimeMillis = addedTime;
                 return device;
             }
         } finally {
@@ -82,8 +86,13 @@ public class DeviceStore {
      * 记录一个设备（在线发现时调用）。
      * 去重规则：deviceId 非空时按 deviceId 合并（旧 host:port 记录会被自动删除），
      * deviceId 为 null 时退化为按主键 (host, port) 替换。
+     * 新设备写入加入时间；已有设备（按 deviceId 或 host:port 匹配）保留原加入时间。
      */
     public synchronized void saveDevice(DiscoveredDevice device) {
+        Long existing = findExistingAddTime(device);
+        long addTime = existing != null ? existing : System.currentTimeMillis();
+        device.addedTimeMillis = addTime;
+
         ContentValues values = new ContentValues();
         values.put(DBHelper.COL_DEV_HOST, device.host);
         values.put(DBHelper.COL_DEV_PORT, device.port);
@@ -92,12 +101,42 @@ public class DeviceStore {
         values.put(DBHelper.COL_DEV_PROTO_VERSION, device.protoVersion);
         values.put(DBHelper.COL_DEV_ID, device.deviceId);
         values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());
+        values.put(DBHelper.COL_DEV_ADD_TIME, addTime);
 
         values.put(DBHelper.COL_DEV_LAST_SEND_ID, device.latestJobId);
 
         // 插入或替换（主键冲突时更新）
         db.insertWithOnConflict(DBHelper.TABLE_DEVICE, null, values,
                 SQLiteDatabase.CONFLICT_REPLACE);
+    }
+
+    /** 查询已有记录的加入时间：优先按 deviceId 匹配（IP 变化视为同一台），其次按 host:port。 */
+    private Long findExistingAddTime(DiscoveredDevice device) {
+        Cursor c = null;
+        try {
+            if (device.deviceId != null) {
+                c = db.query(DBHelper.TABLE_DEVICE, new String[]{DBHelper.COL_DEV_ADD_TIME},
+                        DBHelper.COL_DEV_ID + "=?", new String[]{device.deviceId},
+                        null, null, null, "1");
+                if (c.moveToFirst()) {
+                    long t = c.getLong(0);
+                    if (t > 0) return t;
+                }
+                c.close();
+                c = null;
+            }
+            c = db.query(DBHelper.TABLE_DEVICE, new String[]{DBHelper.COL_DEV_ADD_TIME},
+                    DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?",
+                    new String[]{device.host, String.valueOf(device.port)},
+                    null, null, null, "1");
+            if (c.moveToFirst()) {
+                long t = c.getLong(0);
+                if (t > 0) return t;
+            }
+        } finally {
+            if (c != null) c.close();
+        }
+        return null;
     }
 
     /** 删除指定设备。 */

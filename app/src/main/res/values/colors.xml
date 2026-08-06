@@ -12,4 +12,12 @@
     <color name="category_app">#FFD81B60</color>
     <color name="category_desktop">#FFFFA000</color>
     <color name="category_download">#FF00ACC1</color>
+
+    <!-- 设备任务页操作按钮配色（明快） -->
+    <color name="action_browse">#FF9800</color>
+    <color name="action_search">#2196F3</color>
+    <color name="action_props">#4CAF50</color>
+
+    <!-- 删除设备按钮 -->
+    <color name="delete_device_red">#FFD32F2F</color>
 </resources>

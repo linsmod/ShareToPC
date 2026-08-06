@@ -67,6 +67,10 @@
             android:exported="false" />
 
         <activity
+            android:name=".ui.DeviceTasksActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".ui.LogViewerActivity"
             android:exported="false" />
 

@@ -101,6 +101,7 @@ public class NsdDiscoveryManager {
         merged.deviceId = incoming.deviceId != null ? incoming.deviceId : existing.deviceId;
         merged.latestJobId = existing.latestJobId;
         merged.latestJob = existing.latestJob;
+        merged.addedTimeMillis = existing.addedTimeMillis;
 
         // 地址变化（同 deviceId 但 host/port 不同）时，移除旧 key 重新放入
         if (!existing.address().equals(merged.address())) {
@@ -151,6 +152,22 @@ public class NsdDiscoveryManager {
 
     public boolean isDiscovering() {
         return discovering;
+    }
+
+    /**
+     * 强制重启 NSD 扫描。删除设备后，Android 不会对仍在广播的同一服务再次回调
+     * onServiceFound，必须重启扫描才能重新发现在线设备。
+     */
+    public void forceRescan() {
+        mainHandler.post(() -> {
+            if (discovering) {
+                stopDiscovery();
+                // 等 NSD 停止处理完成再启动，避免状态冲突
+                mainHandler.postDelayed(this::startDiscovery, 200);
+            } else {
+                startDiscovery();
+            }
+        });
     }
 
     /** 开始持续扫描（前台长连接，由 App 层生命周期管理启停）。 */

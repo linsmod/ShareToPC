@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 2;
+    private static final int DB_VERSION = 3;
 
     // ---------- job_entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -42,6 +42,7 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_DEV_LAST_SEEN = "lastSeen";
     public static final String COL_DEV_VERSION = "version";          // 原 v4 添加
     public static final String COL_DEV_PROTO_VERSION = "protoVersion"; // 原 v5 添加
+    public static final String COL_DEV_ADD_TIME = "addTime";          // v3 添加
 
     // ---------- PairSession 表 ----------
     public static final String TABLE_PAIR_SESSION = "pair_session";
@@ -99,6 +100,7 @@ public class DBHelper extends SQLiteOpenHelper {
                     COL_DEV_LAST_SEEN + " INTEGER, " +
                     COL_DEV_VERSION + " TEXT, " +
                     COL_DEV_PROTO_VERSION + " TEXT, " +
+                    COL_DEV_ADD_TIME + " INTEGER DEFAULT 0, " +
                     "PRIMARY KEY (" + COL_DEV_HOST + ", " + COL_DEV_PORT + ")" +
                     ")";
 
@@ -156,6 +158,11 @@ public class DBHelper extends SQLiteOpenHelper {
                     "  )" +
                     ")");
             createDeviceIdUniqueIndex(db);
+        }
+        if (oldVersion < 3) {
+            // v3: 设备加入时间
+            db.execSQL("ALTER TABLE " + TABLE_DEVICE
+                    + " ADD COLUMN " + COL_DEV_ADD_TIME + " INTEGER DEFAULT 0");
         }
     }
 

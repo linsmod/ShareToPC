@@ -123,6 +123,14 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
         vh.tvName.setText(device.displayName());
         vh.tvAddr.setText(device.address());
 
+        // 加入时间（右侧，友好文案）
+        if (device.addedTimeMillis > 0) {
+            vh.tvAddTime.setVisibility(View.VISIBLE);
+            vh.tvAddTime.setText(TaskAdapter.friendlyTime(device.addedTimeMillis));
+        } else {
+            vh.tvAddTime.setVisibility(View.GONE);
+        }
+
         // 传输进度
         TransferManager.SendJob latestJob = device.latestJob;
         if (latestJob != null) {
@@ -220,7 +228,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
 
     static class DeviceVH extends RecyclerView.ViewHolder {
         final View vOnlineDot;
-        final TextView tvName, tvAddr, tvProgress, tvEntryName, tvEntrySize;
+        final TextView tvName, tvAddr, tvAddTime, tvProgress, tvEntryName, tvEntrySize;
         final LinearLayout layoutProgress, layoutEntryInfo;
         final ProgressBar pbProgress;
         DeviceVH(@NonNull View v) {
@@ -228,6 +236,7 @@ public class DeviceAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>
             vOnlineDot = v.findViewById(R.id.vOnlineDot);
             tvName = v.findViewById(R.id.tvDeviceName);
             tvAddr = v.findViewById(R.id.tvDeviceAddr);
+            tvAddTime = v.findViewById(R.id.tvDeviceAddTime);
             layoutProgress = v.findViewById(R.id.layoutProgress);
             pbProgress = v.findViewById(R.id.pbDeviceJob);
             tvProgress = v.findViewById(R.id.tvDeviceProgress);

@@ -182,6 +182,17 @@ public class JobStore {
                 DBHelper.COL_JOB_ID + "=?", new String[]{jobId});
     }
 
+    /** 删除指定设备的所有传输记录（entry + job 聚合记录）。 */
+    public synchronized void deleteByDevice(String host, int port) {
+        if (host == null) return;
+        db.delete(DBHelper.TABLE_JOB_ENTRY,
+                DBHelper.COL_HOST + "=? AND " + DBHelper.COL_PORT + "=?",
+                new String[]{host, String.valueOf(port)});
+        db.delete(DBHelper.TABLE_JOB,
+                DBHelper.COL_JOB_DEVICE_HOST + "=? AND " + DBHelper.COL_JOB_DEVICE_PORT + "=?",
+                new String[]{host, String.valueOf(port)});
+    }
+
     private String makePlaceholders(int count) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < count; i++) {

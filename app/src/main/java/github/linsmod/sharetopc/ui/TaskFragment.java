@@ -26,6 +26,7 @@ import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.MainViewModel;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.SendEntry;
+import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 
 public class TaskFragment extends Fragment {
 
@@ -34,8 +35,17 @@ public class TaskFragment extends Fragment {
     public static final String EXTRA_PORT = "port";
     public static final String EXTRA_DEVICE_NAME = "deviceName";
 
+    /** 设备操作回调：由宿主 Activity 实现（MainActivity / DeviceTasksActivity）。 */
+    public interface DeviceActionListener {
+        void showEtpExplorer(DiscoveredDevice device);
+        void showEtpSearch(DiscoveredDevice device);
+        void showAliasDialog(DiscoveredDevice device);
+    }
+
     private MainViewModel viewModel;
     private TaskAdapter taskAdapter;
+    private DeviceActionListener deviceActionListener;
+    private TextView tvTaskEmpty;
 
     /** 设备筛选参数（null 表示显示全部任务）。 */
     @Nullable private String filterHost;
@@ -47,6 +57,7 @@ public class TaskFragment extends Fragment {
         if (taskAdapter != null && getView() != null) {
             List<TaskGroup> filtered = applyFilter(tasks);
             taskAdapter.submitList(filtered);
+            tvTaskEmpty.setVisibility(filtered.isEmpty() ? View.VISIBLE : View.GONE);
         }
     };
 
@@ -75,6 +86,10 @@ public class TaskFragment extends Fragment {
         TextView tvTaskTitle = view.findViewById(R.id.tvTaskTitle);
         RecyclerView rvTask = view.findViewById(R.id.rvTask);
 
+        // 顶部工具栏已显示设备名（DeviceTasksActivity），标题统一为"传输任务"
+        tvTaskTitle.setText(R.string.task_title);
+        tvTaskEmpty = view.findViewById(R.id.tvTaskEmpty);
+
         rvTask.setLayoutManager(new LinearLayoutManager(requireContext()));
         rvTask.setItemAnimator(null); // 禁用动画，避免频繁 notifyItemChanged 导致闪烁
         taskAdapter = new TaskAdapter(new Listeners.TaskActionListener() {
@@ -86,12 +101,7 @@ public class TaskFragment extends Fragment {
         }, transferId -> viewModel.hasPfd(transferId));
         rvTask.setAdapter(taskAdapter);
 
-        // 标题根据是否有筛选条件切换
-        if (isFiltered()) {
-            tvTaskTitle.setText(filterDeviceName + " 的任务");
-        } else {
-            tvTaskTitle.setText(R.string.task_title);
-        }
+        setupDeviceActions(view);
 
         FloatingActionButton fabClearTasks = view.findViewById(R.id.fabClearTasks);
         fabClearTasks.setOnClickListener(v -> showClearTasksDialog());
@@ -104,6 +114,31 @@ public class TaskFragment extends Fragment {
 
     private boolean isFiltered() {
         return filterHost != null && !filterHost.isEmpty();
+    }
+
+    @Override
+    public void onAttach(@NonNull android.content.Context context) {
+        super.onAttach(context);
+        if (context instanceof DeviceActionListener) {
+            deviceActionListener = (DeviceActionListener) context;
+        }
+    }
+
+    /** 仅当按设备筛选时展示设备操作按钮（ETP 浏览/搜索、设备属性）。 */
+    private void setupDeviceActions(@NonNull View view) {
+        View rowDeviceActions = view.findViewById(R.id.rowDeviceActions);
+        if (!isFiltered() || deviceActionListener == null) return;
+
+        DiscoveredDevice device = new DiscoveredDevice(filterDeviceName, filterHost, filterPort);
+        device.alias = App.get().settingsStore.getDeviceAlias(filterHost, filterPort);
+
+        rowDeviceActions.setVisibility(View.VISIBLE);
+        view.findViewById(R.id.btnEtpExplorer).setOnClickListener(v ->
+                deviceActionListener.showEtpExplorer(device));
+        view.findViewById(R.id.btnEtpSearch).setOnClickListener(v ->
+                deviceActionListener.showEtpSearch(device));
+        view.findViewById(R.id.btnDeviceProps).setOnClickListener(v ->
+                deviceActionListener.showAliasDialog(device));
     }
 
     /** 根据设备筛选参数过滤任务分组，并隐藏分组内的设备信息文本。 */

@@ -34,6 +34,7 @@ import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.service.ShareForegroundService;
 import github.linsmod.sharetopc.share.ShareReceiverActivity;
 import github.linsmod.sharetopc.ui.DevicesFragment;
+import github.linsmod.sharetopc.ui.DeviceTasksActivity;
 import github.linsmod.sharetopc.ui.EtpExplorerActivity;
 import github.linsmod.sharetopc.ui.EtpSearchActivity;
 import github.linsmod.sharetopc.ui.TaskFragment;
@@ -41,7 +42,7 @@ import github.linsmod.sharetopc.ui.SettingsActivity;
 
 import androidx.fragment.app.Fragment;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements TaskFragment.DeviceActionListener {
 
     private MainViewModel viewModel;
 
@@ -94,18 +95,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void showTaskForDevice(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
-        Bundle args = new Bundle();
-        args.putString(TaskFragment.EXTRA_HOST, device.host);
-        args.putInt(TaskFragment.EXTRA_PORT, device.port);
-        args.putString(TaskFragment.EXTRA_DEVICE_NAME, device.displayName());
-
-        TaskFragment fragment = new TaskFragment();
-        fragment.setArguments(args);
-
-        getSupportFragmentManager().beginTransaction()
-                .replace(R.id.navHost, fragment)
-                .addToBackStack(null)
-                .commit();
+        Intent intent = new Intent(this, DeviceTasksActivity.class);
+        intent.putExtra(DeviceTasksActivity.EXTRA_DEVICE_NAME, device.displayName());
+        intent.putExtra(DeviceTasksActivity.EXTRA_HOST, device.host);
+        intent.putExtra(DeviceTasksActivity.EXTRA_PORT, device.port);
+        startActivity(intent);
     }
 
     private void showTextPreview(github.linsmod.sharetopc.data.SendEntry record) {
@@ -153,71 +147,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void showAliasDialog(github.linsmod.sharetopc.discovery.DiscoveredDevice device) {
-        View layout = getLayoutInflater().inflate(R.layout.dialog_alias, null);
-
-        EditText etAlias = layout.findViewById(R.id.etAlias);
-        etAlias.setHint(device.name);
-        if (device.alias != null) {
-            etAlias.setText(device.alias);
-        }
-
-        TextView tvTitle = layout.findViewById(R.id.tvAliasTitle);
-        tvTitle.setText(device.name);
-
-        TextView tvVersion = layout.findViewById(R.id.tvDeviceVersion);
-        if (device.version != null && !device.version.isEmpty()) {
-            tvVersion.setText("程序版本: " + device.version);
-            tvVersion.setVisibility(View.VISIBLE);
-        } else {
-            tvVersion.setVisibility(View.GONE);
-        }
-
-        TextView tvProtoVersion = layout.findViewById(R.id.tvDeviceProtoVersion);
-        if (device.protoVersion != null && !device.protoVersion.isEmpty()) {
-            tvProtoVersion.setText("协议版本: v" + device.protoVersion);
-            tvProtoVersion.setVisibility(View.VISIBLE);
-        } else {
-            tvProtoVersion.setVisibility(View.GONE);
-        }
-
-        TextView tvDeviceId = layout.findViewById(R.id.tvDeviceId);
-        if (device.deviceId != null && !device.deviceId.isEmpty()) {
-            String shortId = device.deviceId.length() > 8 ? device.deviceId.substring(0, 8) : device.deviceId;
-            tvDeviceId.setText("设备ID: " + shortId);
-            tvDeviceId.setVisibility(View.VISIBLE);
-        } else {
-            tvDeviceId.setVisibility(View.GONE);
-        }
-
-        layout.findViewById(R.id.btnPresetLaptop).setOnClickListener(v -> etAlias.setText(R.string.preset_laptop));
-        layout.findViewById(R.id.btnPresetOffice).setOnClickListener(v -> etAlias.setText(R.string.preset_office));
-        layout.findViewById(R.id.btnPresetDesktop).setOnClickListener(v -> etAlias.setText(R.string.preset_desktop));
-
-        AlertDialog dialog = new AlertDialog.Builder(this)
-                .setView(layout)
-                .setPositiveButton(R.string.save, (d, which) -> {
-                    App.get().settingsStore.setDeviceAlias(device.host, device.port,
-                            etAlias.getText().toString());
-                    viewModel.refreshDevices();
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .setNeutralButton(R.string.delete_device, (d, which) -> {
-                    App.get().deviceStore.deleteDevice(device.host, device.port);
-                    viewModel.removeDevice(device);
-                })
-                .show();
-
-        // 去掉 AlertDialog 内部容器多余 padding
-        View customPanel = dialog.findViewById(android.R.id.custom);
-        if (customPanel instanceof ViewGroup) {
-            ((ViewGroup) customPanel).setPadding(0, 0, 0, 0);
-        }
-        Window w = dialog.getWindow();
-        if (w != null) {
-            w.setBackgroundDrawableResource(R.drawable.bg_dialog);
-            w.setLayout((int) (getResources().getDisplayMetrics().widthPixels * 0.88),
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-        }
+        github.linsmod.sharetopc.ui.DeviceDialogs.showAliasDialog(this, viewModel, device);
     }
 
     public void showManualDeviceDialog() {
