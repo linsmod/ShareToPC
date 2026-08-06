@@ -35,6 +35,7 @@ public class TaskFragment extends Fragment {
     public static final String EXTRA_HOST = "host";
     public static final String EXTRA_PORT = "port";
     public static final String EXTRA_DEVICE_NAME = "deviceName";
+    public static final String EXTRA_DEVICE_ID = "deviceId";
 
     /** 设备操作回调：由宿主 Activity 实现（MainActivity / DeviceTasksActivity）。 */
     public interface DeviceActionListener {
@@ -51,6 +52,7 @@ public class TaskFragment extends Fragment {
     @Nullable private String filterHost;
     private int filterPort;
     @Nullable private String filterDeviceName;
+    @Nullable private String filterDeviceId;
 
     /** 类型 tab：0=发送, 1=下载。 */
     private int taskTypeTab;
@@ -82,6 +84,7 @@ public class TaskFragment extends Fragment {
             filterHost = args.getString(EXTRA_HOST);
             filterPort = args.getInt(EXTRA_PORT, 0);
             filterDeviceName = args.getString(EXTRA_DEVICE_NAME);
+            filterDeviceId = args.getString(EXTRA_DEVICE_ID);
         }
 
         TextView tvTaskTitle = view.findViewById(R.id.tvTaskTitle);
@@ -145,6 +148,7 @@ public class TaskFragment extends Fragment {
         if (!isFiltered() || deviceActionListener == null) return;
 
         DiscoveredDevice device = new DiscoveredDevice(filterDeviceName, filterHost, filterPort);
+        device.deviceId = filterDeviceId;
         device.alias = App.get().settingsStore.getDeviceAlias(filterHost, filterPort);
 
         rowDeviceActions.setVisibility(View.VISIBLE);

@@ -79,6 +79,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
             args.putString(TaskFragment.EXTRA_HOST, host);
             args.putInt(TaskFragment.EXTRA_PORT, intent.getIntExtra(EXTRA_PORT, 0));
             args.putString(TaskFragment.EXTRA_DEVICE_NAME, deviceName);
+            args.putString(TaskFragment.EXTRA_DEVICE_ID, intent.getStringExtra(EXTRA_DEVICE_ID));
             fragment.setArguments(args);
             getSupportFragmentManager().beginTransaction()
                     .replace(R.id.deviceTasksContent, fragment)
