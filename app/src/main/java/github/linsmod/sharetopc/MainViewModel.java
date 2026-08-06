@@ -21,6 +21,7 @@ import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.NsdDiscoveryManager;
 import github.linsmod.sharetopc.transfer.TransferManager;
 import github.linsmod.sharetopc.ui.TaskGroup;
+import github.linsmod.sharetopc.util.LogX;
 
 public class MainViewModel extends AndroidViewModel {
 
@@ -196,9 +197,12 @@ public class MainViewModel extends AndroidViewModel {
 
         // 2) 队列中等待的 job（设备当前无活动 job 且有排队任务时显示排队状态）
         for (TransferManager.SendJob job : app.transferManager.getQueueSnapshot()) {
-            String key = job.host + ":" + job.port;
-            if (!map.containsKey(key)) {
-                map.put(key, job);
+            if (job.deviceId == null || job.deviceId.isEmpty()) {
+                LogX.e("computeDeviceLatestJob: job missing deviceId: " + job.id);
+                continue;
+            }
+            if (!map.containsKey(job.deviceId)) {
+                map.put(job.deviceId, job);
             }
         }
 
@@ -231,11 +235,12 @@ public class MainViewModel extends AndroidViewModel {
         if (list == null || deviceProgressListener == null) return;
         Map<String, TransferManager.SendJob> progressMap = computeDeviceLatestJob();
         for (DiscoveredDevice d : list) {
-            // 优先用 deviceId 匹配（与 enrichDeviceProgress 保持一致），fallback 到 address()
-            TransferManager.SendJob p = progressMap.get(d.deviceId);
-            if (p == null) p = progressMap.get(d.address());
-            d.latestJob = p;
-            if (p != null) d.latestJobId = p.id;
+            if (d.deviceId == null || d.deviceId.isEmpty()) {
+                LogX.e("updateDeviceProgressInPlace: device missing deviceId: " + d.address());
+                continue;
+            }
+            d.latestJob = progressMap.get(d.deviceId);
+            if (d.latestJob != null) d.latestJobId = d.latestJob.id;
         }
         // 直接遍历设备列表通知，确保 key 与 DeviceAdapter 中 address() 匹配
         for (DiscoveredDevice d : list) {

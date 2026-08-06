@@ -202,6 +202,17 @@ public class HeartbeatManager {
             if (drives != null && !drives.isEmpty()) {
                 DeviceUserInfo.putDrives(device.host, drives);
             }
+            // ACK 携带 PC 端版本/协议版本/设备 ID，可靠地回填身份信息（mDNS TXT 解析常失败）
+            String pcVersion = TransferProtocol.optString(ack, "version");
+            String pcDeviceId = TransferProtocol.optString(ack, "deviceId");
+            if (pcDeviceId != null && !pcDeviceId.isEmpty()) {
+                int proto = 0;
+                if (ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()) {
+                    proto = ack.get("protoVersion").getAsInt();
+                }
+                discoveryManager.updateDeviceInfo(device.host, device.port,
+                        pcVersion, proto, pcDeviceId);
+            }
             int beatReadTimeout = (int) (hbInterval + BEAT_TIMEOUT_MARGIN_MS);
             LogX.d("Hb-" + device.address() + ": HELLO OK, hbInterval=" + hbInterval + "ms");
 

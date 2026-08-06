@@ -139,9 +139,14 @@ public final class EtpFileDialog {
             Toast.makeText(ctx, R.string.etp_pull_no_target, Toast.LENGTH_SHORT).show();
             return;
         }
+        if (deviceId == null || deviceId.isEmpty()) {
+            github.linsmod.sharetopc.util.LogX.e(
+                    "EtpFileDialog: device missing deviceId: " + host + ":" + port);
+            Toast.makeText(ctx, R.string.etp_no_device_id, Toast.LENGTH_SHORT).show();
+            return;
+        }
         TransferManager.SendJob job = App.get().transferManager.enqueuePull(
-                deviceId != null ? deviceId : host,
-                host, port, r.name,
+                deviceId, host, port, r.name,
                 r.size >= 0 ? r.size : 0,
                 FileUtils.guessMimeType(r.name),
                 r.fullPath(),
@@ -157,8 +162,14 @@ public final class EtpFileDialog {
             Toast.makeText(ctx, R.string.etp_pull_no_target, Toast.LENGTH_SHORT).show();
             return;
         }
+        if (deviceId == null || deviceId.isEmpty()) {
+            github.linsmod.sharetopc.util.LogX.e(
+                    "EtpFileDialog: device missing deviceId: " + host + ":" + port);
+            Toast.makeText(ctx, R.string.etp_no_device_id, Toast.LENGTH_SHORT).show();
+            return;
+        }
         StreamingShare.share(ctx,
-                deviceId != null ? deviceId : host,
+                deviceId,
                 host, port, r.name, r.fullPath(),
                 r.size >= 0 ? r.size : 0, FileUtils.guessMimeType(r.name));
     }

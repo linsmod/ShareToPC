@@ -28,6 +28,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
     public static final String EXTRA_PORT = "port";
+    public static final String EXTRA_DEVICE_ID = "device_id";
 
     private MainViewModel viewModel;
 
@@ -60,6 +61,9 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
 
         DiscoveredDevice device = new DiscoveredDevice(deviceName, host,
                 intent.getIntExtra(EXTRA_PORT, 0));
+        device.deviceId = intent.getStringExtra(EXTRA_DEVICE_ID);
+        device.alias = github.linsmod.sharetopc.App.get().settingsStore
+                .getDeviceAlias(host, intent.getIntExtra(EXTRA_PORT, 0));
         toolbar.inflateMenu(R.menu.device_tasks_menu);
         toolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.action_device_props) {
