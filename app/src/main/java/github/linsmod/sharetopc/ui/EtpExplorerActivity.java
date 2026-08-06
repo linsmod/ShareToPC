@@ -393,6 +393,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         btnModeCommon.setChecked(true);
         modeSwitchGuard = false;
         layoutBreadcrumb.setVisibility(View.GONE);
+        layoutBrowseQuick.setVisibility(View.GONE);
         pbBrowseLoading.setVisibility(View.GONE);
         rvExplorer.setAdapter(adapter);
         if (cacheState != null) {
