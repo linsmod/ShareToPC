@@ -183,8 +183,8 @@
     <string name="etp_sheet_connecting_status">连接中…</string>
 
     <!-- 设备长按菜单 -->
-    <string name="device_menu_etp_search">远程文件搜索</string>
-    <string name="device_menu_etp_explor">远程文件浏览</string>
+    <string name="device_menu_etp_search">搜索文件</string>
+    <string name="device_menu_etp_explor">文件浏览器</string>
     <string name="device_menu_device_props">设备属性</string>
 
     <!-- 设备任务页操作按钮（图标在上，文字在下） -->
