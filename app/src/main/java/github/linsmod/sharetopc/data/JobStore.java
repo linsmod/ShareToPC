@@ -179,7 +179,7 @@ public class JobStore {
                 DBHelper.COL_ID + "=?", new String[]{id});
     }
 
-    /** 更新拉取任务成功后本机缓存文件路径（供任务列表打开已拉取的文件）。 */
+    /** 更新下载任务成功后本机缓存文件路径（供任务列表打开已下载的文件）。 */
     public synchronized void updateLocalPath(String id, String localPath) {
         if (id == null) return;
         ContentValues values = new ContentValues();

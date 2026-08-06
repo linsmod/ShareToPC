@@ -45,14 +45,14 @@ namespace ShareToPcReciver.Config
         /// <summary>本机设备唯一 ID，首次启动自动生成。</summary>
         public string DeviceId { get; set; } = Guid.NewGuid().ToString();
 
-        // ---- 拉取（手机端从 PC 拉文件） ----
+        // ---- 下载（手机端从 PC 拉文件） ----
 
-        /// <summary>是否允许手机端拉取文件。</summary>
+        /// <summary>是否允许手机端下载文件。</summary>
         public bool PullEnabled { get; set; } = true;
-        /// <summary>允许拉取的文件扩展名（逗号分隔，不含点），空表示仅允许列表为空。</summary>
+        /// <summary>允许下载的文件扩展名（逗号分隔，不含点），空表示仅允许列表为空。</summary>
         public string PullAllowedExtensions { get; set; } =
             "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,csv,json,xml,jpg,jpeg,png,gif,bmp,webp,svg,mp3,wav,flac,ogg,m4a,mp4,mkv,avi,mov,zip,7z,rar,tar,gz,apk";
-        /// <summary>单文件拉取大小上限（字节），0 表示不限制。默认 512MB。</summary>
+        /// <summary>单文件下载大小上限（字节），0 表示不限制。默认 512MB。</summary>
         public long PullMaxBytes { get; set; } = 512L * 1024 * 1024;
 
         public static AppConfig Load()

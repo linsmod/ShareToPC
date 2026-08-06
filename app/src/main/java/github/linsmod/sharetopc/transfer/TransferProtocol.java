@@ -56,7 +56,7 @@ public final class TransferProtocol {
         logSend(header);
     }
 
-    /** 发送"拉取文件"请求帧（走自定义协议，请求 PC 端回传文件）。seek>0 表示从该偏移断点续传。 */
+    /** 发送"下载文件"请求帧（走自定义协议，请求 PC 端回传文件）。seek>0 表示从该偏移断点续传。 */
     public static void writePullRequest(DataOutputStream out, String deviceId, String name,
                                         String path, long size, long seek, String jobId) throws IOException {
         JsonObject header = new JsonObject();

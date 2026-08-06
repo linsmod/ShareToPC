@@ -148,11 +148,11 @@ namespace ShareToPcReciver
             this.cmbFileAction.Location = new Point(100, 160);
             this.cmbFileAction.Size = new Size(190, 23);
 
-            this.lblPullTitle.Text = "拉取文件（手机端从 PC 拉取，走自定义协议）:";
+            this.lblPullTitle.Text = "下载文件（手机端从 PC 下载，走自定义协议）:";
             this.lblPullTitle.Location = new Point(12, 193);
             this.lblPullTitle.AutoSize = true;
 
-            this.chkPullEnabled.Text = "允许手机端拉取文件";
+            this.chkPullEnabled.Text = "允许手机端下载文件";
             this.chkPullEnabled.Location = new Point(12, 217);
 
             this.lblPullExt.Text = "允许的扩展名:";

@@ -25,7 +25,7 @@ import github.linsmod.sharetopc.transfer.EtpClient;
  */
 public class EtpSearchViewModel extends ViewModel {
 
-    /** 每批传输条数（列表底部"加载更多"一次拉取的数量）。 */
+    /** 每批传输条数（列表底部"加载更多"一次下载的数量）。 */
     private static final int PAGE_SIZE = 50;
     private static final int MAX_HISTORY = 10;
 
@@ -179,7 +179,7 @@ public class EtpSearchViewModel extends ViewModel {
         cancelActiveQuery(); // 关闭后后台线程请求失败会静默退出（query 不匹配）
     }
 
-    /** 加载更多：从已显示条数开始拉取下一批。 */
+    /** 加载更多：从已显示条数开始下载下一批。 */
     public void loadMore() {
         if (!hasMore || loadMoreLoading || currentQuery.isEmpty()) return;
         if (!isConnected()) return;

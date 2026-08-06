@@ -23,9 +23,9 @@ import github.linsmod.sharetopc.util.LogX;
 
 /**
  * 流式分享 ContentProvider：把 PC 端文件"边拉边灌"给目标应用（不落盘，只经过管道内存缓冲）。
- * 目标应用通过 content://…/pull/{nonce} 打开，provider 后台从 PC 拉取并写入 pipe，
+ * 目标应用通过 content://…/pull/{nonce} 打开，provider 后台从 PC 下载并写入 pipe，
  * 管道缓冲提供背压（目标读多快就拉多快）。URI 需先经 {@link #register} 注册（随机 nonce），
- * 避免外部应用任意触发网络拉取。
+ * 避免外部应用任意触发网络下载。
  *
  * 说明：pipe 只支持顺序读；绝大多数 content 消费方为顺序读。需要随机 seek 的应用（部分播放器）
  * 不适用——PC 端支持 seek，但 pipe 无法回放，暂不做 seek 支持。
@@ -34,10 +34,10 @@ public class StreamingShareProvider extends ContentProvider {
 
     public static final String AUTHORITY_SUFFIX = ".streaming";
 
-    /** 待流式拉取的请求（key = 随机 nonce）。 */
+    /** 待流式下载的请求（key = 随机 nonce）。 */
     private static final ConcurrentHashMap<String, PullSpec> SPECS = new ConcurrentHashMap<>();
 
-    /** 流式拉取参数。 */
+    /** 流式下载参数。 */
     public static class PullSpec {
         public final String deviceId;
         public final String host;
@@ -59,7 +59,7 @@ public class StreamingShareProvider extends ContentProvider {
         }
     }
 
-    /** 注册一次流式拉取，返回可授予目标应用的 content URI。 */
+    /** 注册一次流式下载，返回可授予目标应用的 content URI。 */
     public static Uri register(PullSpec spec) {
         String nonce = UUID.randomUUID().toString();
         if (SPECS.size() > 32) {
@@ -107,7 +107,7 @@ public class StreamingShareProvider extends ContentProvider {
         return new AssetFileDescriptor(read, 0, length);
     }
 
-    /** 创建管道并启动后台拉取线程，返回读端（写端交给拉取线程）。 */
+    /** 创建管道并启动后台下载线程，返回读端（写端交给下载线程）。 */
     private ParcelFileDescriptor openPipeReadEnd(Uri uri) throws FileNotFoundException {
         ParcelFileDescriptor[] pipe;
         try {

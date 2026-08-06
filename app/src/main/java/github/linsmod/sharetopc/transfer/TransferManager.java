@@ -63,7 +63,7 @@ public class TransferManager implements TransferProtocol.Progress {
         public final String host;
         public final int port;
         public final String deviceId;
-        /** true = 从 PC 拉取文件到手机（复用发送队列/状态机/任务记录）。 */
+        /** true = 从 PC 下载文件到手机（复用发送队列/状态机/任务记录）。 */
         public boolean pull;
         public Long createMillis;
         public Long updateMillis;
@@ -435,7 +435,7 @@ public class TransferManager implements TransferProtocol.Progress {
             currentJob.sendingItem = null;
             currentJob.authResult = null;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
-            // 拉取任务全部成功后自动打开已拉到本机的文件
+            // 下载任务全部成功后自动打开已拉到本机的文件
             if (finished.pull && finished.isAllSuccess() && !finished.items.isEmpty()) {
                 openPulledFiles(finished);
             }
@@ -445,7 +445,7 @@ public class TransferManager implements TransferProtocol.Progress {
         }
     }
 
-    /** 打开已拉取成功的文件：按条目的 postPullAction 决定打开/转发/仅下载。 */
+    /** 打开已下载成功的文件：按条目的 postPullAction 决定打开/转发/仅下载。 */
     private void openPulledFiles(SendJob job) {
         for (SendEntry item : job.items) {
             if (!item.isSuccess() || item.localPath == null) continue;
@@ -454,21 +454,21 @@ public class TransferManager implements TransferProtocol.Progress {
             if (item.postPullAction == SendEntry.POST_PULL_SHARE) {
                 sharePulledFile(f, item);
             } else if (item.postPullAction == SendEntry.POST_PULL_NONE) {
-                // 仅拉取到缓存，不自动处理
+                // 仅下载到缓存，不自动处理
             } else {
                 openPulledFile(f, item);
             }
         }
     }
 
-    /** 供任务列表/外部调用：以"打开方式"选择器打开已拉取的文件。 */
+    /** 供任务列表/外部调用：以"打开方式"选择器打开已下载的文件。 */
     public void openPulledFile(SendEntry item) {
         if (item == null || item.localPath == null) return;
         File f = new File(item.localPath);
         if (f.exists()) openPulledFile(f, item);
     }
 
-    /** 供任务列表/外部调用：转发已拉取的文件。 */
+    /** 供任务列表/外部调用：转发已下载的文件。 */
     public void sharePulledFile(SendEntry item) {
         if (item == null || item.localPath == null) return;
         File f = new File(item.localPath);
@@ -543,7 +543,7 @@ public class TransferManager implements TransferProtocol.Progress {
     }
 
     /**
-     * 把已拉取的文件保存到系统"下载/ShareToPC"目录（MediaStore，无需存储权限）。
+     * 把已下载的文件保存到系统"下载/ShareToPC"目录（MediaStore，无需存储权限）。
      * @param onSaved 成功回调（主线程），参数为展示用路径
      * @param onError 失败回调（主线程）
      */
@@ -589,7 +589,7 @@ public class TransferManager implements TransferProtocol.Progress {
         return "下载/ShareToPC/" + src.getName();
     }
 
-    /** 删除已拉取文件的本地缓存，并删除对应任务记录。 */
+    /** 删除已下载文件的本地缓存，并删除对应任务记录。 */
     public void deletePulledFile(SendEntry item) {
         if (item == null) return;
         if (item.localPath != null) {
@@ -730,7 +730,7 @@ public class TransferManager implements TransferProtocol.Progress {
         }
     }
 
-    /** 拉取单条：连接 → HELLO → PULL_REQUEST → 写缓存并上报进度（无 JOB_INFO 授权，由 PC 安全规则把关）。 */
+    /** 下载单条：连接 → HELLO → PULL_REQUEST → 写缓存并上报进度（无 JOB_INFO 授权，由 PC 安全规则把关）。 */
     private void pullItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
         client.connect();
         client.hello(job, true);
@@ -753,7 +753,7 @@ public class TransferManager implements TransferProtocol.Progress {
     }
 
     /**
-     * 提交一个"从 PC 拉取文件"的任务（复用发送队列/状态机/任务记录，direction=拉取）。
+     * 提交一个"从 PC 下载文件"的任务（复用发送队列/状态机/任务记录，direction=下载）。
      * @param postPullAction 完成后动作：POST_PULL_OPEN / POST_PULL_SHARE / POST_PULL_NONE。
      * @return 新建的任务；enqueue 失败时返回 null。
      */

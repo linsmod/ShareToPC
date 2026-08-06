@@ -206,7 +206,7 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private void bindEntry(EntryVH vh, DisplayItem di) {
         SendEntry r = di.entry;
         vh.item.bind(r);
-        // 已完成的拉取任务：长按可打开/转发本机缓存文件
+        // 已完成的下载任务：长按可打开/转发本机缓存文件
         vh.itemView.setOnLongClickListener(v -> {
             if (r.isPull() && r.isSuccess() && r.localPath != null
                     && new java.io.File(r.localPath).exists()

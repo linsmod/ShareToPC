@@ -204,8 +204,8 @@ namespace ShareToPcReciver.Net
         }
 
         /// <summary>
-        /// 处理手机端"拉取文件"请求：按安全规则校验（拒绝系统/隐藏/点开头文件、扩展名白名单、大小上限），
-        /// 通过后以 PULL_CHUNK 分块流式回传文件，最后发 PULL_END。拉取走自定义协议而非 ETP，防止滥用。
+        /// 处理手机端"下载文件"请求：按安全规则校验（拒绝系统/隐藏/点开头文件、扩展名白名单、大小上限），
+        /// 通过后以 PULL_CHUNK 分块流式回传文件，最后发 PULL_END。下载走自定义协议而非 ETP，防止滥用。
         /// </summary>
         private async Task HandlePullRequest(Stream stream, JsonElement header)
         {
@@ -246,15 +246,15 @@ namespace ShareToPcReciver.Net
         }
 
         /// <summary>
-        /// 拉取安全校验。默认拒绝：系统/隐藏属性文件、以点开头的文件或目录、扩展名不在白名单、
-        /// 超过大小上限的文件；未开启拉取时一律拒绝。
+        /// 下载安全校验。默认拒绝：系统/隐藏属性文件、以点开头的文件或目录、扩展名不在白名单、
+        /// 超过大小上限的文件；未开启下载时一律拒绝。
         /// </summary>
         private bool TryAllowPull(string path, string name, out string reason)
         {
             reason = "";
             if (!_config.PullEnabled)
             {
-                reason = "拉取功能已关闭";
+                reason = "下载功能已关闭";
                 return false;
             }
             if (string.IsNullOrEmpty(path))
@@ -285,7 +285,7 @@ namespace ShareToPcReciver.Net
             }
             if ((fi.Attributes & FileAttributes.Directory) != 0)
             {
-                reason = "不支持拉取文件夹";
+                reason = "不支持下载文件夹";
                 return false;
             }
             if ((fi.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0)
@@ -312,7 +312,7 @@ namespace ShareToPcReciver.Net
             return true;
         }
 
-        /// <summary>允许拉取的文件扩展名集合（小写）。</summary>
+        /// <summary>允许下载的文件扩展名集合（小写）。</summary>
         private HashSet<string> _allowedExtensions;
         private HashSet<string> AllowedExtensions
         {

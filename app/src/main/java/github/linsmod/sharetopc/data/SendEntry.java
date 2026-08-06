@@ -48,7 +48,7 @@ public class SendEntry {
     }
     public String statusLabel(){
         if (status==STATUS_SENDING){
-            return isPull() ? "拉取中" : "发送中";
+            return isPull() ? "下载中" : "发送中";
         }
         else switch (idleReason){
             case IDLE_REASON_CREATED:
@@ -66,7 +66,7 @@ public class SendEntry {
             case IDLE_REASON_REMOTE_REJECTED:
                 return "远程拒绝";
             case IDLE_REASON_SUCCESS:
-                return isPull() ? "拉取完成" : "发送完成";
+                return isPull() ? "下载完成" : "发送完成";
         }
         return "未知状态";
     }
@@ -121,18 +121,18 @@ public class SendEntry {
     public static final int TYPE_FILE = 2;
 
     public static final int DIRECTION_SEND = 0;   // 发送到 PC
-    public static final int DIRECTION_PULL = 1;   // 从 PC 拉取到手机
+    public static final int DIRECTION_PULL = 1;   // 从 PC 下载到手机
 
-    // 拉取完成后的动作
+    // 下载完成后的动作
     public static final int POST_PULL_NONE = 0;   // 仅下载，不自动处理
-    public static final int POST_PULL_OPEN = 1;   // 拉取完成弹"打开方式"
-    public static final int POST_PULL_SHARE = 2;  // 拉取完成弹"转发"
+    public static final int POST_PULL_OPEN = 1;   // 下载完成弹"打开方式"
+    public static final int POST_PULL_SHARE = 2;  // 下载完成弹"转发"
 
     /** 任务方向：DIRECTION_SEND / DIRECTION_PULL。 */
     public int direction;
-    /** 拉取任务：远端文件路径（发送任务为空）。 */
+    /** 下载任务：远端文件路径（发送任务为空）。 */
     public String remotePath;
-    /** 拉取任务：完成后动作（POST_PULL_*），仅本次进程有效。 */
+    /** 下载任务：完成后动作（POST_PULL_*），仅本次进程有效。 */
     public int postPullAction;
 
     public boolean isPull() {

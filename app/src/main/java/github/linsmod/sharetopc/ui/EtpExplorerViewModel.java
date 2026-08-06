@@ -23,7 +23,7 @@ import github.linsmod.sharetopc.transfer.EtpClient;
  * ETP 文件浏览 ViewModel。
  * 打开时在常用位置按分类搜索常见类型并缓存结果；无缓存时对外发出
  * Initializing 进度（用于"正在初始化缓存"界面）。结果缓存到
- * SharedPreferences（磁盘）+ 内存，Activity 重建不重复拉取。
+ * SharedPreferences（磁盘）+ 内存，Activity 重建不重复下载。
  */
 public class EtpExplorerViewModel extends ViewModel {
 
@@ -80,7 +80,7 @@ public class EtpExplorerViewModel extends ViewModel {
         }
     }
 
-    /** 分类结果就绪（来自缓存或刚拉取完成）。 */
+    /** 分类结果就绪（来自缓存或刚下载完成）。 */
     public static final class Ready extends State {
         public final List<CategoryResult> categories;
         public final long cachedAt;

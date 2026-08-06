@@ -31,8 +31,8 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_PORT = "port";
     public static final String COL_TARGET_NAME = "targetName";
     public static final String COL_UPDATE_MILLIS = "updateMillis";   // 原 v6 添加
-    public static final String COL_DIRECTION = "direction";          // v4: 0=发送到PC, 1=从PC拉取
-    public static final String COL_REMOTE_PATH = "remotePath";       // v4: 拉取时的远端路径
+    public static final String COL_DIRECTION = "direction";          // v4: 0=发送到PC, 1=从PC下载
+    public static final String COL_REMOTE_PATH = "remotePath";       // v4: 下载时的远端路径
 
     // ---------- Device 表 ----------
     public static final String TABLE_DEVICE = "device";
@@ -169,7 +169,7 @@ public class DBHelper extends SQLiteOpenHelper {
                     + " ADD COLUMN " + COL_DEV_ADD_TIME + " INTEGER DEFAULT 0");
         }
         if (oldVersion < 4) {
-            // v4: 拉取任务标识（方向 + 远端路径）
+            // v4: 下载任务标识（方向 + 远端路径）
             db.execSQL("ALTER TABLE " + TABLE_JOB_ENTRY
                     + " ADD COLUMN " + COL_DIRECTION + " INTEGER DEFAULT 0");
             db.execSQL("ALTER TABLE " + TABLE_JOB_ENTRY

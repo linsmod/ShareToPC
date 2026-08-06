@@ -37,7 +37,7 @@ public class TransferStatusHelper {
      */
     public static boolean canResumeOrRetry(SendEntry record, @Nullable PfdChecker pfdChecker) {
         if (record == null) return false;
-        // 拉取任务：重试即重新下载，只要有远端路径即可
+        // 下载任务：重试即重新下载，只要有远端路径即可
         if (record.isPull()) {
             return record.remotePath != null;
         }

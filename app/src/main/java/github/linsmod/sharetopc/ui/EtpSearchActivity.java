@@ -67,7 +67,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     private EtpSearchViewModel viewModel;
 
-    // 拉取所需：设备标识 + 接收端口
+    // 下载所需：设备标识 + 接收端口
     private String deviceHost;
     private String deviceId;
     private int devicePort;
@@ -320,7 +320,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         rvResults.setItemAnimator(null);
 
         resultAdapter = new EtpResultAdapter(this::showFilePropertiesDialog);
-        // 列表底部“加载更多” → ViewModel 拉取下一批
+        // 列表底部“加载更多” → ViewModel 下载下一批
         resultAdapter.setOnLoadMoreListener(() -> viewModel.loadMore());
         rvResults.setAdapter(resultAdapter);
 

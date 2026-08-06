@@ -142,7 +142,7 @@ public class TransferClient implements Closeable {
     }
 
     /**
-     * 流式拉取：把远端文件内容写入给定 OutputStream（不落盘，只经过管道/内存缓冲）。
+     * 流式下载：把远端文件内容写入给定 OutputStream（不落盘，只经过管道/内存缓冲）。
      * 调用前需已 connect + hello(oneway)。返回已写入字节数；PC 明确拒绝时返回 0（不抛异常）。
      */
     public long pullToStream(String deviceId, String name, String path, long estSize,
@@ -167,7 +167,7 @@ public class TransferClient implements Closeable {
                 os.write(buf);
                 received += len;
             } else if ("ACK".equals(type)) {
-                throw new IOException("拉取中断: " + TransferProtocol.ackError(h));
+                throw new IOException("下载中断: " + TransferProtocol.ackError(h));
             } else {
                 throw new IOException("unexpected frame: " + type);
             }
@@ -238,7 +238,7 @@ public class TransferClient implements Closeable {
                     received += len;
                     if (progress != null) progress.onProgress(entry, received, total);
                 } else if ("ACK".equals(type)) {
-                    throw new IOException("拉取中断: " + TransferProtocol.ackError(h));
+                    throw new IOException("下载中断: " + TransferProtocol.ackError(h));
                 } else {
                     throw new IOException("unexpected frame: " + type);
                 }
