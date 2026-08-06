@@ -47,21 +47,6 @@
                 app:iconPadding="4dp"
                 app:iconSize="26dp"
                 app:iconTint="@color/action_search" />
-
-            <github.linsmod.sharetopc.ui.TextButton
-                android:id="@+id/btnDeviceProps"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:minWidth="0dp"
-                android:paddingHorizontal="4dp"
-                android:text="@string/device_action_props"
-                app:icon="@drawable/ic_devices"
-                app:iconGravity="top"
-                app:iconPadding="4dp"
-                app:iconSize="26dp"
-                app:iconTint="@color/action_props" />
         </LinearLayout>
 
         <TextView
@@ -73,7 +58,7 @@
             android:text="@string/task_title"
             android:textStyle="bold" />
 
-        <!-- 任务类型过滤：全部 / 发送 / 远程读取 -->
+        <!-- 任务类型过滤：发送 / 下载 -->
         <com.google.android.material.tabs.TabLayout
             android:id="@+id/tabTaskType"
             android:layout_width="match_parent"
@@ -81,11 +66,6 @@
             android:paddingHorizontal="8dp"
             app:tabGravity="fill"
             app:tabMode="fixed">
-
-            <com.google.android.material.tabs.TabItem
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/task_tab_all" />
 
             <com.google.android.material.tabs.TabItem
                 android:layout_width="wrap_content"

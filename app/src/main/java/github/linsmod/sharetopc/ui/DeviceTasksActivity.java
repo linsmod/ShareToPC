@@ -58,6 +58,17 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         toolbar.setTitle(deviceName != null ? deviceName : "");
         toolbar.setNavigationOnClickListener(v -> finish());
 
+        DiscoveredDevice device = new DiscoveredDevice(deviceName, host,
+                intent.getIntExtra(EXTRA_PORT, 0));
+        toolbar.inflateMenu(R.menu.device_tasks_menu);
+        toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_device_props) {
+                showAliasDialog(device);
+                return true;
+            }
+            return false;
+        });
+
         if (savedInstanceState == null) {
             TaskFragment fragment = new TaskFragment();
             Bundle args = new Bundle();
@@ -91,7 +102,6 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         startActivity(intent);
     }
 
-    @Override
     public void showAliasDialog(DiscoveredDevice device) {
         DeviceDialogs.showAliasDialog(this, viewModel, device);
     }

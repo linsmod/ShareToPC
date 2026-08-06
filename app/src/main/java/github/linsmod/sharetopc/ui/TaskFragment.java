@@ -40,7 +40,6 @@ public class TaskFragment extends Fragment {
     public interface DeviceActionListener {
         void showEtpExplorer(DiscoveredDevice device);
         void showEtpSearch(DiscoveredDevice device);
-        void showAliasDialog(DiscoveredDevice device);
     }
 
     private MainViewModel viewModel;
@@ -53,7 +52,7 @@ public class TaskFragment extends Fragment {
     private int filterPort;
     @Nullable private String filterDeviceName;
 
-    /** 类型 tab：0=全部, 1=发送, 2=远程读取。 */
+    /** 类型 tab：0=发送, 1=远程读取。 */
     private int taskTypeTab;
     @Nullable private List<TaskGroup> latestTasks;
 
@@ -153,8 +152,6 @@ public class TaskFragment extends Fragment {
                 deviceActionListener.showEtpExplorer(device));
         view.findViewById(R.id.btnEtpSearch).setOnClickListener(v ->
                 deviceActionListener.showEtpSearch(device));
-        view.findViewById(R.id.btnDeviceProps).setOnClickListener(v ->
-                deviceActionListener.showAliasDialog(device));
     }
 
     /** 根据设备筛选参数过滤任务分组，并隐藏分组内的设备信息文本。 */
@@ -183,11 +180,10 @@ public class TaskFragment extends Fragment {
         tvTaskEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
     }
 
-    /** 按类型 tab 过滤：0=全部, 1=仅发送, 2=仅远程读取。 */
+    /** 按类型 tab 过滤：0=仅发送, 1=仅远程读取。 */
     @NonNull
     private List<TaskGroup> applyTypeFilter(@NonNull List<TaskGroup> tasks) {
-        if (taskTypeTab == 0) return tasks;
-        boolean wantPull = taskTypeTab == 2;
+        boolean wantPull = taskTypeTab == 1;
         List<TaskGroup> result = new ArrayList<>();
         for (TaskGroup g : tasks) {
             if (g.isPull() == wantPull) result.add(g);
@@ -196,11 +192,7 @@ public class TaskFragment extends Fragment {
     }
 
     private int emptyTextForTab() {
-        switch (taskTypeTab) {
-            case 1: return R.string.task_empty_send;
-            case 2: return R.string.task_empty_pull;
-            default: return R.string.task_empty;
-        }
+        return taskTypeTab == 1 ? R.string.task_empty_pull : R.string.task_empty_send;
     }
 
     @Override

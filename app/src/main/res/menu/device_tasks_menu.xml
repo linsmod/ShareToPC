@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_device_props"
+        android:icon="@drawable/ic_tune"
+        android:title="@string/device_action_props"
+        app:showAsAction="always" />
+
+</menu>

@@ -188,8 +188,8 @@
     <string name="device_menu_device_props">设备属性</string>
 
     <!-- 设备任务页操作按钮（图标在上，文字在下） -->
-    <string name="device_action_explor">文件浏览</string>
-    <string name="device_action_search">文件搜索</string>
+    <string name="device_action_explor">文件浏览器</string>
+    <string name="device_action_search">搜索文件</string>
     <string name="device_action_props">属性</string>
 
     <!-- 路径预设 -->
@@ -264,9 +264,8 @@
     <string name="etp_pull_download_only">下载Only</string>
     <string name="etp_pull_stream">流式转发（转发大文件时推荐）</string>
     <string name="etp_pull_no_target">缺少目标设备信息，无法拉取</string>
-    <string name="task_tab_all">全部</string>
     <string name="task_tab_send">发送</string>
-    <string name="task_tab_pull">远程读取</string>
+    <string name="task_tab_pull">下载</string>
     <string name="task_empty_send">暂无发送任务</string>
     <string name="task_empty_pull">暂无远程读取任务</string>
 
