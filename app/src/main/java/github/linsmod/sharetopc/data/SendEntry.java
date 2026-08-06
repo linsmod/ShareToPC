@@ -48,15 +48,15 @@ public class SendEntry {
     }
     public String statusLabel(){
         if (status==STATUS_SENDING){
-            return "发送中";
+            return isPull() ? "拉取中" : "发送中";
         }
         else switch (idleReason){
             case IDLE_REASON_CREATED:
-                return "准备发送";
+                return "准备中";
             case IDLE_REASON_OUTDATE:
                 return "已过期";
             case IDLE_REASON_IO_ERROR:
-                return "读取出错";
+                return isPull() ? "写入出错" : "读取出错";
             case IDLE_REASON_NET_ERROR:
                 return "网络错误";
             case IDLE_REASON_PAUSED:
@@ -66,7 +66,7 @@ public class SendEntry {
             case IDLE_REASON_REMOTE_REJECTED:
                 return "远程拒绝";
             case IDLE_REASON_SUCCESS:
-                return "发送完成";
+                return isPull() ? "拉取完成" : "发送完成";
         }
         return "未知状态";
     }
@@ -119,6 +119,18 @@ public class SendEntry {
     }
     public static final int TYPE_TEXT = 1;
     public static final int TYPE_FILE = 2;
+
+    public static final int DIRECTION_SEND = 0;   // 发送到 PC
+    public static final int DIRECTION_PULL = 1;   // 从 PC 拉取到手机
+
+    /** 任务方向：DIRECTION_SEND / DIRECTION_PULL。 */
+    public int direction;
+    /** 拉取任务：远端文件路径（发送任务为空）。 */
+    public String remotePath;
+
+    public boolean isPull() {
+        return direction == DIRECTION_PULL;
+    }
     /** TYPE_TEXT 时的文本内容 */
     public String text;
 

@@ -48,6 +48,8 @@ import java.util.Set;
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.transfer.EtpClient;
+import github.linsmod.sharetopc.transfer.TransferManager;
+import github.linsmod.sharetopc.util.FileUtils;
 
 /**
  * ETP 文件浏览：打开后在常用位置按分类搜索常见类型并缓存结果，
@@ -59,6 +61,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
     public static final String EXTRA_DEVICE_ID = "device_id";
+    public static final String EXTRA_PORT = "port";
 
     private EtpExplorerViewModel viewModel;
     private EtpExplorerAdapter adapter;
@@ -85,6 +88,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private String deviceName;
     private String deviceHost;
     private String deviceId;
+    private int devicePort;
 
     // 分类入口
     private View layoutCategories;
@@ -146,6 +150,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
         deviceHost = intent.getStringExtra(EXTRA_HOST);
         deviceId = intent.getStringExtra(EXTRA_DEVICE_ID);
+        devicePort = intent.getIntExtra(EXTRA_PORT, 0);
         if (TextUtils.isEmpty(deviceHost)) {
             Toast.makeText(this, "未指定设备", Toast.LENGTH_SHORT).show();
             finish();
@@ -785,6 +790,13 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         new MaterialAlertDialogBuilder(this)
                 .setTitle(r.name)
                 .setView(tv)
+                .setNeutralButton(r.isFolder ? null : getString(R.string.etp_pull_to_phone),
+                        (d, w) -> {
+                            if (!r.isFolder) {
+                                enqueuePull(r);
+                                d.dismiss();
+                            }
+                        })
                 .setPositiveButton("复制路径", (d, w) -> {
                     ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                     cm.setPrimaryClip(ClipData.newPlainText("file_path", r.fullPath()));
@@ -793,6 +805,23 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
                 })
                 .setNegativeButton("关闭", null)
                 .show();
+    }
+
+    /** 提交"拉取文件"任务：走自定义协议把文件拉到缓存目录，完成后自动打开。 */
+    private void enqueuePull(EtpClient.EtpSearchResult r) {
+        if (deviceHost == null || devicePort <= 0) {
+            Toast.makeText(this, R.string.etp_pull_no_target, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        TransferManager.SendJob job = App.get().transferManager.enqueuePull(
+                deviceId != null ? deviceId : deviceHost,
+                deviceHost, devicePort, r.name,
+                r.size >= 0 ? r.size : 0,
+                FileUtils.guessMimeType(r.name),
+                r.fullPath());
+        if (job != null) {
+            Toast.makeText(this, R.string.etp_pull_queued, Toast.LENGTH_SHORT).show();
+        }
     }
 
     private static String formatFileAttributes(int attrs) {

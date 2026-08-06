@@ -51,6 +51,8 @@ public class JobStore {
         values.put(DBHelper.COL_PORT, r.port);
         values.put(DBHelper.COL_TARGET_NAME, r.targetName);
         values.put(DBHelper.COL_UPDATE_MILLIS, r.updateMillis);
+        values.put(DBHelper.COL_DIRECTION, r.direction);
+        values.put(DBHelper.COL_REMOTE_PATH, r.remotePath);
         return values;
     }
 
@@ -76,6 +78,8 @@ public class JobStore {
         r.port = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_PORT));
         r.targetName = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_TARGET_NAME));
         r.updateMillis = c.getLong(c.getColumnIndexOrThrow(DBHelper.COL_UPDATE_MILLIS));
+        r.direction = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_DIRECTION));
+        r.remotePath = c.getString(c.getColumnIndexOrThrow(DBHelper.COL_REMOTE_PATH));
         return r;
     }
 
@@ -171,6 +175,15 @@ public class JobStore {
         values.put(DBHelper.COL_SENT_BYTES, sentBytes);
         values.put(DBHelper.COL_TOTAL_BYTES, totalBytes);
         values.put(DBHelper.COL_UPDATE_MILLIS, updateMillis);
+        db.update(DBHelper.TABLE_JOB_ENTRY, values,
+                DBHelper.COL_ID + "=?", new String[]{id});
+    }
+
+    /** 更新拉取任务成功后本机缓存文件路径（供任务列表打开已拉取的文件）。 */
+    public synchronized void updateLocalPath(String id, String localPath) {
+        if (id == null) return;
+        ContentValues values = new ContentValues();
+        values.put(DBHelper.COL_LOCAL_PATH, localPath);
         db.update(DBHelper.TABLE_JOB_ENTRY, values,
                 DBHelper.COL_ID + "=?", new String[]{id});
     }

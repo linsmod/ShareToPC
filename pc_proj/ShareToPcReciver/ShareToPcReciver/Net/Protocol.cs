@@ -131,6 +131,37 @@ namespace ShareToPcReciver.Net
             await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
             await stream.FlushAsync(ct);
         }
+
+        /// <summary>PULL_REQUEST 响应：status=OK 时携带文件大小与 MIME（PC 注册表为准），ERROR 时 msg 为拒绝原因。</summary>
+        public static async Task WritePullAckAsync(Stream stream, bool ok, string msg, long size, string mime, CancellationToken ct)
+        {
+            var ack = new { type = "PULL_ACK", status = ok ? "OK" : "ERROR", msg = msg ?? "", size, mime = mime ?? "" };
+            string json = JsonSerializer.Serialize(ack);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+
+        /// <summary>发送拉取文件的一个数据块：[{"type":"PULL_CHUNK","len":L}][L bytes data]。</summary>
+        public static async Task WritePullChunkAsync(Stream stream, byte[] data, int len, CancellationToken ct)
+        {
+            var header = new { type = "PULL_CHUNK", len };
+            byte[] hb = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(header));
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(hb.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(hb, 0, hb.Length, ct);
+            await stream.WriteAsync(data, 0, len, ct);
+            await stream.FlushAsync(ct);
+        }
+
+        /// <summary>拉取结束通知（文件内容传输完毕）。</summary>
+        public static async Task WritePullEndAsync(Stream stream, CancellationToken ct)
+        {
+            await WriteSerializedMessageAsync(stream,
+                JsonSerializer.Serialize(new { type = "PULL_END", status = "OK" }), ct);
+        }
         public static async Task WriteJobAckAsync(Stream stream,AuthResult session, CancellationToken ct)
         { 
             await WriteJobAckAsync(stream, session.Status, session.PairKey, session.Credits, session.MaxItemsPerJob, session.MaxBytesPerJob, false, ct);

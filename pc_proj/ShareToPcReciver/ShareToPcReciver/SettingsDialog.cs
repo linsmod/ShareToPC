@@ -14,6 +14,8 @@ namespace ShareToPcReciver
         public ArrivalAction FileAction { get; private set; }
         public bool ShowBalloon { get; private set; }
         public bool RunAtStartup { get; private set; }
+        public bool PullEnabled { get; private set; }
+        public string PullAllowedExtensions { get; private set; }
 
         private readonly int _currentPort;
 
@@ -60,6 +62,8 @@ namespace ShareToPcReciver
             FileAction = config.FileAction;
             ShowBalloon = config.ShowBalloon;
             RunAtStartup = config.RunAtStartup;
+            PullEnabled = config.PullEnabled;
+            PullAllowedExtensions = config.PullAllowedExtensions;
             InitializeComponent();
 
             // 将依赖外部数据的赋值放在 InitializeComponent 之后，避免设计器序列化错误
@@ -67,6 +71,8 @@ namespace ShareToPcReciver
             txtSaveDir.Text = SaveDir;
             chkShowBalloon.Checked = ShowBalloon;
             chkRunAtStartup.Checked = RunAtStartup;
+            chkPullEnabled.Checked = PullEnabled;
+            txtPullExt.Text = PullAllowedExtensions;
 
             BindActionCombo(cmbTextAction, TextActionOptions, TextAction);
             BindActionCombo(cmbFileAction, FileActionOptions, FileAction);
@@ -94,6 +100,10 @@ namespace ShareToPcReciver
             this.cmbTextAction = new ComboBox();
             this.lblFileAction = new Label();
             this.cmbFileAction = new ComboBox();
+            this.lblPullTitle = new Label();
+            this.chkPullEnabled = new CheckBox();
+            this.lblPullExt = new Label();
+            this.txtPullExt = new TextBox();
             this.btnOk = new Button();
             this.btnCancel = new Button();
             this.folderBrowserDialog1 = new FolderBrowserDialog();
@@ -138,12 +148,26 @@ namespace ShareToPcReciver
             this.cmbFileAction.Location = new Point(100, 160);
             this.cmbFileAction.Size = new Size(190, 23);
 
+            this.lblPullTitle.Text = "拉取文件（手机端从 PC 拉取，走自定义协议）:";
+            this.lblPullTitle.Location = new Point(12, 193);
+            this.lblPullTitle.AutoSize = true;
+
+            this.chkPullEnabled.Text = "允许手机端拉取文件";
+            this.chkPullEnabled.Location = new Point(12, 217);
+
+            this.lblPullExt.Text = "允许的扩展名:";
+            this.lblPullExt.Location = new Point(12, 245);
+            this.lblPullExt.AutoSize = true;
+
+            this.txtPullExt.Location = new Point(100, 242);
+            this.txtPullExt.Size = new Size(280, 23);
+
             this.btnOk.Text = "确定";
-            this.btnOk.Location = new Point(220, 200);
+            this.btnOk.Location = new Point(220, 280);
             this.btnOk.DialogResult = DialogResult.OK;
 
             this.btnCancel.Text = "取消";
-            this.btnCancel.Location = new Point(310, 200);
+            this.btnCancel.Location = new Point(310, 280);
             this.btnCancel.DialogResult = DialogResult.Cancel;
 
             this.Controls.Add(this.lblPort);
@@ -157,12 +181,16 @@ namespace ShareToPcReciver
             this.Controls.Add(this.cmbTextAction);
             this.Controls.Add(this.lblFileAction);
             this.Controls.Add(this.cmbFileAction);
+            this.Controls.Add(this.lblPullTitle);
+            this.Controls.Add(this.chkPullEnabled);
+            this.Controls.Add(this.lblPullExt);
+            this.Controls.Add(this.txtPullExt);
             this.Controls.Add(this.btnOk);
             this.Controls.Add(this.btnCancel);
 
             this.AcceptButton = this.btnOk;
             this.CancelButton = this.btnCancel;
-            this.ClientSize = new Size(420, 240);
+            this.ClientSize = new Size(420, 320);
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
@@ -192,6 +220,8 @@ namespace ShareToPcReciver
                 FileAction = ((ActionOption)cmbFileAction.SelectedItem).Value;
                 ShowBalloon = chkShowBalloon.Checked;
                 RunAtStartup = chkRunAtStartup.Checked;
+                PullEnabled = chkPullEnabled.Checked;
+                PullAllowedExtensions = txtPullExt.Text;
             }
             return result;
         }
@@ -207,6 +237,10 @@ namespace ShareToPcReciver
         private ComboBox cmbTextAction;
         private Label lblFileAction;
         private ComboBox cmbFileAction;
+        private Label lblPullTitle;
+        private CheckBox chkPullEnabled;
+        private Label lblPullExt;
+        private TextBox txtPullExt;
         private Button btnOk;
         private Button btnCancel;
         private FolderBrowserDialog folderBrowserDialog1;

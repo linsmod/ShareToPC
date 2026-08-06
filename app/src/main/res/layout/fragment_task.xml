@@ -73,6 +73,31 @@
             android:text="@string/task_title"
             android:textStyle="bold" />
 
+        <!-- 任务类型过滤：全部 / 发送 / 远程读取 -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/tabTaskType"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="8dp"
+            app:tabGravity="fill"
+            app:tabMode="fixed">
+
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/task_tab_all" />
+
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/task_tab_send" />
+
+            <com.google.android.material.tabs.TabItem
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/task_tab_pull" />
+        </com.google.android.material.tabs.TabLayout>
+
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/rvTask"
             android:layout_width="match_parent"

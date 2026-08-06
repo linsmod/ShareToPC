@@ -56,6 +56,19 @@ public final class TransferProtocol {
         logSend(header);
     }
 
+    /** 发送"拉取文件"请求帧（走自定义协议，请求 PC 端回传文件）。 */
+    public static void writePullRequest(DataOutputStream out, String deviceId, String name,
+                                        String path, long size, String jobId) throws IOException {
+        JsonObject header = new JsonObject();
+        header.addProperty("type", "PULL_REQUEST");
+        header.addProperty("deviceId", deviceId != null ? deviceId : "");
+        header.addProperty("name", name != null ? name : "");
+        header.addProperty("path", path != null ? path : "");
+        header.addProperty("size", size);
+        header.addProperty("jobId", jobId != null ? jobId : "");
+        writeFrame(out, header);
+    }
+
     /** 发送一个文件数据 chunk 帧：[headerLen][{"type":"CHUNK","len":L}][L bytes data]。 */
     private static void writeChunkFrame(DataOutputStream out, byte[] data,
                                         int offset, int length) throws IOException {

@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.android.material.tabs.TabLayout;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,13 +53,14 @@ public class TaskFragment extends Fragment {
     private int filterPort;
     @Nullable private String filterDeviceName;
 
+    /** 类型 tab：0=全部, 1=发送, 2=远程读取。 */
+    private int taskTypeTab;
+    @Nullable private List<TaskGroup> latestTasks;
+
     /** 任务变更回调（注册时立即收到当前值，避免 LiveData lifecycle 延迟）。 */
     private final MainViewModel.TasksChangeListener tasksListener = tasks -> {
-        if (taskAdapter != null && getView() != null) {
-            List<TaskGroup> filtered = applyFilter(tasks);
-            taskAdapter.submitList(filtered);
-            tvTaskEmpty.setVisibility(filtered.isEmpty() ? View.VISIBLE : View.GONE);
-        }
+        latestTasks = tasks;
+        refreshList();
     };
 
     /** 条目进度增量更新回调。 */
@@ -85,6 +87,15 @@ public class TaskFragment extends Fragment {
 
         TextView tvTaskTitle = view.findViewById(R.id.tvTaskTitle);
         RecyclerView rvTask = view.findViewById(R.id.rvTask);
+        TabLayout tabTaskType = view.findViewById(R.id.tabTaskType);
+        tabTaskType.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override public void onTabSelected(TabLayout.Tab tab) {
+                taskTypeTab = tab.getPosition();
+                refreshList();
+            }
+            @Override public void onTabUnselected(TabLayout.Tab tab) {}
+            @Override public void onTabReselected(TabLayout.Tab tab) {}
+        });
 
         // 顶部工具栏已显示设备名（DeviceTasksActivity），标题统一为"传输任务"
         tvTaskTitle.setText(R.string.task_title);
@@ -154,6 +165,37 @@ public class TaskFragment extends Fragment {
             }
         }
         return result;
+    }
+
+    /** 重新计算（设备 + 类型 tab）并刷新列表与空态提示。 */
+    private void refreshList() {
+        if (taskAdapter == null || getView() == null || latestTasks == null) return;
+        List<TaskGroup> filtered = applyFilter(latestTasks);
+        filtered = applyTypeFilter(filtered);
+        taskAdapter.submitList(filtered);
+        boolean empty = filtered.isEmpty();
+        tvTaskEmpty.setText(emptyTextForTab());
+        tvTaskEmpty.setVisibility(empty ? View.VISIBLE : View.GONE);
+    }
+
+    /** 按类型 tab 过滤：0=全部, 1=仅发送, 2=仅远程读取。 */
+    @NonNull
+    private List<TaskGroup> applyTypeFilter(@NonNull List<TaskGroup> tasks) {
+        if (taskTypeTab == 0) return tasks;
+        boolean wantPull = taskTypeTab == 2;
+        List<TaskGroup> result = new ArrayList<>();
+        for (TaskGroup g : tasks) {
+            if (g.isPull() == wantPull) result.add(g);
+        }
+        return result;
+    }
+
+    private int emptyTextForTab() {
+        switch (taskTypeTab) {
+            case 1: return R.string.task_empty_send;
+            case 2: return R.string.task_empty_pull;
+            default: return R.string.task_empty;
+        }
     }
 
     @Override

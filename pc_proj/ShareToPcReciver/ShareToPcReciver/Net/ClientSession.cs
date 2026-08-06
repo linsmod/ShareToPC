@@ -2,6 +2,7 @@ using ShareToPcReciver.Config;
 using ShareToPcReciver.Models;
 using ShareToPcReciver.Storage;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -63,6 +64,9 @@ namespace ShareToPcReciver.Net
                             break;
                         case "POLL":
                             await HandlePoll(stream);
+                            break;
+                        case "PULL_REQUEST":
+                            await HandlePullRequest(stream, header);
                             break;
                         case "JOB_INFO":
                             await HandleJobInfo(stream, header);
@@ -197,6 +201,130 @@ namespace ShareToPcReciver.Net
             });
             if(!oneway)
                 await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _config.HeartbeatIntervalMs, KnownFolder.GetAll(), Drives.GetAll(), _ct);
+        }
+
+        /// <summary>
+        /// 处理手机端"拉取文件"请求：按安全规则校验（拒绝系统/隐藏/点开头文件、扩展名白名单、大小上限），
+        /// 通过后以 PULL_CHUNK 分块流式回传文件，最后发 PULL_END。拉取走自定义协议而非 ETP，防止滥用。
+        /// </summary>
+        private async Task HandlePullRequest(Stream stream, JsonElement header)
+        {
+            if (clientDevice == null)
+            {
+                await Protocol.WritePullAckAsync(stream, false, "未完成握手", 0, "", _ct);
+                return;
+            }
+            string path = header.TryGetProperty("path", out JsonElement pp) ? pp.GetString() ?? "" : "";
+            string name = header.TryGetProperty("name", out JsonElement pn) ? pn.GetString() ?? "" : "";
+
+            if (!TryAllowPull(path, name, out string reason))
+            {
+                Util.Log.Warn($"PULL_REQUEST rejected for {clientDevice.DeviceName}: {reason} ({path})");
+                await Protocol.WritePullAckAsync(stream, false, reason, 0, "", _ct);
+                return;
+            }
+
+            Util.Log.Info($"PULL_REQUEST accepted for {clientDevice.DeviceName}: {path}");
+            var fi = new FileInfo(path);
+            await Protocol.WritePullAckAsync(stream, true, "", fi.Length, Mime.FromFileName(path), _ct);
+
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete, 64 * 1024, FileOptions.SequentialScan);
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = await fs.ReadAsync(buf, 0, buf.Length, _ct)) > 0)
+            {
+                if (_ct.IsCancellationRequested) break;
+                await Protocol.WritePullChunkAsync(stream, buf, n, _ct);
+            }
+            await Protocol.WritePullEndAsync(stream, _ct);
+            Util.Log.Info($"PULL_REQUEST done for {clientDevice.DeviceName}: {path}");
+        }
+
+        /// <summary>
+        /// 拉取安全校验。默认拒绝：系统/隐藏属性文件、以点开头的文件或目录、扩展名不在白名单、
+        /// 超过大小上限的文件；未开启拉取时一律拒绝。
+        /// </summary>
+        private bool TryAllowPull(string path, string name, out string reason)
+        {
+            reason = "";
+            if (!_config.PullEnabled)
+            {
+                reason = "拉取功能已关闭";
+                return false;
+            }
+            if (string.IsNullOrEmpty(path))
+            {
+                reason = "路径为空";
+                return false;
+            }
+            // 路径穿越防护（仅匹配目录分隔符形式的 ..，避免误伤文件名里的 ".."）
+            if (path.StartsWith("..\\") || path.Contains("\\..\\") || path.EndsWith("\\.."))
+            {
+                reason = "非法路径";
+                return false;
+            }
+            FileInfo fi;
+            try
+            {
+                fi = new FileInfo(path);
+            }
+            catch
+            {
+                reason = "非法路径";
+                return false;
+            }
+            if (!fi.Exists)
+            {
+                reason = "文件不存在";
+                return false;
+            }
+            if ((fi.Attributes & FileAttributes.Directory) != 0)
+            {
+                reason = "不支持拉取文件夹";
+                return false;
+            }
+            if ((fi.Attributes & (FileAttributes.Hidden | FileAttributes.System)) != 0)
+            {
+                reason = "拒绝访问系统/隐藏文件";
+                return false;
+            }
+            if (name.StartsWith(".") || fi.Name.StartsWith("."))
+            {
+                reason = "拒绝访问点开头文件";
+                return false;
+            }
+            string ext = fi.Extension.TrimStart('.').ToLowerInvariant();
+            if (string.IsNullOrEmpty(ext) || !AllowedExtensions.Contains(ext))
+            {
+                reason = "文件类型不允许";
+                return false;
+            }
+            if (_config.PullMaxBytes > 0 && fi.Length > _config.PullMaxBytes)
+            {
+                reason = "文件超过大小限制";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>允许拉取的文件扩展名集合（小写）。</summary>
+        private HashSet<string> _allowedExtensions;
+        private HashSet<string> AllowedExtensions
+        {
+            get
+            {
+                if (_allowedExtensions != null) return _allowedExtensions;
+                var set = new HashSet<string>();
+                string raw = _config.PullAllowedExtensions ?? "";
+                foreach (var part in raw.Split(new[] { ',', ';', ' ', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string e = part.Trim().TrimStart('.').ToLowerInvariant();
+                    if (!string.IsNullOrEmpty(e)) set.Add(e);
+                }
+                _allowedExtensions = set;
+                return set;
+            }
         }
 
         private async Task HandleText(Stream stream, JsonElement header)

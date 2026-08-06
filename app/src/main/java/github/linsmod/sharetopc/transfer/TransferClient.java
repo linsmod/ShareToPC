@@ -97,6 +97,71 @@ public class TransferClient implements Closeable {
         }
     }
 
+    /**
+     * 拉取文件：向 PC 请求指定远端路径，按 PULL_CHUNK 分块写入缓存目录（不落 inbox），
+     * 供打开/转发。PC 端按安全规则决定是否允许，拒绝时抛出带原因的 IOException。
+     */
+    public void pullFile(TransferManager.SendJob job, SendEntry entry,
+                         TransferProtocol.Progress progress) throws IOException {
+        TransferProtocol.writePullRequest(out, job.deviceId, entry.name, entry.remotePath,
+                entry.size >= 0 ? entry.size : 0, job.id);
+
+        JsonObject ack = TransferProtocol.readHeader(in);
+        if (!"PULL_ACK".equals(TransferProtocol.optString(ack, "type"))) {
+            throw new IOException("expected PULL_ACK, got: " + ack);
+        }
+        if (!"OK".equals(TransferProtocol.optString(ack, "status"))) {
+            String reason = TransferProtocol.optString(ack, "msg");
+            throw new IOException("拉取被拒绝: " + (reason == null ? "unknown" : reason));
+        }
+        long total = ack.has("size") && !ack.get("size").isJsonNull()
+                ? ack.get("size").getAsLong() : entry.size;
+        // 优先用 PC 端注册表提供的 MIME（比本机按扩展名猜测更准）
+        String mime = TransferProtocol.optString(ack, "mime");
+        if (mime != null && !mime.isEmpty()) {
+            entry.mime = mime;
+        }
+
+        File cacheDir = new File(App.get().getCacheDir(), "pulled");
+        if (!cacheDir.exists()) {
+            cacheDir.mkdirs();
+        }
+        File outFile = new File(cacheDir, FileUtils.sanitizeFileName(entry.name));
+        entry.localPath = outFile.getAbsolutePath();
+
+        long received = 0;
+        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outFile)) {
+            while (true) {
+                if (job.isCancelRequested()) break;
+                JsonObject h = TransferProtocol.readHeader(in);
+                String type = TransferProtocol.optString(h, "type");
+                if ("PULL_END".equals(type)) break;
+                if ("PULL_CHUNK".equals(type)) {
+                    int len = h.has("len") && !h.get("len").isJsonNull() ? h.get("len").getAsInt() : 0;
+                    if (len < 0 || len > 16 * 1024 * 1024) {
+                        throw new IOException("invalid chunk len: " + len);
+                    }
+                    byte[] buf = new byte[len];
+                    in.readFully(buf);
+                    fos.write(buf);
+                    received += len;
+                    if (progress != null) progress.onProgress(entry, received, total);
+                } else if ("ACK".equals(type)) {
+                    throw new IOException("拉取中断: " + TransferProtocol.ackError(h));
+                } else {
+                    throw new IOException("unexpected frame: " + type);
+                }
+            }
+            fos.flush();
+        }
+        if (job.isCancelRequested()) {
+            outFile.delete();
+            if (progress != null) progress.onCanceled(entry, received, total);
+            return;
+        }
+        if (progress != null) progress.onFinish(entry, received, total);
+    }
+
     /** 发送 FILE 帧头（仅 JSON 头，不含 payload）。 */
     private void sendFileHeader(String fileName, String mime,int objectType, long size, String entryId, String jobId,String pairKey) throws IOException {
         JsonObject header = new JsonObject();

@@ -65,6 +65,7 @@
     <Compile Include="Net\Drives.cs" />
     <Compile Include="Net\KnownFolder.cs" />
     <Compile Include="Net\Messages.cs" />
+    <Compile Include="Net\Mime.cs" />
     <Compile Include="Net\Protocol.cs" />
     <Compile Include="Net\ServiceAdvertiser.cs" />
     <Compile Include="Net\TransferServer.cs" />

@@ -76,4 +76,12 @@ public class TaskGroup {
         if (host == null || host.isEmpty()) return "";
         return host + ":" + port;
     }
+
+    /** 该分组是否为"从 PC 拉取"任务（发送任务返回 false）。 */
+    public boolean isPull() {
+        for (SendEntry r : entries) {
+            if (r.isPull()) return true;
+        }
+        return false;
+    }
 }

@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 3;
+    private static final int DB_VERSION = 4;
 
     // ---------- job_entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -31,6 +31,8 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_PORT = "port";
     public static final String COL_TARGET_NAME = "targetName";
     public static final String COL_UPDATE_MILLIS = "updateMillis";   // 原 v6 添加
+    public static final String COL_DIRECTION = "direction";          // v4: 0=发送到PC, 1=从PC拉取
+    public static final String COL_REMOTE_PATH = "remotePath";       // v4: 拉取时的远端路径
 
     // ---------- Device 表 ----------
     public static final String TABLE_DEVICE = "device";
@@ -87,7 +89,9 @@ public class DBHelper extends SQLiteOpenHelper {
                     COL_HOST + " TEXT, " +
                     COL_PORT + " INTEGER, " +
                     COL_TARGET_NAME + " TEXT, " +
-                    COL_UPDATE_MILLIS + " INTEGER DEFAULT 0" +
+                    COL_UPDATE_MILLIS + " INTEGER DEFAULT 0, " +
+                    COL_DIRECTION + " INTEGER DEFAULT 0, " +
+                    COL_REMOTE_PATH + " TEXT" +
                     ")";
 
     private static final String CREATE_DEVICE_TABLE =
@@ -163,6 +167,13 @@ public class DBHelper extends SQLiteOpenHelper {
             // v3: 设备加入时间
             db.execSQL("ALTER TABLE " + TABLE_DEVICE
                     + " ADD COLUMN " + COL_DEV_ADD_TIME + " INTEGER DEFAULT 0");
+        }
+        if (oldVersion < 4) {
+            // v4: 拉取任务标识（方向 + 远端路径）
+            db.execSQL("ALTER TABLE " + TABLE_JOB_ENTRY
+                    + " ADD COLUMN " + COL_DIRECTION + " INTEGER DEFAULT 0");
+            db.execSQL("ALTER TABLE " + TABLE_JOB_ENTRY
+                    + " ADD COLUMN " + COL_REMOTE_PATH + " TEXT");
         }
     }
 

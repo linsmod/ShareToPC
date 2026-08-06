@@ -217,6 +217,8 @@ namespace ShareToPcReciver
                 _config.FileAction = dlg.FileAction;
                 _config.ShowBalloon = dlg.ShowBalloon;
                 _config.RunAtStartup = dlg.RunAtStartup;
+                _config.PullEnabled = dlg.PullEnabled;
+                _config.PullAllowedExtensions = dlg.PullAllowedExtensions;
                 _config.Save();
                 _config.ApplyRunAtStartup();
                 if (needRestart)

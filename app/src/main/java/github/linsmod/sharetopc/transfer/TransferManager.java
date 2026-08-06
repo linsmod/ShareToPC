@@ -1,13 +1,18 @@
 package github.linsmod.sharetopc.transfer;
 
+import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.net.http.NetworkException;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.FileProvider;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -24,6 +29,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -38,6 +44,7 @@ import github.linsmod.sharetopc.data.PairStore;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.discovery.PairSession;
+import github.linsmod.sharetopc.util.FileUtils;
 import github.linsmod.sharetopc.util.LogX;
 
 /**
@@ -51,6 +58,8 @@ public class TransferManager implements TransferProtocol.Progress {
         public final String host;
         public final int port;
         public final String deviceId;
+        /** true = 从 PC 拉取文件到手机（复用发送队列/状态机/任务记录）。 */
+        public boolean pull;
         public Long createMillis;
         public Long updateMillis;
         private boolean isCancelRequested;
@@ -358,7 +367,11 @@ public class TransferManager implements TransferProtocol.Progress {
                             break;
                         }
                         job.sendingItem = item;
-                        sendItem(client, job, item);
+                        if (job.pull) {
+                            pullItem(client, job, item);
+                        } else {
+                            sendItem(client, job, item);
+                        }
                         if (item.isSuccess()) {
                             releasePfd(item.id);
                         }
@@ -417,9 +430,42 @@ public class TransferManager implements TransferProtocol.Progress {
             currentJob.sendingItem = null;
             currentJob.authResult = null;
             currentJob = null; // 及时清空，让 computeDeviceProgress 走 DB 逻辑标记 STATE_COMPLETED
+            // 拉取任务全部成功后自动打开已拉到本机的文件
+            if (finished.pull && finished.isAllSuccess() && !finished.items.isEmpty()) {
+                openPulledFiles(finished);
+            }
             mainHandler.post(() -> {
                 for (JobProgressListener l : progressListeners) l.onJobFinished(finished);
             });
+        }
+    }
+
+    /** 打开已拉取成功的文件（FileProvider 授权 + ACTION_VIEW），无应用可打开时提示。 */
+    private void openPulledFiles(SendJob job) {
+        for (SendEntry item : job.items) {
+            if (!item.isSuccess() || item.localPath == null) continue;
+            File f = new File(item.localPath);
+            if (!f.exists()) continue;
+            try {
+                Uri uri = FileProvider.getUriForFile(appContext,
+                        appContext.getPackageName() + ".fileprovider", f);
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                // 优先用 PC 端上报的 MIME；缺失/兜底类型再按扩展名猜测
+                String mime = item.mime;
+                if (mime == null || mime.isEmpty() || "application/octet-stream".equals(mime)) {
+                    mime = FileUtils.guessMimeType(item.name);
+                }
+                intent.setDataAndType(uri, mime);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+                appContext.startActivity(intent);
+                LogX.d("Opened pulled file: " + f.getAbsolutePath());
+            } catch (ActivityNotFoundException e) {
+                LogX.e("No app to open pulled file: " + f.getAbsolutePath(), e);
+                mainHandler.post(() -> Toast.makeText(appContext,
+                        "没有应用能打开 " + item.name, Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                LogX.e("Failed to open pulled file: " + f.getAbsolutePath(), e);
+            }
         }
     }
 
@@ -555,6 +601,51 @@ public class TransferManager implements TransferProtocol.Progress {
         }
     }
 
+    /** 拉取单条：连接 → HELLO → PULL_REQUEST → 写缓存并上报进度（无 JOB_INFO 授权，由 PC 安全规则把关）。 */
+    private void pullItem(TransferClient client, SendJob job, SendEntry item) throws Exception {
+        client.connect();
+        client.hello(job, true);
+        item.status = SendEntry.STATUS_SENDING;
+        item.idleReason = SendEntry.IDLE_REASON_CREATED;
+        job.updateMillis = System.currentTimeMillis();
+        updateJob(job, item);
+        lastProgressNotifyMs = 0;
+        client.pullFile(job, item, this);
+    }
+
+    /**
+     * 提交一个"从 PC 拉取文件"的任务（复用发送队列/状态机/任务记录，direction=拉取）。
+     * @return 新建的任务；enqueue 失败时返回 null。
+     */
+    @Nullable
+    public SendJob enqueuePull(String deviceId, String host, int port,
+                               String name, long size, String mime, String remotePath) {
+        if (deviceId == null || host == null || remotePath == null) return null;
+        SendEntry e = new SendEntry();
+        e.id = UUID.randomUUID().toString();
+        e.objectType = SendEntry.TYPE_FILE;
+        e.direction = SendEntry.DIRECTION_PULL;
+        e.name = name;
+        e.size = Math.max(0, size);
+        e.mime = mime != null ? mime : FileUtils.guessMimeType(name);
+        e.remotePath = remotePath;
+        e.timeMillis = System.currentTimeMillis();
+        e.status = SendEntry.STATUS_IDLE;
+        e.idleReason = SendEntry.IDLE_REASON_CREATED;
+        e.host = host;
+        e.port = port;
+        List<SendEntry> items = new ArrayList<>();
+        items.add(e);
+
+        SendJob job = new SendJob(UUID.randomUUID().toString(), deviceId, items, host, port);
+        job.pull = true;
+        jobStore.addJobEntry(e);
+        jobStore.upsertJob(job);
+        deviceStore.setLatestJobId(host, port, job.id);
+        enqueue(job);
+        return job;
+    }
+
     /**
      * 更新历史记录状态（发送成功后 / 取消 / 失败）。targetName 不覆盖，提交时已正确设置。
      */
@@ -588,6 +679,9 @@ public class TransferManager implements TransferProtocol.Progress {
         entry.status = SendEntry.STATUS_IDLE;
         entry.idleReason = SendEntry.IDLE_REASON_SUCCESS;
         updateJob(currentJob, entry);
+        if (entry.isPull() && entry.localPath != null) {
+            jobStore.updateLocalPath(entry.id, entry.localPath);
+        }
         SendJob job = currentJob;
         if (job != null) {
             mainHandler.post(() -> {

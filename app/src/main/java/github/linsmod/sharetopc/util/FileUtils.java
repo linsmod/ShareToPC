@@ -10,7 +10,9 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 /** 文件工具：流复制、inbox 目录、文件名清洗、MimeType 查询。 */
@@ -100,7 +102,54 @@ public final class FileUtils {
         }
     }
 
-    /** 依据扩展名猜测 MimeType。 */
+    /**
+     * 扩展名 → MIME 显式映射。系统 MimeTypeMap 对 OOXML（docx/xlsx/pptx 等）经常返回 null，
+     * 若回退到 application/octet-stream，打开时会被浏览器抢走。这里补全常用类型。
+     */
+    private static final Map<String, String> EXT_MIME = new HashMap<>();
+
+    static {
+        EXT_MIME.put("doc", "application/msword");
+        EXT_MIME.put("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+        EXT_MIME.put("xls", "application/vnd.ms-excel");
+        EXT_MIME.put("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        EXT_MIME.put("csv", "text/csv");
+        EXT_MIME.put("ppt", "application/vnd.ms-powerpoint");
+        EXT_MIME.put("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation");
+        EXT_MIME.put("pdf", "application/pdf");
+        EXT_MIME.put("txt", "text/plain");
+        EXT_MIME.put("md", "text/plain");
+        EXT_MIME.put("log", "text/plain");
+        EXT_MIME.put("json", "application/json");
+        EXT_MIME.put("xml", "text/xml");
+        EXT_MIME.put("html", "text/html");
+        EXT_MIME.put("htm", "text/html");
+        EXT_MIME.put("jpg", "image/jpeg");
+        EXT_MIME.put("jpeg", "image/jpeg");
+        EXT_MIME.put("png", "image/png");
+        EXT_MIME.put("gif", "image/gif");
+        EXT_MIME.put("bmp", "image/bmp");
+        EXT_MIME.put("webp", "image/webp");
+        EXT_MIME.put("svg", "image/svg+xml");
+        EXT_MIME.put("mp3", "audio/mpeg");
+        EXT_MIME.put("wav", "audio/wav");
+        EXT_MIME.put("flac", "audio/flac");
+        EXT_MIME.put("ogg", "audio/ogg");
+        EXT_MIME.put("m4a", "audio/mp4");
+        EXT_MIME.put("mp4", "video/mp4");
+        EXT_MIME.put("mkv", "video/x-matroska");
+        EXT_MIME.put("avi", "video/x-msvideo");
+        EXT_MIME.put("mov", "video/quicktime");
+        EXT_MIME.put("3gp", "video/3gpp");
+        EXT_MIME.put("zip", "application/zip");
+        EXT_MIME.put("rar", "application/vnd.rar");
+        EXT_MIME.put("7z", "application/x-7z-compressed");
+        EXT_MIME.put("tar", "application/x-tar");
+        EXT_MIME.put("gz", "application/gzip");
+        EXT_MIME.put("apk", "application/vnd.android.package-archive");
+    }
+
+    /** 依据扩展名猜测 MimeType（显式映射优先，其次系统 MimeTypeMap，兜底 octet-stream）。 */
     public static String guessMimeType(String fileName) {
         if (fileName == null) {
             return "application/octet-stream";
@@ -110,7 +159,11 @@ public final class FileUtils {
             return "application/octet-stream";
         }
         String ext = fileName.substring(dot + 1).toLowerCase(Locale.US);
-        String mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
+        String mime = EXT_MIME.get(ext);
+        if (mime != null) {
+            return mime;
+        }
+        mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
         return mime != null ? mime : "application/octet-stream";
     }
 
