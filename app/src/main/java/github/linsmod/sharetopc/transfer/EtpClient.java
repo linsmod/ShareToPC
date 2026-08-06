@@ -167,15 +167,21 @@ public class EtpClient implements Closeable {
     }
 
     /**
-     * 列出指定目录的直接子项（文件夹/文件），支持翻页。
-     * 与 {@link #query} 相同参数语义，仅搜索串固定为 {@code parent:"<path>"}。
+     * 列出指定目录的直接子项（文件夹/文件），支持翻页与过滤。
+     * 与 {@link #query} 相同参数语义，仅搜索串固定为 {@code parent:"<path>"}，
+     * filterSuffix 为追加到搜索串末尾的过滤词（如 {@code "folder:"} 只看目录、
+     * {@code "!folder:"} 只看文件），null/空表示不过滤。
      */
     public QueryResult queryChildren(String path, int columns,
                                      int matchCase, int matchPath, int matchRegex,
                                      int matchWholeWord,
                                      String sortName, boolean sortAscending,
-                                     int offset, int count) throws IOException {
-        return query(buildParentSearch(path), columns, matchCase, matchPath, matchRegex,
+                                     int offset, int count, String filterSuffix) throws IOException {
+        String search = buildParentSearch(path);
+        if (filterSuffix != null && !filterSuffix.isEmpty()) {
+            search += " " + filterSuffix;
+        }
+        return query(search, columns, matchCase, matchPath, matchRegex,
                 matchWholeWord, sortName, sortAscending, offset, count);
     }
 

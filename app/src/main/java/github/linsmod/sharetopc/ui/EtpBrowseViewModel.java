@@ -540,9 +540,9 @@ public class EtpBrowseViewModel extends ViewModel {
                 if (!c.isLoggedIn()) c.login("anonymous", "");
                 if (!c.isLoggedIn()) throw new IOException("登录失败，请检查 ETP 服务是否开启");
                 EtpClient.QueryResult folders = c.queryChildren(path, COLUMNS,
-                        0, 0, 0, 0, "name", true, 0, PAGE_SIZE);
+                        0, 0, 0, 0, "name", true, 0, PAGE_SIZE, "folder:");
                 EtpClient.QueryResult files = c.queryChildren(path, COLUMNS,
-                        0, 0, 0, 0, "name", true, 0, PAGE_SIZE);
+                        0, 0, 0, 0, "name", true, 0, PAGE_SIZE, "!folder:");
                 mainHandler.post(() -> onFolderLoaded(token, path, folders, files, c));
             } catch (IOException e) {
                 mainHandler.post(() -> onFolderFailed(token, c, e));
@@ -578,10 +578,10 @@ public class EtpBrowseViewModel extends ViewModel {
                 int folderOffset = cf.folders.size();
                 int fileOffset = cf.files.size();
                 EtpClient.QueryResult folders = folderOffset < cf.folderTotal
-                        ? c.queryChildren(path, COLUMNS, 0, 0, 0, 0, "name", true, folderOffset, PAGE_SIZE)
+                        ? c.queryChildren(path, COLUMNS, 0, 0, 0, 0, "name", true, folderOffset, PAGE_SIZE, "folder:")
                         : null;
                 EtpClient.QueryResult files = fileOffset < cf.fileTotal
-                        ? c.queryChildren(path, COLUMNS, 0, 0, 0, 0, "name", true, fileOffset, PAGE_SIZE)
+                        ? c.queryChildren(path, COLUMNS, 0, 0, 0, 0, "name", true, fileOffset, PAGE_SIZE, "!folder:")
                         : null;
                 mainHandler.post(() -> onMoreLoaded(token, path, cf, folders, files, c));
             } catch (IOException e) {
