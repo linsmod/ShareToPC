@@ -46,17 +46,46 @@ public final class EtpFileDialog {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
 
-        // 属性文本（可滚动、可选中复制）
+        // 路径行 + 复制按钮（放在文件路径后面）
+        LinearLayout pathRow = new LinearLayout(ctx);
+        pathRow.setOrientation(LinearLayout.HORIZONTAL);
+        pathRow.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        pathRow.setPadding(dp(ctx, 16), dp(ctx, 12), dp(ctx, 8), dp(ctx, 4));
+
+        TextView tvPath = new TextView(ctx);
+        tvPath.setText("路径：" + r.fullPath());
+        tvPath.setTextSize(14);
+        tvPath.setTextColor(getThemeColor(ctx, android.R.attr.textColorPrimary));
+        tvPath.setTextIsSelectable(true);
+        pathRow.addView(tvPath, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+
+        TextView btnCopyPath = new TextView(ctx);
+        btnCopyPath.setText(R.string.copy);
+        btnCopyPath.setTextSize(14);
+        btnCopyPath.setTextColor(getThemeColor(ctx, com.google.android.material.R.attr.colorPrimary));
+        btnCopyPath.setPadding(dp(ctx, 8), dp(ctx, 6), dp(ctx, 8), dp(ctx, 6));
+        btnCopyPath.setBackgroundResource(selectableItemBackground(ctx));
+        btnCopyPath.setClickable(true);
+        btnCopyPath.setFocusable(true);
+        btnCopyPath.setOnClickListener(v -> copyPath(ctx, r));
+        pathRow.addView(btnCopyPath);
+
+        root.addView(pathRow);
+        root.addView(divider(ctx));
+
+        // 其余属性文本（类型/大小/时间等），可滚动、可选中复制
         TextView tv = new TextView(ctx);
-        tv.setText(buildBody(ctx, r));
+        tv.setText(buildBodyTail(ctx, r));
         tv.setTextSize(14);
         tv.setTextColor(getThemeColor(ctx, android.R.attr.textColorPrimary));
-        tv.setPadding(dp(ctx, 16), dp(ctx, 12), dp(ctx, 16), dp(ctx, 8));
+        tv.setPadding(dp(ctx, 16), dp(ctx, 4), dp(ctx, 16), dp(ctx, 8));
         tv.setTextIsSelectable(true);
         ScrollView scroll = new ScrollView(ctx);
         scroll.addView(tv);
         root.addView(scroll, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, dp(ctx, 170)));
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
 
         final Dialog[] dialogRef = new Dialog[1];
 
@@ -74,16 +103,14 @@ public final class EtpFileDialog {
                 if (dialogRef[0] != null) dialogRef[0].dismiss();
                 enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_NONE);
             }));
-            root.addView(actionRow(ctx, R.string.etp_pull_stream, v -> {
-                if (dialogRef[0] != null) dialogRef[0].dismiss();
-                streamingShare(ctx, r, deviceId, host, port);
-            }));
+            // 流式转发仅在大文件（>100MB）或大小未知时显示
+            if (r.size < 0 || r.size > 100L * 1024 * 1024) {
+                root.addView(actionRow(ctx, R.string.etp_pull_stream, v -> {
+                    if (dialogRef[0] != null) dialogRef[0].dismiss();
+                    streamingShare(ctx, r, deviceId, host, port);
+                }));
+            }
         }
-        root.addView(divider(ctx));
-        root.addView(actionRow(ctx, "复制路径", v -> {
-            if (dialogRef[0] != null) dialogRef[0].dismiss();
-            copyPath(ctx, r);
-        }));
 
         Dialog dialog = new MaterialAlertDialogBuilder(ctx)
                 .setTitle(r.name)
@@ -94,9 +121,8 @@ public final class EtpFileDialog {
         dialog.show();
     }
 
-    private static String buildBody(Context ctx, EtpClient.EtpSearchResult r) {
+    private static String buildBodyTail(Context ctx, EtpClient.EtpSearchResult r) {
         StringBuilder body = new StringBuilder();
-        body.append("路径：").append(r.fullPath()).append("\n\n");
         body.append("类型：").append(r.isFolder ? "文件夹" : "文件").append("\n\n");
 
         if (r.size >= 0) {
