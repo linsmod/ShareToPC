@@ -208,16 +208,17 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         TaskGroup g = di.group;
         vh.item.bind(r);
 
-        // 重试按钮 → 弹出菜单
+        // 可重试的条目：点击弹出菜单
         boolean canRetry = r.status == SendEntry.STATUS_IDLE
                 && r.idleReason != SendEntry.IDLE_REASON_SUCCESS
                 && r.pendingAction == 0
                 && TransferStatusHelper.canResumeOrRetry(r, pfdChecker);
         if (canRetry && actionListener != null) {
-            vh.item.setOnRetryClickListener(() ->
-                    actionListener.onEntryMenuRequested(r, g, vh.item));
+            vh.itemView.setOnClickListener(v ->
+                    actionListener.onEntryMenuRequested(r, g, vh.itemView));
         } else {
-            vh.item.setOnRetryClickListener(null);
+            vh.itemView.setOnClickListener(null);
+            vh.itemView.setClickable(false);
         }
 
         // 已完成的下载任务：长按可打开/转发本机缓存文件

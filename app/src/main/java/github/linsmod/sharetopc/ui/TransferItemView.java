@@ -74,12 +74,6 @@ public class TransferItemView extends LinearLayout {
                 && record.idleReason != SendEntry.IDLE_REASON_CREATED
                 && record.idleReason != SendEntry.IDLE_REASON_OUTDATE;
 
-        // 失败/暂停时显示重试按钮
-        data.showRetryButton = record.status == SendEntry.STATUS_IDLE
-                && record.idleReason != SendEntry.IDLE_REASON_SUCCESS
-                && record.pendingAction == 0
-                && TransferStatusHelper.canResumeOrRetry(record, null);
-
         return data;
     }
 
@@ -105,8 +99,6 @@ public class TransferItemView extends LinearLayout {
         public boolean showErrorDot = false;
         /** 过期显示灰色圆点。 */
         public boolean showOutdateDot = false;
-        /** 显示重试按钮（失败/暂停时可重试）。 */
-        public boolean showRetryButton = false;
     }
 
     private final View vStatus;
@@ -118,7 +110,6 @@ public class TransferItemView extends LinearLayout {
     private final TextView tvCheckMark;
     private final View vErrorDot;
     private final View vOutdateDot;
-    private final android.widget.Button btnRetry;
 
     public TransferItemView(Context context) {
         this(context, null);
@@ -147,24 +138,12 @@ public class TransferItemView extends LinearLayout {
         tvCheckMark = findViewById(R.id.tvCheckMark);
         vErrorDot = findViewById(R.id.vErrorDot);
         vOutdateDot = findViewById(R.id.vOutdateDot);
-        btnRetry = findViewById(R.id.btnRetry);
     }
 
     // ── 数据设置 ──────────────────────────────────
 
     public void setName(String name) {
         tvName.setText(name);
-    }
-
-    /** 设置重试按钮点击监听器。 */
-    public void setOnRetryClickListener(@Nullable Runnable listener) {
-        if (listener != null) {
-            btnRetry.setVisibility(VISIBLE);
-            btnRetry.setOnClickListener(v -> listener.run());
-        } else {
-            btnRetry.setOnClickListener(null);
-            btnRetry.setVisibility(GONE);
-        }
     }
 
     /** 设置名称透明度（如文件已删除则灰化）。 */
@@ -239,7 +218,6 @@ public class TransferItemView extends LinearLayout {
         }
         tvCheckMark.setVisibility(data.showCheckMark ? VISIBLE : GONE);
         vErrorDot.setVisibility(data.showErrorDot ? VISIBLE : GONE);
-        btnRetry.setVisibility(data.showRetryButton ? VISIBLE : GONE);
         // disabled in this version.
 //        vOutdateDot.setVisibility(data.showOutdateDot ? VISIBLE : GONE);
     }
