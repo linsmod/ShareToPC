@@ -169,7 +169,7 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             String label = g.deviceName != null && !g.deviceName.isEmpty()
                     ? g.deviceName : g.deviceAddress();
             if (label != null && !label.isEmpty()) {
-                vh.tvTime.setText(label);
+                vh.tvTime.setText("To " + label);
                 vh.tvTime.setVisibility(View.VISIBLE);
             } else {
                 vh.tvTime.setVisibility(View.GONE);
