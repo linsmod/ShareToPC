@@ -443,7 +443,7 @@ namespace ShareToPcReciver
             AuthInfo req = result.authJobInfo;
             this.Invoke(new Action(() =>
             {
-                var dr = AuthDialog.ShowDialog(req, cancellation);
+                var dr = AuthDialog.ShowDialog(this, req, cancellation);
 
                 if (dr.IsBlocked)
                 {

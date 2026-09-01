@@ -74,7 +74,7 @@ namespace ShareToPcReciver
             this.ResumeLayout(false);
         }
 
-        public static AuthResult ShowDialog(AuthInfo req, CancellationToken cancellation)
+        public static AuthResult ShowDialog(IWin32Window owner, AuthInfo req, CancellationToken cancellation)
         {
             using var dlg = new AuthDialog();
             dlg._cancellation = cancellation;
@@ -100,7 +100,7 @@ namespace ShareToPcReciver
             dlg.countdownTimer.Start();
             dlg.Disposed += (s, ev) => { dlg.countdownTimer.Stop(); dlg.countdownTimer.Dispose(); };
 
-            var dr = dlg.ShowDialog();
+            var dr = dlg.ShowDialog(owner);
             dlg.countdownTimer.Stop();
 
             switch (dr)
