@@ -9,11 +9,13 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32;
 using static ShareToPcReciver.Net.TransferServer;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
 
@@ -33,6 +35,11 @@ namespace ShareToPcReciver
         private string _lastFilePath;
         private ListViewItem _activeRow;
         private const int ProgressColumnIndex = 6;
+
+        /// <summary>网络/IP 变化去抖定时器（WinForms 定时器，Tick 在 UI 线程触发）。</summary>
+        private System.Windows.Forms.Timer _netChangeTimer;
+        private bool _netChangePending;
+        private string _advertisedIp;
 
         public MainForm()
         {
@@ -71,6 +78,13 @@ namespace ShareToPcReciver
 
             UpdateStatus("服务未运行", Color.DarkRed);
             UpdateIpLabel();
+
+            _advertisedIp = GetLocalIpAddress();
+            _netChangeTimer = new System.Windows.Forms.Timer { Interval = 1500 };
+            _netChangeTimer.Tick += (s, ev) => HandleNetworkChanged();
+            // 睡眠恢复 / IP 变化时刷新 mDNS 广播与 IP 显示，不动已绑定的 TCP 监听
+            NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
         }
 
         private void MainForm_Load(object sender, EventArgs e)
@@ -161,6 +175,55 @@ namespace ShareToPcReciver
             if (!string.IsNullOrWhiteSpace(_config.ListenIp) && IPAddress.TryParse(_config.ListenIp, out var pinned))
                 return pinned.ToString();
             return LocalNetwork.GetPrimaryIp();
+        }
+
+        private void OnNetworkAddressChanged(object sender, EventArgs e)
+        {
+            ScheduleNetworkRefresh();
+        }
+
+        private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e)
+        {
+            if (e.Mode == PowerModes.Resume)
+                ScheduleNetworkRefresh();
+        }
+
+        /// <summary>IP/网络变化事件可能一次触发多次，先合并去抖（1.5s）再在 UI 线程统一处理。</summary>
+        private void ScheduleNetworkRefresh()
+        {
+            if (_netChangePending || _netChangeTimer == null) return;
+            _netChangePending = true;
+            if (IsDisposed || !IsHandleCreated) { _netChangePending = false; return; }
+            try
+            {
+                BeginInvoke(new Action(() => _netChangeTimer.Start()));
+            }
+            catch
+            {
+                _netChangePending = false;
+            }
+        }
+
+        /// <summary>睡眠恢复 / IP 变化后：重启 mDNS 广播使手机端发现新 IP，并刷新 IP 显示。TCP 监听绑定不变更。</summary>
+        private void HandleNetworkChanged()
+        {
+            _netChangeTimer.Stop();
+            _netChangePending = false;
+            try
+            {
+                string ip = GetLocalIpAddress();
+                bool ipChanged = !string.Equals(ip, _advertisedIp, StringComparison.Ordinal);
+                _advertisedIp = ip;
+
+                _advertiser.Stop();
+                _advertiser.Start(_config.Port, _config.DeviceId);
+                UpdateIpLabel();
+                Log.Info($"Network changed, re-advertised mDNS (IP={ip}, addressChanged={ipChanged})");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Failed to refresh mDNS after network change", ex);
+            }
         }
 
         private void BtnCopyIp_Click(object sender, EventArgs e)
@@ -297,6 +360,17 @@ namespace ShareToPcReciver
         {
             try
             {
+                // 取消网络变化监听，避免退出后仍有回调
+                NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
+                SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                if (_netChangeTimer != null)
+                {
+                    _netChangeTimer.Stop();
+                    _netChangeTimer.Dispose();
+                    _netChangeTimer = null;
+                }
+                _netChangePending = false;
+
                 // 1. 先停 mDNS 广播，Android 端更快感知
                 _advertiser.Stop();
 
