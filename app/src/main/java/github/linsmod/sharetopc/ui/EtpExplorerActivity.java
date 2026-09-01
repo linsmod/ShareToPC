@@ -10,8 +10,11 @@ import android.text.TextUtils;
 import android.text.format.DateUtils;
 import android.text.style.ImageSpan;
 import android.util.TypedValue;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -77,8 +80,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private MaterialButton btnModeCommon, btnModeBrowse;
     private android.widget.HorizontalScrollView layoutBreadcrumb;
     private LinearLayout llBreadcrumb;
-    private View layoutBrowseQuick;
-    private ChipGroup cgBrowseQuick;
+    private com.google.android.material.button.MaterialButton btnQuickLocations;
 
     private String deviceName;
     private String deviceHost;
@@ -224,8 +226,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         // 浏览模式：面包屑 + 目录列表适配器
         layoutBreadcrumb = findViewById(R.id.layoutBreadcrumb);
         llBreadcrumb = findViewById(R.id.llBreadcrumb);
-        layoutBrowseQuick = findViewById(R.id.layoutBrowseQuick);
-        cgBrowseQuick = findViewById(R.id.cgBrowseQuick);
+        btnQuickLocations = findViewById(R.id.btnQuickLocations);
         browseAdapter = new EtpResultAdapter(this::onBrowseItemClick, false /* showPathInfo */);
         browseAdapter.setItemLongClickListener(item -> {
             showFilePropertiesDialog(item);
@@ -394,7 +395,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         btnModeCommon.setChecked(true);
         modeSwitchGuard = false;
         layoutBreadcrumb.setVisibility(View.GONE);
-        layoutBrowseQuick.setVisibility(View.GONE);
+        btnQuickLocations.setVisibility(View.GONE);
         pbBrowseLoading.setVisibility(View.GONE);
         rvExplorer.setAdapter(adapter);
         if (cacheState != null) {
@@ -425,7 +426,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private void renderBrowseState(EtpBrowseViewModel.State s) {
         if (!browseMode || s == null) return;
         buildBreadcrumb();
-        layoutBrowseQuick.setVisibility(View.GONE);
+        btnQuickLocations.setVisibility(View.GONE);
         pbBrowseLoading.setVisibility(View.GONE);
         if (s instanceof EtpBrowseViewModel.Root) {
             renderBrowseRoot((EtpBrowseViewModel.Root) s);
@@ -527,22 +528,29 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         }
     }
 
-    /** 渲染根视图常用位置 chips：点击直接进入对应目录。 */
+    /** 渲染根视图常用位置按钮：点击弹出位置列表菜单。 */
     private void buildQuickChips(List<EtpBrowseViewModel.QuickLocation> locations) {
-        cgBrowseQuick.removeAllViews();
         if (locations == null || locations.isEmpty()) {
-            layoutBrowseQuick.setVisibility(View.GONE);
+            btnQuickLocations.setVisibility(View.GONE);
             return;
         }
-        layoutBrowseQuick.setVisibility(View.VISIBLE);
-        for (EtpBrowseViewModel.QuickLocation loc : locations) {
-            Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
-            chip.setText(loc.label);
-            chip.setCheckable(false);
-            chip.setClickable(true);
-            chip.setOnClickListener(v -> browseViewModel.openFolder(loc.path));
-            cgBrowseQuick.addView(chip);
-        }
+        btnQuickLocations.setVisibility(View.VISIBLE);
+        btnQuickLocations.setOnClickListener(v -> {
+            PopupMenu popup = new PopupMenu(this, v);
+            for (int i = 0; i < locations.size(); i++) {
+                EtpBrowseViewModel.QuickLocation loc = locations.get(i);
+                popup.getMenu().add(Menu.NONE, i, i, loc.label);
+            }
+            popup.setOnMenuItemClickListener(item -> {
+                int idx = item.getItemId();
+                if (idx >= 0 && idx < locations.size()) {
+                    browseViewModel.openFolder(locations.get(idx).path);
+                    return true;
+                }
+                return false;
+            });
+            popup.show();
+        });
     }
 
     /**

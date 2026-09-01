@@ -72,21 +72,16 @@
         </HorizontalScrollView>
 
         <!-- 位置浏览：常用位置快捷入口（仅根视图显示） -->
-        <HorizontalScrollView
-            android:id="@+id/layoutBrowseQuick"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none"
-            android:visibility="gone">
-
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/cgBrowseQuick"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
-                android:paddingBottom="6dp"
-                app:singleLine="true" />
-        </HorizontalScrollView>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnQuickLocations"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginHorizontal="12dp"
+            android:text="@string/path_preset_common"
+            android:textAllCaps="false"
+            android:visibility="gone" />
 
         <!-- 缓存时间提示 -->
         <TextView
