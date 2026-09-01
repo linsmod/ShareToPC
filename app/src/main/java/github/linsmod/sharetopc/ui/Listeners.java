@@ -13,6 +13,8 @@ public final class Listeners {
         void onGroupMenuRequested(TaskGroup group, View anchor, float touchX);
         /** 已完成的下载条目长按 → 弹出打开/转发菜单 */
         default void onPullEntryMenuRequested(SendEntry entry, View anchor) {}
+        /** 单个条目点击重试按钮 */
+        default void onEntryRetryRequested(SendEntry entry, TaskGroup group) {}
         /** 暂停整个分组 */
         default void onGroupPauseRequested(TaskGroup group) {}
         /** 继续整个分组 */

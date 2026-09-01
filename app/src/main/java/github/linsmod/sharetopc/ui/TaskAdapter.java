@@ -205,7 +205,21 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
     private void bindEntry(EntryVH vh, DisplayItem di) {
         SendEntry r = di.entry;
+        TaskGroup g = di.group;
         vh.item.bind(r);
+
+        // 重试按钮
+        boolean canRetry = r.status == SendEntry.STATUS_IDLE
+                && r.idleReason != SendEntry.IDLE_REASON_SUCCESS
+                && r.pendingAction == 0
+                && TransferStatusHelper.canResumeOrRetry(r, pfdChecker);
+        if (canRetry && actionListener != null) {
+            vh.item.setOnRetryClickListener(() ->
+                    actionListener.onEntryRetryRequested(r, g));
+        } else {
+            vh.item.setOnRetryClickListener(null);
+        }
+
         // 已完成的下载任务：长按可打开/转发本机缓存文件
         vh.itemView.setOnLongClickListener(v -> {
             if (r.isPull() && r.isSuccess() && r.localPath != null

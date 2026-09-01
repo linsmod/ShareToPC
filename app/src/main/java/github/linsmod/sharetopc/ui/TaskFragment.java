@@ -116,6 +116,14 @@ public class TaskFragment extends Fragment {
             public void onPullEntryMenuRequested(SendEntry entry, View anchor) {
                 showPullEntryMenu(entry, anchor);
             }
+
+            @Override
+            public void onEntryRetryRequested(SendEntry entry, TaskGroup group) {
+                if (entry != null && group != null) {
+                    viewModel.resumeGroup(group);
+                    Toast.makeText(requireContext(), "正在重试传输", Toast.LENGTH_SHORT).show();
+                }
+            }
         }, transferId -> viewModel.hasPfd(transferId));
         rvTask.setAdapter(taskAdapter);
 
