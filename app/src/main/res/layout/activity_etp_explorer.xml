@@ -187,24 +187,6 @@
             </HorizontalScrollView>
         </LinearLayout>
 
-        <!-- 分类入口 chips -->
-        <HorizontalScrollView
-            android:id="@+id/layoutCategories"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:scrollbars="none"
-            android:visibility="gone">
-
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/cgCategories"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:paddingHorizontal="12dp"
-                android:paddingTop="2dp"
-                android:paddingBottom="6dp"
-                app:singleLine="true" />
-        </HorizontalScrollView>
-
         <!-- 主体区域：列表 + 加载/错误/空 覆盖层 -->
         <FrameLayout
             android:layout_width="match_parent"
@@ -334,5 +316,18 @@
         android:visibility="gone"
         app:fabCustomSize="48dp"
         app:srcCompat="@android:drawable/ic_menu_recent_history" />
+
+    <!-- 分类筛选浮动按钮 -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabCategories"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="80dp"
+        android:contentDescription="分类筛选"
+        android:visibility="gone"
+        app:fabSize="mini"
+        app:srcCompat="@android:drawable/ic_menu_sort_by_size" />
 
 </FrameLayout>

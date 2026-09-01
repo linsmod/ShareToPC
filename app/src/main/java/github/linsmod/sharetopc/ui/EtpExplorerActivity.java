@@ -81,6 +81,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private android.widget.HorizontalScrollView layoutBreadcrumb;
     private LinearLayout llBreadcrumb;
     private com.google.android.material.floatingactionbutton.FloatingActionButton fabQuickLocations;
+    private com.google.android.material.floatingactionbutton.FloatingActionButton fabCategories;
 
     private String deviceName;
     private String deviceHost;
@@ -88,8 +89,6 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private int devicePort;
 
     // 分类入口
-    private View layoutCategories;
-    private ChipGroup cgCategories;
     private TextView tvCacheInfo;
 
     // 本地筛选/排序（数据源为缓存，全部在内存中完成）
@@ -196,9 +195,8 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
             return false;
         });
 
-        layoutCategories = findViewById(R.id.layoutCategories);
-        cgCategories = findViewById(R.id.cgCategories);
         tvCacheInfo = findViewById(R.id.tvCacheInfo);
+        fabCategories = findViewById(R.id.fabCategories);
 
         tilExplorerSearch = findViewById(R.id.tilExplorerSearch);
         etExplorerSearch = findViewById(R.id.etExplorerSearch);
@@ -304,7 +302,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         rvExplorer.setVisibility(View.GONE);
         layoutError.setVisibility(View.GONE);
         layoutEmpty.setVisibility(View.GONE);
-        layoutCategories.setVisibility(View.GONE);
+        fabCategories.setVisibility(View.GONE);
         tvCacheInfo.setVisibility(View.GONE);
         tilExplorerSearch.setVisibility(View.GONE);
         layoutExplorerSort.setVisibility(View.GONE);
@@ -335,7 +333,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         if (fullCategories.isEmpty()) {
             // 全部分类无结果 → 空界面
             rvExplorer.setVisibility(View.GONE);
-            layoutCategories.setVisibility(View.GONE);
+            fabCategories.setVisibility(View.GONE);
             tvCacheInfo.setVisibility(View.GONE);
             tilExplorerSearch.setVisibility(View.GONE);
             layoutExplorerSort.setVisibility(View.GONE);
@@ -360,7 +358,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         rvExplorer.setVisibility(View.GONE);
         layoutLoading.setVisibility(View.GONE);
         layoutEmpty.setVisibility(View.GONE);
-        layoutCategories.setVisibility(View.GONE);
+        fabCategories.setVisibility(View.GONE);
         tvCacheInfo.setVisibility(View.GONE);
         tilExplorerSearch.setVisibility(View.GONE);
         layoutExplorerSort.setVisibility(View.GONE);
@@ -407,7 +405,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         modeSwitchGuard = true;
         btnModeBrowse.setChecked(true);
         modeSwitchGuard = false;
-        layoutCategories.setVisibility(View.GONE);
+        fabCategories.setVisibility(View.GONE);
         tvCacheInfo.setVisibility(View.GONE);
         tilExplorerSearch.setVisibility(View.GONE);
         layoutExplorerSort.setVisibility(View.GONE);
@@ -629,7 +627,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
                         searchQuery, currentSort, sortAsc);
 
         if (chipView.isEmpty()) {
-            layoutCategories.setVisibility(View.GONE);
+            fabCategories.setVisibility(View.GONE);
         } else {
             buildCategoryChips(chipView);
         }
@@ -647,22 +645,40 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         rvExplorer.setVisibility(View.VISIBLE);
     }
 
-    /** 渲染分类筛选 chips（可多选）：勾选后仅显示选中分类，全部不勾选时显示全部。 */
+    /** 渲染分类筛选浮动按钮：点击弹出多选菜单。 */
     private void buildCategoryChips(List<EtpExplorerViewModel.CategoryResult> categories) {
-        cgCategories.removeAllViews();
-        layoutCategories.setVisibility(View.VISIBLE);
-        for (EtpExplorerViewModel.CategoryResult c : categories) {
-            Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
-            chip.setText(c.label + " " + c.items.size());
-            chip.setCheckable(true);
-            chip.setChecked(selectedCategories.contains(c.label));
-            chip.setOnCheckedChangeListener((button, isChecked) -> {
-                if (isChecked) selectedCategories.add(c.label);
-                else selectedCategories.remove(c.label);
+        fabCategories.setVisibility(View.VISIBLE);
+        fabCategories.setOnClickListener(v -> {
+            PopupMenu popup = new PopupMenu(this, v);
+            for (int i = 0; i < categories.size(); i++) {
+                EtpExplorerViewModel.CategoryResult c = categories.get(i);
+                MenuItem item = popup.getMenu().add(Menu.NONE, i, i, c.label + " (" + c.items.size() + ")");
+                item.setCheckable(true);
+                item.setChecked(selectedCategories.contains(c.label));
+            }
+            // 添加"全部"选项
+            MenuItem allItem = popup.getMenu().add(Menu.NONE, -1, categories.size(), "全部");
+            allItem.setCheckable(true);
+            allItem.setChecked(selectedCategories.isEmpty());
+
+            popup.setOnMenuItemClickListener(item -> {
+                int idx = item.getItemId();
+                if (idx == -1) {
+                    // 全部
+                    selectedCategories.clear();
+                } else if (idx >= 0 && idx < categories.size()) {
+                    String label = categories.get(idx).label;
+                    if (selectedCategories.contains(label)) {
+                        selectedCategories.remove(label);
+                    } else {
+                        selectedCategories.add(label);
+                    }
+                }
                 rebuildView();
+                return true;
             });
-            cgCategories.addView(chip);
-        }
+            popup.show();
+        });
     }
 
     // ---- 排序（参考搜索页：点击排序字段，单选中，再点切换升降序） ----
