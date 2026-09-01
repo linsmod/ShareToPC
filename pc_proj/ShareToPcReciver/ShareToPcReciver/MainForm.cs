@@ -37,6 +37,10 @@ namespace ShareToPcReciver
         private ListViewItem _activeRow;
         private const int ProgressColumnIndex = 6;
         private System.Windows.Forms.Timer _searchDebounceTimer;
+        private readonly Dictionary<string, int> _jobIdIndexMap = new Dictionary<string, int>();
+        private int _nextJobIdIndex = 0;
+        private static readonly Color EvenRowColor = Color.White;
+        private static readonly Color OddRowColor = Color.FromArgb(240, 240, 245);
 
         /// <summary>网络/IP 变化去抖定时器（WinForms 定时器，Tick 在 UI 线程触发）。</summary>
         private System.Windows.Forms.Timer _netChangeTimer;
@@ -831,6 +835,9 @@ namespace ShareToPcReciver
             // 记住传输中的行，重建后按 TransferId 恢复引用
             string activeTid = (_activeRow?.Tag as FileProgressInfo)?.TransferId;
 
+            _jobIdIndexMap.Clear();
+            _nextJobIdIndex = 0;
+
             lvHistory.BeginUpdate();
             try
             {
@@ -874,7 +881,7 @@ namespace ShareToPcReciver
         private void BtnSearchWord_Click(object sender, EventArgs e) => ToggleSearchOption(btnSearchWord);
         private void BtnSearchRegex_Click(object sender, EventArgs e) => ToggleSearchOption(btnSearchRegex);
 
-        /// <summary>VSCode 风格选项按钮：切换开关状态并高亮。搜索框为空时无需刷新列表，仅更新边框。</summary>
+        /// <summary>VSCode 风格选项按钮：切换开关状态并高亮。</summary>
         private void ToggleSearchOption(Button btn)
         {
             bool on = !ToggleOn(btn);
@@ -884,8 +891,6 @@ namespace ShareToPcReciver
             _searchDebounceTimer.Stop();
             if (txtSearch.Text.Trim().Length > 0)
                 ApplySearchFilter();
-            else
-                UpdateSearchBorder();
         }
 
         private static bool ToggleOn(Button btn)
@@ -970,6 +975,7 @@ namespace ShareToPcReciver
                 item.SubItems.Add("");
                 item.Tag = tag;
                 item.Group = GetOrCreateGroup(tag, text.DeviceName);
+                ApplyOddStyle(item, tag);
                 return item;
             }
             if (tag is ReceivedFile file)
@@ -987,6 +993,7 @@ namespace ShareToPcReciver
                 item.SubItems.Add("");
                 item.Tag = tag;
                 item.Group = GetOrCreateGroup(tag, file.DeviceName);
+                ApplyOddStyle(item, tag);
                 return item;
             }
             if (tag is FileProgressInfo pi)
@@ -1000,6 +1007,7 @@ namespace ShareToPcReciver
                 item.SubItems.Add("");
                 item.Tag = tag;
                 item.Group = GetOrCreateGroup(tag, pi.DeviceName);
+                ApplyOddStyle(item, tag);
                 return item;
             }
             return null;
@@ -1007,73 +1015,79 @@ namespace ShareToPcReciver
 
         private void LvHistory_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
         {
-            if (e.ColumnIndex != ProgressColumnIndex)
-            {
-                e.DrawDefault = true;
-                return;
-            }
+            bool selected = e.Item.Selected;
+            Color bgColor = selected ? SystemColors.Highlight : e.Item.BackColor;
+            Color fgColor = selected ? SystemColors.HighlightText : SystemColors.ControlText;
 
-            // 传输中：FileProgressInfo（实时进度条）
-            if (e.Item.Tag is FileProgressInfo p)
-            {
-                string label = $"{p.Percent}%";
-                Color clr = SystemColors.ControlText;
-                DrawProgressCell(e, p.Percent, label, clr);
-                return;
-            }
+            using (var bgBrush = new SolidBrush(bgColor))
+                e.Graphics.FillRectangle(bgBrush, e.Bounds);
 
-            // 重启后加载的历史记录：ReceivedFile
-            if (e.Item.Tag is ReceivedFile rf)
+            // 进度列：自绘进度条
+            if (e.ColumnIndex == ProgressColumnIndex)
             {
-                if (rf.Status == "cancelled")
+                if (e.Item.Tag is FileProgressInfo p)
                 {
-                    int pct = rf.TotalBytes > 0 ? (int)(rf.ReceivedBytes * 100 / rf.TotalBytes) : 0;
-                    Color clr =  Color.Gray;
-                    string label = $"{pct}%";
-                    DrawProgressCell(e, pct, label, clr);
+                    DrawProgressCell(e, p.Percent, $"{p.Percent}%", fgColor);
+                    return;
                 }
-                else
+                if (e.Item.Tag is ReceivedFile rf)
                 {
-                    bool sel = e.Item.Selected;
-                    var bg = sel ? SystemColors.Highlight : e.Item.BackColor;
-                    using (var bgBrush = new SolidBrush(bg))
-                        e.Graphics.FillRectangle(bgBrush, e.Bounds);
-                    var fg = sel ? SystemColors.HighlightText : Color.Green;
-                    TextRenderer.DrawText(e.Graphics, "完成", lvHistory.Font, e.Bounds, fg,
-                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                    if (rf.Status == "cancelled")
+                    {
+                        int pct = rf.TotalBytes > 0 ? (int)(rf.ReceivedBytes * 100 / rf.TotalBytes) : 0;
+                        DrawProgressCell(e, pct, $"{pct}%", Color.Gray);
+                    }
+                    else
+                    {
+                        TextRenderer.DrawText(e.Graphics, "完成", lvHistory.Font, e.Bounds, selected ? SystemColors.HighlightText : Color.Green,
+                            TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
+                    }
+                    return;
                 }
-                return;
             }
 
-            e.DrawDefault = true;
+            // 普通列：绘制文字
+            var padding = new Padding(4, 0, 4, 0);
+            var textRect = new Rectangle(e.Bounds.X + padding.Left, e.Bounds.Y,
+                e.Bounds.Width - padding.Left - padding.Right, e.Bounds.Height);
+            TextRenderer.DrawText(e.Graphics, e.SubItem.Text, lvHistory.Font, textRect, fgColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+            // 名称列：已完成但文件已删除的记录画红色删除线
+            if (e.ColumnIndex == 2 && e.Item.Tag is ReceivedFile file)
+            {
+                bool deleted = file.Status == "success"
+                    && (string.IsNullOrEmpty(file.FilePath) || !File.Exists(file.FilePath));
+                if (deleted)
+                {
+                    int y = e.Bounds.Top + e.Bounds.Height / 2;
+                    using (var pen = new Pen(Color.Red, 1))
+                        e.Graphics.DrawLine(pen, textRect.Left, y, textRect.Right, y);
+                }
+            }
         }
 
         private void DrawProgressCell(DrawListViewSubItemEventArgs e, int percent,
                                        string label, Color textColor)
         {
             bool selected = e.Item.Selected;
+            var cell = e.Bounds;
 
-            // 显式绘制背景（选中/未选中），避免 e.DrawBackground 不可靠
-            Color bgColor = selected ? SystemColors.Highlight : e.Item.BackColor;
-            using (var bgBrush = new SolidBrush(bgColor))
-                e.Graphics.FillRectangle(bgBrush, e.Bounds);
+            var barRect = new Rectangle(cell.X + 3, cell.Y + 3,
+                Math.Max(0, cell.Width - 6), Math.Max(0, cell.Height - 6));
 
-            var rect = new Rectangle(e.Bounds.X + 3, e.Bounds.Y + 3,
-                Math.Max(0, e.Bounds.Width - 6), Math.Max(0, e.Bounds.Height - 6));
-
-            if (ProgressBarRenderer.IsSupported && !selected && rect.Width > 4 && rect.Height > 4)
+            if (ProgressBarRenderer.IsSupported && !selected && barRect.Width > 4 && barRect.Height > 4)
             {
-                ProgressBarRenderer.DrawHorizontalBar(e.Graphics, rect);
-                int fillWidth = (rect.Width - 2) * percent / 100;
+                ProgressBarRenderer.DrawHorizontalBar(e.Graphics, barRect);
+                int fillWidth = (barRect.Width - 2) * percent / 100;
                 if (fillWidth > 0)
                 {
-                    var fill = new Rectangle(rect.X + 1, rect.Y + 1, fillWidth, rect.Height - 2);
+                    var fill = new Rectangle(barRect.X + 1, barRect.Y + 1, fillWidth, barRect.Height - 2);
                     ProgressBarRenderer.DrawHorizontalChunks(e.Graphics, fill);
                 }
             }
-            else if (rect.Width > 4 && rect.Height > 4)
+            else if (barRect.Width > 4 && barRect.Height > 4)
             {
-                // 选中或 ProgressBarRenderer 不支持时，自绘进度条
                 Color trackColor = selected ? SystemColors.Highlight : SystemColors.ControlLight;
                 Color fillColor = selected ? SystemColors.HighlightText : Color.ForestGreen;
                 Color borderColor = selected ? SystemColors.HighlightText : SystemColors.ControlDark;
@@ -1081,22 +1095,22 @@ namespace ShareToPcReciver
                 using (var fillBrush = new SolidBrush(fillColor))
                 {
                     int fillWidth = selected
-                        ? (rect.Width - 2) * percent / 100
-                        : rect.Width * percent / 100;
+                        ? (barRect.Width - 2) * percent / 100
+                        : barRect.Width * percent / 100;
                     if (fillWidth > 0)
                         e.Graphics.FillRectangle(fillBrush,
-                            selected ? rect.X + 1 : rect.X,
-                            selected ? rect.Y + 1 : rect.Y,
+                            selected ? barRect.X + 1 : barRect.X,
+                            selected ? barRect.Y + 1 : barRect.Y,
                             fillWidth,
-                            selected ? rect.Height - 2 : rect.Height);
+                            selected ? barRect.Height - 2 : barRect.Height);
                 }
                 using (var pen = new Pen(borderColor))
-                    e.Graphics.DrawRectangle(pen, rect);
+                    e.Graphics.DrawRectangle(pen, barRect);
             }
 
             Color finalColor = selected ? SystemColors.HighlightText : textColor;
-            TextRenderer.DrawText(e.Graphics, label, lvHistory.Font, e.Bounds, finalColor,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(e.Graphics, label, lvHistory.Font, cell, finalColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
         }
 
         private static string FormatSize(long size)
@@ -1127,6 +1141,7 @@ namespace ShareToPcReciver
             item.SubItems.Add(""); // 进度列（自绘，文本留空）
             item.Tag = tag;
             item.Group = GetOrCreateGroup(tag, source);
+            ApplyOddStyle(item, tag);
             lvHistory.Items.Insert(0, item);
 
             while (lvHistory.Items.Count > 200)
@@ -1164,7 +1179,7 @@ namespace ShareToPcReciver
             return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }
 
-        /// <summary>按 jobId 分组，若无 jobId 则按设备名分组。活跃分组排在最前。</summary>
+        /// <summary>按天分组（今天/昨天/日期），不同 JOB ID 使用交替行底色。</summary>
         private ListViewGroup GetOrCreateGroup(object tag, string deviceName)
         {
             string jobId = null;
@@ -1172,12 +1187,31 @@ namespace ShareToPcReciver
             else if (tag is ReceivedFile rf) jobId = rf.JobId;
             else if (tag is FileProgressInfo pi) jobId = pi.JobId;
 
-            string key = !string.IsNullOrEmpty(jobId) ? "job:" + jobId : "dev:" + (deviceName ?? "(未知)");
-            string header = (deviceName ?? "(未知)") + " · " + FriendlyTime(GetTagTime(tag));
+            var time = GetTagTime(tag);
+            var date = DateTimeOffset.FromUnixTimeMilliseconds(time).LocalDateTime.Date;
+            var today = DateTime.Today;
+
+            string dateKey;
+            string header;
+            if (date == today)
+            {
+                dateKey = "day:today";
+                header = "今天";
+            }
+            else if (date == today.AddDays(-1))
+            {
+                dateKey = "day:yesterday";
+                header = "昨天";
+            }
+            else
+            {
+                dateKey = $"day:{date:yyyy-MM-dd}";
+                header = date.ToString("M月d日");
+            }
 
             foreach (ListViewGroup g in lvHistory.Groups)
             {
-                if (g.Name == key)
+                if (g.Name == dateKey)
                 {
                     if (lvHistory.Groups[0] != g)
                     {
@@ -1187,9 +1221,30 @@ namespace ShareToPcReciver
                     return g;
                 }
             }
-            var group = new ListViewGroup(key, header);
+            var group = new ListViewGroup(dateKey, header);
             lvHistory.Groups.Insert(0, group);
             return group;
+        }
+
+        /// <summary>为 ListViewItem 设置基于 JOB ID 的交替行底色。</summary>
+        private void ApplyOddStyle(ListViewItem item, object tag)
+        {
+            string jobId = null;
+            if (tag is ReceivedText rt) jobId = rt.JobId;
+            else if (tag is ReceivedFile rf) jobId = rf.JobId;
+            else if (tag is FileProgressInfo pi) jobId = pi.JobId;
+
+            if (string.IsNullOrEmpty(jobId))
+            {
+                item.BackColor = EvenRowColor;
+                return;
+            }
+            if (!_jobIdIndexMap.TryGetValue(jobId, out int idx))
+            {
+                idx = _nextJobIdIndex++;
+                _jobIdIndexMap[jobId] = idx;
+            }
+            item.BackColor = (idx % 2 == 0) ? EvenRowColor : OddRowColor;
         }
 
         /// <summary>按 TransferId 在列表中查找已有行，用于恢复取消的传输时复用</summary>
@@ -1374,7 +1429,12 @@ namespace ShareToPcReciver
             bool isCancelledTransfer = isActiveTransfer && ((FileProgressInfo)record).Cancelled;
             menuCancelTransfer.Visible = singleSelect && isActiveTransfer && !isCancelledTransfer;
             menuContinueTransfer.Visible = singleSelect && isCancelledTransfer;
-            menuSeparator1.Visible = !isActiveTransfer || isCancelledTransfer;
+
+            // 分割线：上方有可见项时才显示
+            bool hasActionAbove = menuOpenFile.Visible || menuOpenFolder.Visible
+                || menuCopyContent.Visible || menuViewDetail.Visible;
+            menuSeparator1.Visible = hasActionAbove && (menuCancelTransfer.Visible || menuContinueTransfer.Visible);
+            menuSeparator2.Visible = menuCancelTransfer.Visible || menuContinueTransfer.Visible;
 
             // 删除菜单始终可见
             int n = selected.Count;
@@ -1521,6 +1581,11 @@ namespace ShareToPcReciver
             UpdateStatus(doneMsg, Color.Black);
         }
 
+        private static readonly HashSet<string> ExecutableExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".bat", ".cmd", ".com", ".msi", ".scr", ".pif", ".vbs", ".js", ".ws", ".wsf", ".ps1"
+        };
+
         private void OpenReceivedFile(ReceivedFile file)
         {
             if (string.IsNullOrEmpty(file.FilePath) || !File.Exists(file.FilePath))
@@ -1531,6 +1596,12 @@ namespace ShareToPcReciver
             }
             try
             {
+                string ext = Path.GetExtension(file.FilePath);
+                if (!string.IsNullOrEmpty(ext) && ExecutableExtensions.Contains(ext))
+                {
+                    _storage.OpenFolder(file.FilePath);
+                    return;
+                }
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = file.FilePath,

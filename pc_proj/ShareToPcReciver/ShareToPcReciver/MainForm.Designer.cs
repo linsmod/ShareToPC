@@ -123,7 +123,7 @@ namespace ShareToPcReciver
             // columnHeader3
             // 
             this.columnHeader3.Text = "名称";
-            this.columnHeader3.Width = 200;
+            this.columnHeader3.Width = 400;
             // 
             // columnHeader6
             // 
@@ -157,18 +157,18 @@ namespace ShareToPcReciver
             // 
             // btnDevices
             // 
-            this.btnDevices.Location = new System.Drawing.Point(287, 12);
+            this.btnDevices.Location = new System.Drawing.Point(296, 12);
             this.btnDevices.Margin = new System.Windows.Forms.Padding(4);
             this.btnDevices.Name = "btnDevices";
-            this.btnDevices.Size = new System.Drawing.Size(100, 31);
+            this.btnDevices.Size = new System.Drawing.Size(117, 31);
             this.btnDevices.TabIndex = 3;
-            this.btnDevices.Text = "设备管理";
+            this.btnDevices.Text = "管理手机连接";
             this.btnDevices.UseVisualStyleBackColor = true;
             this.btnDevices.Click += new System.EventHandler(this.BtnDevices_Click);
             // 
             // btnSettings
             // 
-            this.btnSettings.Location = new System.Drawing.Point(187, 12);
+            this.btnSettings.Location = new System.Drawing.Point(186, 12);
             this.btnSettings.Margin = new System.Windows.Forms.Padding(4);
             this.btnSettings.Name = "btnSettings";
             this.btnSettings.Size = new System.Drawing.Size(100, 31);
