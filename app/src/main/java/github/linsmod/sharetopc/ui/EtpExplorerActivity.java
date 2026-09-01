@@ -80,7 +80,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private MaterialButton btnModeCommon, btnModeBrowse;
     private android.widget.HorizontalScrollView layoutBreadcrumb;
     private LinearLayout llBreadcrumb;
-    private com.google.android.material.button.MaterialButton btnQuickLocations;
+    private com.google.android.material.floatingactionbutton.FloatingActionButton fabQuickLocations;
 
     private String deviceName;
     private String deviceHost;
@@ -226,7 +226,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         // 浏览模式：面包屑 + 目录列表适配器
         layoutBreadcrumb = findViewById(R.id.layoutBreadcrumb);
         llBreadcrumb = findViewById(R.id.llBreadcrumb);
-        btnQuickLocations = findViewById(R.id.btnQuickLocations);
+        fabQuickLocations = findViewById(R.id.fabQuickLocations);
         browseAdapter = new EtpResultAdapter(this::onBrowseItemClick, false /* showPathInfo */);
         browseAdapter.setItemLongClickListener(item -> {
             showFilePropertiesDialog(item);
@@ -395,7 +395,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         btnModeCommon.setChecked(true);
         modeSwitchGuard = false;
         layoutBreadcrumb.setVisibility(View.GONE);
-        btnQuickLocations.setVisibility(View.GONE);
+        fabQuickLocations.setVisibility(View.GONE);
         pbBrowseLoading.setVisibility(View.GONE);
         rvExplorer.setAdapter(adapter);
         if (cacheState != null) {
@@ -426,7 +426,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private void renderBrowseState(EtpBrowseViewModel.State s) {
         if (!browseMode || s == null) return;
         buildBreadcrumb();
-        btnQuickLocations.setVisibility(View.GONE);
+        fabQuickLocations.setVisibility(View.GONE);
         pbBrowseLoading.setVisibility(View.GONE);
         if (s instanceof EtpBrowseViewModel.Root) {
             renderBrowseRoot((EtpBrowseViewModel.Root) s);
@@ -528,14 +528,14 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         }
     }
 
-    /** 渲染根视图常用位置按钮：点击弹出位置列表菜单。 */
+    /** 渲染根视图常用位置浮动按钮：点击弹出位置列表菜单。 */
     private void buildQuickChips(List<EtpBrowseViewModel.QuickLocation> locations) {
         if (locations == null || locations.isEmpty()) {
-            btnQuickLocations.setVisibility(View.GONE);
+            fabQuickLocations.setVisibility(View.GONE);
             return;
         }
-        btnQuickLocations.setVisibility(View.VISIBLE);
-        btnQuickLocations.setOnClickListener(v -> {
+        fabQuickLocations.setVisibility(View.VISIBLE);
+        fabQuickLocations.setOnClickListener(v -> {
             PopupMenu popup = new PopupMenu(this, v);
             for (int i = 0; i < locations.size(); i++) {
                 EtpBrowseViewModel.QuickLocation loc = locations.get(i);
