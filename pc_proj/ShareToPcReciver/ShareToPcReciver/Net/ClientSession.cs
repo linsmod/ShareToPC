@@ -340,13 +340,17 @@ namespace ShareToPcReciver.Net
 
             string filePath = _storage.SaveTextContent(text);
 
-            _server.OnTextReceived(new ReceivedText
+            _server.OnTextReceived(new ReceivedFile
             {
+                FileName = "文本",
                 DeviceName = clientDevice.DeviceName,
                 Text = text,
                 Time = time,
                 JobId = jobId,
-                FilePath = filePath
+                FilePath = filePath,
+                ObjectType = 1,
+                Size = text.Length,
+                Status = "success"
             });
             await Protocol.WriteAckAsync(stream, true, "", _ct);
         }

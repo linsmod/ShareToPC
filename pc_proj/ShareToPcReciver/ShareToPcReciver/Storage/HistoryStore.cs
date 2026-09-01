@@ -37,29 +37,35 @@ namespace ShareToPcReciver.Storage
             public long TotalBytes { get; set; }
             public long ReceivedBytes { get; set; }
             public string TransferId { get; set; }
+            public int ObjectType { get; set; }
         }
 
-        public List<object> Load()
+        public List<ReceivedFile> Load()
         {
             lock (_lock)
             {
                 try
                 {
                     if (!File.Exists(StorePath))
-                        return new List<object>();
+                        return new List<ReceivedFile>();
                     string json = File.ReadAllText(StorePath);
                     var entries = JsonSerializer.Deserialize<List<Entry>>(json) ?? new List<Entry>();
-                    var result = new List<object>(entries.Count);
+                    var result = new List<ReceivedFile>(entries.Count);
                     foreach (var e in entries)
                     {
                         if (e.Kind == "text")
                         {
-                            result.Add(new ReceivedText
+                            result.Add(new ReceivedFile
                             {
                                 DeviceName = e.DeviceName ?? "",
+                                FileName = "文本",
                                 Text = e.Text ?? "",
                                 Time = e.Time,
-                                JobId = e.JobId ?? ""
+                                JobId = e.JobId ?? "",
+                                FilePath = e.FilePath ?? "",
+                                Size = e.Text?.Length ?? 0,
+                                Status = "success",
+                                ObjectType = 1
                             });
                         }
                         else if (e.Kind == "file")
@@ -71,12 +77,12 @@ namespace ShareToPcReciver.Storage
                                 FilePath = e.FilePath ?? "",
                                 Size = e.Size,
                                 Time = e.Time,
-                                Progress = 100,
                                 Status = string.IsNullOrEmpty(e.Status) ? "success" : e.Status,
                                 TotalBytes = e.TotalBytes > 0 ? e.TotalBytes : e.Size,
                                 ReceivedBytes = e.ReceivedBytes,
                                 TransferId = e.TransferId ?? "",
-                                JobId = e.JobId ?? ""
+                                JobId = e.JobId ?? "",
+                                ObjectType = e.ObjectType != 0 ? e.ObjectType : 2
                             });
                         }
                     }
@@ -85,12 +91,12 @@ namespace ShareToPcReciver.Storage
                 catch (Exception ex)
                 {
                     Util.Log.Error("Failed to load history", ex);
-                    return new List<object>();
+                    return new List<ReceivedFile>();
                 }
             }
         }
 
-        public void Save(IEnumerable<object> history)
+        public void Save(IEnumerable<ReceivedFile> history)
         {
             lock (_lock)
             {
@@ -134,37 +140,32 @@ namespace ShareToPcReciver.Storage
             }
         }
 
-        private static Entry ToEntry(object item)
+        private static Entry ToEntry(ReceivedFile f)
         {
-            switch (item)
+            if (f.IsText)
+                return new Entry
+                {
+                    Kind = "text",
+                    DeviceName = f.DeviceName,
+                    Time = f.Time,
+                    JobId = f.JobId ?? "",
+                    Text = f.Text
+                };
+            return new Entry
             {
-                case ReceivedText t:
-                    return new Entry
-                    {
-                        Kind = "text",
-                        DeviceName = t.DeviceName,
-                        Time = t.Time,
-                        JobId = t.JobId ?? "",
-                        Text = t.Text
-                    };
-                case ReceivedFile f:
-                    return new Entry
-                    {
-                        Kind = "file",
-                        DeviceName = f.DeviceName,
-                        Time = f.Time,
-                        JobId = f.JobId ?? "",
-                        FileName = f.FileName,
-                        FilePath = f.FilePath,
-                        Size = f.Size,
-                        Status = f.Status,
-                        TotalBytes = f.TotalBytes,
-                        ReceivedBytes = f.ReceivedBytes,
-                        TransferId = f.TransferId
-                    };
-                default:
-                    return null;
-            }
+                Kind = "file",
+                DeviceName = f.DeviceName,
+                Time = f.Time,
+                JobId = f.JobId ?? "",
+                FileName = f.FileName,
+                FilePath = f.FilePath,
+                Size = f.Size,
+                Status = f.Status,
+                TotalBytes = f.TotalBytes,
+                ReceivedBytes = f.ReceivedBytes,
+                TransferId = f.TransferId,
+                ObjectType = f.ObjectType
+            };
         }
     }
 }

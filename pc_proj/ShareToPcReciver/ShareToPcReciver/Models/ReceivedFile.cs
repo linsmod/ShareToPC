@@ -10,14 +10,20 @@ namespace ShareToPcReciver.Models
         public string DeviceName { get; set; } = "";
         public long Time { get; set; }
         public int Progress { get; set; }
-        public string Status { get; set; } = "success";  // success | failed | cancelled
+        public string Status { get; set; } = "success";  // success | failed | cancelled | incomplete
         public long TotalBytes { get; set; }               // 文件总大小
         public long ReceivedBytes { get; set; }            // 已接收字节数（断点续传用）
         public string TransferId { get; set; } = "";       // 传输标识，用于定位 .part 文件
         public string JobId { get; set; } = "";            // Android 端发送批次标识
         public DateTime ReceivedAt => DateTimeOffset.FromUnixTimeMilliseconds(Time).LocalDateTime;
 
-        public int ObjectType { get; internal set; }
+        public int ObjectType { get; set; }                // 1=text, 2=file（改为 public set 以便外部构造）
+        public string Text { get; set; } = "";             // 文本内容（ObjectType=1 时使用）
+
+        public bool IsText => ObjectType == 1;
+        public bool IsTransferring => Status == "incomplete";
+
+        public int Percent => TotalBytes > 0 ? (int)(ReceivedBytes * 100 / TotalBytes) : 0;
     }
 
     public class FileProgressInfo

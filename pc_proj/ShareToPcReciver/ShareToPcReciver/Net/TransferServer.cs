@@ -29,7 +29,7 @@ namespace ShareToPcReciver.Net
         public AppConfig Config { get; }
 
         public event Action<ClientInfo> ClientConnected;
-        public event Action<ReceivedText> TextReceived;
+        public event Action<ReceivedFile> TextReceived;
         public event Action<ReceivedFile> FileReceived;
         public event Action<FileProgressInfo> FileProgressChanged;
         /// <summary>设备授权请求事件。MainForm 订阅后弹出对话框，完成时调用 callback。</summary>
@@ -243,7 +243,7 @@ namespace ShareToPcReciver.Net
             ClientConnected?.Invoke(info);
         }
 
-        public void OnTextReceived(ReceivedText msg)
+        public void OnTextReceived(ReceivedFile msg)
         {
             TextReceived?.Invoke(msg);
         }

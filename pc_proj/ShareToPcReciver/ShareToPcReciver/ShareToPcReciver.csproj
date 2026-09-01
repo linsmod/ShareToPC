@@ -77,7 +77,9 @@
     <Compile Include="MainForm.Designer.cs">
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
-    <Compile Include="AuthDialog.cs" />
+    <Compile Include="AuthDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Models\ClientInfo.cs" />
     <Compile Include="Models\ReceivedText.cs" />
     <Compile Include="Models\ReceivedFile.cs" />
@@ -92,6 +94,9 @@
     <Compile Include="Storage\PairStore.cs" />
     <Compile Include="Storage\ReceiveStorage.cs" />
     <Compile Include="Util\Log.cs" />
+    <EmbeddedResource Include="AuthDialog.resx">
+      <DependentUpon>AuthDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="DeviceManagerDialog.resx">
       <DependentUpon>DeviceManagerDialog.cs</DependentUpon>
     </EmbeddedResource>
@@ -107,6 +112,9 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <EmbeddedResource Include="SettingsDialog.resx">
+      <DependentUpon>SettingsDialog.cs</DependentUpon>
+    </EmbeddedResource>
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>

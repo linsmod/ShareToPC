@@ -28,7 +28,7 @@ namespace ShareToPcReciver
         private ReceiveStorage _storage;
         private readonly ServiceAdvertiser _advertiser;
         private readonly TransferServer _server;
-        private readonly List<object> _history = new List<object>();
+        private readonly List<ReceivedFile> _history = new List<ReceivedFile>();
         private readonly object _historyLock = new object();
         private readonly HistoryStore _historyStore = new HistoryStore();
         private readonly DeviceStore _deviceStore = new DeviceStore();
@@ -133,24 +133,22 @@ namespace ShareToPcReciver
             }
             foreach (var item in items.AsEnumerable().Reverse())
             {
-                switch (item)
+                if (item is ReceivedFile file)
                 {
-                    case ReceivedText text:
+                    if (file.IsText)
                     {
-                        string preview = text.Text.Length > 80 ? text.Text.Substring(0, 80) + "..." : text.Text;
-                        AddHistoryRow(text.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, "", text.Text.Length + " 字符", text.DeviceName, text);
-                        break;
+                        string preview = file.Text.Length > 80 ? file.Text.Substring(0, 80) + "..." : file.Text;
+                        AddHistoryRow(file.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, "", file.Text.Length + " 字符", file.DeviceName, file);
                     }
-                    case ReceivedFile file:
+                    else
                     {
                         string ext = GetFileExtension(file.FileName);
                         string sizeText;
-                        if ((file.Status == "cancelled") && file.ReceivedBytes > 0)
+                        if ((file.Status == "cancelled" || file.Status == "incomplete") && file.ReceivedBytes > 0)
                             sizeText = $"{FormatSize(file.ReceivedBytes)} / {FormatSize(file.Size)}";
                         else
                             sizeText = FormatSize(file.Size);
                         AddHistoryRow(file.ReceivedAt.ToString("HH:mm:ss"), "文件", file.FileName, ext, sizeText, file.DeviceName, file);
-                        break;
                     }
                 }
             }
@@ -158,10 +156,10 @@ namespace ShareToPcReciver
 
         private void SaveHistory()
         {
-            List<object> snapshot;
+            List<ReceivedFile> snapshot;
             lock (_historyLock)
             {
-                snapshot = new List<object>(_history);
+                snapshot = new List<ReceivedFile>(_history);
             }
             _historyStore.Save(snapshot);
         }
@@ -470,7 +468,7 @@ namespace ShareToPcReciver
             }));
         }
 
-        private void OnTextReceived(ReceivedText msg)
+        private void OnTextReceived(ReceivedFile msg)
         {
             lock (_historyLock)
             {
@@ -533,13 +531,7 @@ namespace ShareToPcReciver
                     var content = File.ReadAllText(msg.FilePath);
                     string preview = content.Length > 80 ? content.Substring(0, 80) + "..." : content;
                     AddHistoryRow(msg.ReceivedAt.ToString("HH:mm:ss"), "文本", preview, "", content.Length + " 字符", msg.DeviceName, msg);
-                    PerformTextAction(new ReceivedText
-                    {
-                        DeviceName = msg.DeviceName,
-                        Text = content,
-                        Time = msg.Time,
-                        JobId = msg.JobId
-                    });
+                    PerformTextAction(msg);
                 }
                 else { 
                     PerformFileAction(msg);
@@ -566,7 +558,6 @@ namespace ShareToPcReciver
                     {
                         _activeRow.Tag = p;
                         RefreshRow(_activeRow);
-                        // 写入历史，重启后可恢复
                         var rf = MakeFailedRecord(p, "canceled");
                         lock (_historyLock) { ReplaceHistoryEntry(rf); }
                         SaveHistory();
@@ -580,7 +571,6 @@ namespace ShareToPcReciver
                     {
                         _activeRow.Tag = p;
                         RefreshRow(_activeRow);
-                        // 写入历史
                         var rf = MakeFailedRecord(p, "cancelled");
                         lock (_historyLock) { ReplaceHistoryEntry(rf); }
                         SaveHistory();
@@ -588,7 +578,6 @@ namespace ShareToPcReciver
                     }
                     else
                     {
-                        // 取消时可能还没有 activeRow（传输未开始时取消）
                         string name = p.FileName.Length > 0 ? p.FileName : "(未知文件)";
                         string ext = GetFileExtension(p.FileName);
                         var existingRow = FindRowByTransferId(p.TransferId);
@@ -611,7 +600,6 @@ namespace ShareToPcReciver
                 }
                 if (_activeRow == null)
                 {
-                    // 检查是否已有同 TransferId 的行（恢复取消的传输），有则复用
                     var existingRow = FindRowByTransferId(p.TransferId);
                     if (existingRow != null)
                     {
@@ -631,6 +619,23 @@ namespace ShareToPcReciver
                     _activeRow.Tag = p;
                 }
                 RefreshRow(_activeRow);
+
+                // 持久化传输进度到历史，重启后可恢复为 incomplete 状态
+                var incomplete = new ReceivedFile
+                {
+                    FileName = p.FileName,
+                    Size = p.Total,
+                    DeviceName = p.DeviceName,
+                    Time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Status = "incomplete",
+                    TotalBytes = p.Total,
+                    ReceivedBytes = p.Received,
+                    TransferId = p.TransferId ?? "",
+                    JobId = p.JobId ?? "",
+                    ObjectType = 2
+                };
+                lock (_historyLock) { ReplaceHistoryEntry(incomplete); }
+                SaveHistory();
             }));
         }
 
@@ -646,7 +651,8 @@ namespace ShareToPcReciver
                 TotalBytes = p.Total,
                 ReceivedBytes = p.Received,
                 TransferId = p.TransferId ?? "",
-                JobId = p.JobId ?? ""
+                JobId = p.JobId ?? "",
+                ObjectType = 2
             };
         }
 
@@ -772,13 +778,11 @@ namespace ShareToPcReciver
         /// <summary>判断历史记录是否命中搜索关键字（名称、来源设备、文本内容）。</summary>
         private static bool MatchesQuery(object entry, string q, bool matchCase, bool wholeWord, bool useRegex)
         {
-            if (entry is ReceivedText rt)
-            {
-                return TextMatches(rt.Text, q, matchCase, wholeWord, useRegex)
-                    || TextMatches(rt.DeviceName, q, matchCase, wholeWord, useRegex);
-            }
             if (entry is ReceivedFile rf)
             {
+                if (rf.IsText)
+                    return TextMatches(rf.Text, q, matchCase, wholeWord, useRegex)
+                        || TextMatches(rf.DeviceName, q, matchCase, wholeWord, useRegex);
                 return TextMatches(rf.FileName, q, matchCase, wholeWord, useRegex)
                     || TextMatches(rf.DeviceName, q, matchCase, wholeWord, useRegex);
             }
@@ -812,38 +816,41 @@ namespace ShareToPcReciver
         /// <summary>按历史记录对象构建一行（用于重建列表），返回 null 表示未知类型。</summary>
         private ListViewItem CreateHistoryRow(object tag)
         {
-            if (tag is ReceivedText text)
-            {
-                string preview = text.Text.Length > 80 ? text.Text.Substring(0, 80) + "..." : text.Text;
-                var item = new ListViewItem(text.ReceivedAt.ToString("HH:mm:ss"));
-                item.SubItems.Add("文本");
-                item.SubItems.Add(preview);
-                item.SubItems.Add("");
-                item.SubItems.Add(text.Text.Length + " 字符");
-                item.SubItems.Add(text.DeviceName);
-                item.SubItems.Add("");
-                item.Tag = tag;
-                item.Group = GetOrCreateGroup(tag, text.DeviceName);
-                ApplyOddStyle(item, tag);
-                return item;
-            }
             if (tag is ReceivedFile file)
             {
-                string ext = GetFileExtension(file.FileName);
-                string sizeText = (file.Status == "cancelled") && file.ReceivedBytes > 0
-                    ? $"{FormatSize(file.ReceivedBytes)} / {FormatSize(file.Size)}"
-                    : FormatSize(file.Size);
-                var item = new ListViewItem(file.ReceivedAt.ToString("HH:mm:ss"));
-                item.SubItems.Add("文件");
-                item.SubItems.Add(file.FileName);
-                item.SubItems.Add(ext);
-                item.SubItems.Add(sizeText);
-                item.SubItems.Add(file.DeviceName);
-                item.SubItems.Add("");
-                item.Tag = tag;
-                item.Group = GetOrCreateGroup(tag, file.DeviceName);
-                ApplyOddStyle(item, tag);
-                return item;
+                if (file.IsText)
+                {
+                    string preview = file.Text.Length > 80 ? file.Text.Substring(0, 80) + "..." : file.Text;
+                    var item = new ListViewItem(file.ReceivedAt.ToString("HH:mm:ss"));
+                    item.SubItems.Add("文本");
+                    item.SubItems.Add(preview);
+                    item.SubItems.Add("");
+                    item.SubItems.Add(file.Text.Length + " 字符");
+                    item.SubItems.Add(file.DeviceName);
+                    item.SubItems.Add("");
+                    item.Tag = tag;
+                    item.Group = GetOrCreateGroup(tag, file.DeviceName);
+                    ApplyOddStyle(item, tag);
+                    return item;
+                }
+                else
+                {
+                    string ext = GetFileExtension(file.FileName);
+                    string sizeText = (file.Status == "cancelled" || file.Status == "incomplete") && file.ReceivedBytes > 0
+                        ? $"{FormatSize(file.ReceivedBytes)} / {FormatSize(file.Size)}"
+                        : FormatSize(file.Size);
+                    var item = new ListViewItem(file.ReceivedAt.ToString("HH:mm:ss"));
+                    item.SubItems.Add("文件");
+                    item.SubItems.Add(file.FileName);
+                    item.SubItems.Add(ext);
+                    item.SubItems.Add(sizeText);
+                    item.SubItems.Add(file.DeviceName);
+                    item.SubItems.Add("");
+                    item.Tag = tag;
+                    item.Group = GetOrCreateGroup(tag, file.DeviceName);
+                    ApplyOddStyle(item, tag);
+                    return item;
+                }
             }
             if (tag is FileProgressInfo pi)
             {
@@ -879,12 +886,17 @@ namespace ShareToPcReciver
                     DrawProgressCell(e, p.Percent, $"{p.Percent}%", fgColor);
                     return;
                 }
-                if (e.Item.Tag is ReceivedFile rf)
+                if (e.Item.Tag is ReceivedFile rf && !rf.IsText)
                 {
                     if (rf.Status == "cancelled")
                     {
                         int pct = rf.TotalBytes > 0 ? (int)(rf.ReceivedBytes * 100 / rf.TotalBytes) : 0;
                         DrawProgressCell(e, pct, $"{pct}%", Color.Gray);
+                    }
+                    else if (rf.Status == "incomplete")
+                    {
+                        int pct = rf.TotalBytes > 0 ? (int)(rf.ReceivedBytes * 100 / rf.TotalBytes) : 0;
+                        DrawProgressCell(e, pct, $"{pct}%", Color.Orange);
                     }
                     else
                     {
@@ -906,6 +918,7 @@ namespace ShareToPcReciver
             if (e.ColumnIndex == 2 && e.Item.Tag is ReceivedFile file)
             {
                 bool deleted = file.Status == "success"
+                    && !file.IsText
                     && (string.IsNullOrEmpty(file.FilePath) || !File.Exists(file.FilePath));
                 if (deleted)
                 {
@@ -1023,7 +1036,6 @@ namespace ShareToPcReciver
         /// <summary>从 tag 中提取时间戳（毫秒），用于分组显示。</summary>
         private static long GetTagTime(object tag)
         {
-            if (tag is ReceivedText rt) return rt.Time;
             if (tag is ReceivedFile rf) return rf.Time;
             return DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }
@@ -1032,8 +1044,7 @@ namespace ShareToPcReciver
         private ListViewGroup GetOrCreateGroup(object tag, string deviceName)
         {
             string jobId = null;
-            if (tag is ReceivedText rt) jobId = rt.JobId;
-            else if (tag is ReceivedFile rf) jobId = rf.JobId;
+            if (tag is ReceivedFile rf) jobId = rf.JobId;
             else if (tag is FileProgressInfo pi) jobId = pi.JobId;
 
             var time = GetTagTime(tag);
@@ -1079,8 +1090,7 @@ namespace ShareToPcReciver
         private void ApplyOddStyle(ListViewItem item, object tag)
         {
             string jobId = null;
-            if (tag is ReceivedText rt) jobId = rt.JobId;
-            else if (tag is ReceivedFile rf) jobId = rf.JobId;
+            if (tag is ReceivedFile rf) jobId = rf.JobId;
             else if (tag is FileProgressInfo pi) jobId = pi.JobId;
 
             if (string.IsNullOrEmpty(jobId))
@@ -1105,25 +1115,17 @@ namespace ShareToPcReciver
             {
                 if (item.Tag is ReceivedFile rf && rf.TransferId == transferId)
                     return item;
-                if (item.Tag is FileProgressInfo pi && pi.TransferId == transferId)
-                    return item;
             }
             return null;
         }
 
         /// <summary>将新记录写入 _history，同时移除同 TransferId 的旧条目，避免重复</summary>
-        private void ReplaceHistoryEntry(object newEntry)
+        private void ReplaceHistoryEntry(ReceivedFile newEntry)
         {
-            string tid = null;
-            if (newEntry is ReceivedFile rf)
-                tid = rf.TransferId;
-            else if (newEntry is FileProgressInfo pi)
-                tid = pi.TransferId;
+            string tid = newEntry.TransferId;
 
             if (!string.IsNullOrEmpty(tid))
-                _history.RemoveAll(obj =>
-                    (obj is ReceivedFile r && r.TransferId == tid) ||
-                    (obj is FileProgressInfo p && p.TransferId == tid));
+                _history.RemoveAll(r => r.TransferId == tid);
 
             _history.Insert(0, newEntry);
         }
@@ -1133,14 +1135,12 @@ namespace ShareToPcReciver
         {
             if (string.IsNullOrEmpty(transferId))
                 return;
-            _history.RemoveAll(obj =>
-                (obj is ReceivedFile r && r.TransferId == transferId) ||
-                (obj is FileProgressInfo p && p.TransferId == transferId));
+            _history.RemoveAll(r => r.TransferId == transferId);
         }
 
         // ---- 内容到达动作 ----
 
-        private void PerformTextAction(ReceivedText msg)
+        private void PerformTextAction(ReceivedFile msg)
         {
             // 优先使用设备级设定，null = 跟随全局设定
             var pairSession = _pairStore.LoadAll().FirstOrDefault(s => s.DeviceName == msg.DeviceName);
@@ -1200,7 +1200,7 @@ namespace ShareToPcReciver
             var result = new List<object>();
             foreach (ListViewItem item in lvHistory.SelectedItems)
             {
-                if (item.Tag is ReceivedFile || item.Tag is ReceivedText || item.Tag is FileProgressInfo)
+                if (item.Tag is ReceivedFile || item.Tag is FileProgressInfo)
                     result.Add(item.Tag);
             }
             return result;
@@ -1235,11 +1235,11 @@ namespace ShareToPcReciver
         {
             switch (GetSelectedRecord())
             {
+                case ReceivedFile file when file.IsText:
+                    ShowTextDetail(file);
+                    break;
                 case ReceivedFile file:
                     OpenReceivedFile(file);
-                    break;
-                case ReceivedText text:
-                    ShowTextDetail(text);
                     break;
             }
         }
@@ -1255,15 +1255,15 @@ namespace ShareToPcReciver
 
             bool singleSelect = selected.Count == 1;
             object record = selected[0];
-            bool isFile = record is ReceivedFile;
-            bool isText = record is ReceivedText;
+            bool isFile = record is ReceivedFile rf && !rf.IsText;
+            bool isText = record is ReceivedFile rf2 && rf2.IsText;
             bool isActiveTransfer = record is FileProgressInfo;
             bool fileExists = isFile
                 && !string.IsNullOrEmpty(((ReceivedFile)record).FilePath)
                 && File.Exists(((ReceivedFile)record).FilePath);
             bool textFileExists = isText
-                && !string.IsNullOrEmpty(((ReceivedText)record).FilePath)
-                && File.Exists(((ReceivedText)record).FilePath);
+                && !string.IsNullOrEmpty(((ReceivedFile)record).FilePath)
+                && File.Exists(((ReceivedFile)record).FilePath);
 
             // 单条时显示操作类菜单（传输中不适用）
             menuOpenFile.Visible = singleSelect && isFile;
@@ -1308,9 +1308,6 @@ namespace ShareToPcReciver
                 case ReceivedFile file when !string.IsNullOrEmpty(file.FilePath):
                     _storage.OpenFolder(file.FilePath);
                     break;
-                case ReceivedText text when !string.IsNullOrEmpty(text.FilePath):
-                    _storage.OpenFolder(text.FilePath);
-                    break;
             }
         }
 
@@ -1320,8 +1317,8 @@ namespace ShareToPcReciver
             {
                 switch (GetSelectedRecord())
                 {
-                    case ReceivedText text:
-                        Clipboard.SetText(text.Text);
+                    case ReceivedFile file when file.IsText:
+                        Clipboard.SetText(file.Text);
                         break;
                     case ReceivedFile file when !string.IsNullOrEmpty(file.FilePath):
                         Clipboard.SetText(file.FilePath);
@@ -1336,7 +1333,7 @@ namespace ShareToPcReciver
 
         private void MenuViewDetail_Click(object sender, EventArgs e)
         {
-            if (GetSelectedRecord() is ReceivedText text)
+            if (GetSelectedRecord() is ReceivedFile text && text.IsText)
                 ShowTextDetail(text);
         }
 
@@ -1377,7 +1374,7 @@ namespace ShareToPcReciver
             var selectedItems = new List<ListViewItem>();
             foreach (ListViewItem item in lvHistory.SelectedItems)
             {
-                if (item.Tag is ReceivedFile || item.Tag is ReceivedText)
+                if (item.Tag is ReceivedFile)
                     selectedItems.Add(item);
             }
 
@@ -1404,7 +1401,7 @@ namespace ShareToPcReciver
                     }
 
                     // 删除未完成/失败传输的 .part 临时文件
-                    if (rf.Status == "cancelled")
+                    if (rf.Status == "cancelled" || rf.Status == "incomplete")
                     {
                         if (!string.IsNullOrEmpty(rf.TransferId))
                         {
@@ -1416,7 +1413,8 @@ namespace ShareToPcReciver
 
                 lock (_historyLock)
                 {
-                    _history.Remove(item.Tag);
+                    if (item.Tag is ReceivedFile rf1)
+                        _history.Remove(rf1);
                 }
 
                 lvHistory.Items.Remove(item);
@@ -1465,7 +1463,7 @@ namespace ShareToPcReciver
             }
         }
 
-        private void ShowTextDetail(ReceivedText text)
+        private void ShowTextDetail(ReceivedFile text)
         {
             using var dlg = new Form
             {
