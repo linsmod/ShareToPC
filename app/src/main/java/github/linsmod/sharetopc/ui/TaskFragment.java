@@ -308,10 +308,8 @@ public class TaskFragment extends Fragment {
                 Toast.makeText(requireContext(), "正在重试传输", Toast.LENGTH_SHORT).show();
                 return true;
             } else if (id == R.id.action_delete_group) {
-                viewModel.deleteGroup(group);
-                Toast.makeText(requireContext(),
-                        getString(R.string.group_deleted, group.totalEntries),
-                        Toast.LENGTH_SHORT).show();
+                viewModel.deleteEntry(entry);
+                Toast.makeText(requireContext(), "已删除", Toast.LENGTH_SHORT).show();
                 return true;
             }
             return false;

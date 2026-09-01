@@ -376,6 +376,13 @@ public class MainViewModel extends AndroidViewModel {
         refreshHistory();
     }
 
+    /** 删除单条记录。 */
+    public void deleteEntry(SendEntry entry) {
+        if (entry == null || entry.id == null) return;
+        app.jobStore.deleteEntry(entry.id);
+        refreshHistory();
+    }
+
     /** 暂停分组：对所有 canRequestPause() 的条目设置 pending pause + cancel。 */
     public void pauseGroup(TaskGroup group) {
         app.transferManager.cancelJob(group.jobId);
