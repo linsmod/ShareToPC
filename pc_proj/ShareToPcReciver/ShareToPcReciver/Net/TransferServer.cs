@@ -46,6 +46,8 @@ namespace ShareToPcReciver.Net
             public long ExpiresAt { get; set; }
             /// <summary>收到文本时的动作，null 表示跟随全局设定。</summary>
             public ArrivalAction? TextAction { get; set; }
+            /// <summary>是否拉黑设备。</summary>
+            public bool IsBlocked { get; set; }
 
             public bool IsPending => Status == "PENDING";
             public bool IsAccepted => Status == "ACCEPTED";

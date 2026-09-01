@@ -77,6 +77,7 @@
     <Compile Include="MainForm.Designer.cs">
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
+    <Compile Include="AuthDialog.cs" />
     <Compile Include="Models\ClientInfo.cs" />
     <Compile Include="Models\ReceivedText.cs" />
     <Compile Include="Models\ReceivedFile.cs" />

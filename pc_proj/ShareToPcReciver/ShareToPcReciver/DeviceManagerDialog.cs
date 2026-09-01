@@ -63,78 +63,73 @@ namespace ShareToPcReciver
             this.dgvDevices.CellDoubleClick += DgvDevices_CellDoubleClick;
 
             // Columns
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colName",
-                HeaderText = "设备名称",
-                FillWeight = 25,
-                MinimumWidth = 100
-            });
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colDeviceId",
-                HeaderText = "设备ID",
-                FillWeight = 20,
-                MinimumWidth = 100
-            });
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colCredits",
-                HeaderText = "发送次数",
-                FillWeight = 10,
-                MinimumWidth = 70
-            });
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colIssuedAt",
-                HeaderText = "授权时间",
-                FillWeight = 15,
-                MinimumWidth = 120
-            });
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colExpiresAt",
-                HeaderText = "过期时间",
-                FillWeight = 15,
-                MinimumWidth = 120
-            });
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colLastSeen",
-                HeaderText = "上次连接",
-                FillWeight = 15,
-                MinimumWidth = 120
-            });
-            this.dgvDevices.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "colBlocked",
-                HeaderText = "状态",
-                FillWeight = 8,
-                MinimumWidth = 60
-            });
+            var colName = new DataGridViewTextBoxColumn();
+            colName.Name = "colName";
+            colName.HeaderText = "设备名称";
+            colName.FillWeight = 25;
+            colName.MinimumWidth = 100;
+            this.dgvDevices.Columns.Add(colName);
+
+            var colDeviceId = new DataGridViewTextBoxColumn();
+            colDeviceId.Name = "colDeviceId";
+            colDeviceId.HeaderText = "设备ID";
+            colDeviceId.FillWeight = 20;
+            colDeviceId.MinimumWidth = 100;
+            this.dgvDevices.Columns.Add(colDeviceId);
+
+            var colCredits = new DataGridViewTextBoxColumn();
+            colCredits.Name = "colCredits";
+            colCredits.HeaderText = "发送次数";
+            colCredits.FillWeight = 10;
+            colCredits.MinimumWidth = 70;
+            this.dgvDevices.Columns.Add(colCredits);
+
+            var colIssuedAt = new DataGridViewTextBoxColumn();
+            colIssuedAt.Name = "colIssuedAt";
+            colIssuedAt.HeaderText = "授权时间";
+            colIssuedAt.FillWeight = 15;
+            colIssuedAt.MinimumWidth = 120;
+            this.dgvDevices.Columns.Add(colIssuedAt);
+
+            var colExpiresAt = new DataGridViewTextBoxColumn();
+            colExpiresAt.Name = "colExpiresAt";
+            colExpiresAt.HeaderText = "过期时间";
+            colExpiresAt.FillWeight = 15;
+            colExpiresAt.MinimumWidth = 120;
+            this.dgvDevices.Columns.Add(colExpiresAt);
+
+            var colLastSeen = new DataGridViewTextBoxColumn();
+            colLastSeen.Name = "colLastSeen";
+            colLastSeen.HeaderText = "上次连接";
+            colLastSeen.FillWeight = 15;
+            colLastSeen.MinimumWidth = 120;
+            this.dgvDevices.Columns.Add(colLastSeen);
+
+            var colBlocked = new DataGridViewTextBoxColumn();
+            colBlocked.Name = "colBlocked";
+            colBlocked.HeaderText = "状态";
+            colBlocked.FillWeight = 8;
+            colBlocked.MinimumWidth = 60;
+            this.dgvDevices.Columns.Add(colBlocked);
 
             // btnEdit
-            this.btnEdit = new Button
-            {
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                Enabled = false,
-                Location = new Point(12, 342),
-                Size = new Size(75, 28),
-                Text = "编辑",
-                UseVisualStyleBackColor = true
-            };
+            this.btnEdit = new Button();
+            this.btnEdit.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            this.btnEdit.Enabled = false;
+            this.btnEdit.Location = new Point(12, 342);
+            this.btnEdit.Size = new Size(75, 28);
+            this.btnEdit.Text = "编辑";
+            this.btnEdit.UseVisualStyleBackColor = true;
             this.btnEdit.Click += BtnEdit_Click;
 
             // btnBlock
-            this.btnBlock = new Button
-            {
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                Enabled = false,
-                Location = new Point(93, 342),
-                Size = new Size(75, 28),
-                Text = "拉黑",
-                UseVisualStyleBackColor = true
-            };
+            this.btnBlock = new Button();
+            this.btnBlock.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            this.btnBlock.Enabled = false;
+            this.btnBlock.Location = new Point(93, 342);
+            this.btnBlock.Size = new Size(75, 28);
+            this.btnBlock.Text = "拉黑";
+            this.btnBlock.UseVisualStyleBackColor = true;
             this.btnBlock.Click += BtnBlock_Click;
 
             // btnDeleteAuth
@@ -149,15 +144,13 @@ namespace ShareToPcReciver
             this.btnDeleteAuth.Click += BtnDeleteAuth_Click;
 
             // btnDeleteDevice
-            this.btnDeleteDevice = new Button
-            {
-                Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-                Enabled = false,
-                Location = new Point(280, 342),
-                Size = new Size(100, 28),
-                Text = "删除设备",
-                UseVisualStyleBackColor = true
-            };
+            this.btnDeleteDevice = new Button();
+            this.btnDeleteDevice.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            this.btnDeleteDevice.Enabled = false;
+            this.btnDeleteDevice.Location = new Point(280, 342);
+            this.btnDeleteDevice.Size = new Size(100, 28);
+            this.btnDeleteDevice.Text = "删除设备";
+            this.btnDeleteDevice.UseVisualStyleBackColor = true;
             this.btnDeleteDevice.Click += BtnDeleteDevice_Click;
 
             // btnClose
