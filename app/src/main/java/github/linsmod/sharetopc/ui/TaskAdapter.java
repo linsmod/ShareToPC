@@ -208,12 +208,13 @@ public class TaskAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         TaskGroup g = di.group;
         vh.item.bind(r);
 
-        // 可重试的条目：点击弹出菜单
+        // 可操作的条目（发送中/暂停/失败）：点击弹出菜单
+        boolean isActive = r.status == SendEntry.STATUS_SENDING;
         boolean canRetry = r.status == SendEntry.STATUS_IDLE
                 && r.idleReason != SendEntry.IDLE_REASON_SUCCESS
                 && r.pendingAction == 0
                 && TransferStatusHelper.canResumeOrRetry(r, pfdChecker);
-        if (canRetry && actionListener != null) {
+        if ((isActive || canRetry) && actionListener != null) {
             vh.itemView.setOnClickListener(v ->
                     actionListener.onEntryMenuRequested(r, g, vh.itemView));
         } else {
