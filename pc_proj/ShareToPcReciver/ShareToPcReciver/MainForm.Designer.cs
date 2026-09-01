@@ -35,6 +35,12 @@ namespace ShareToPcReciver
             this.btnOpenDir = new System.Windows.Forms.Button();
             this.btnDevices = new System.Windows.Forms.Button();
             this.btnSettings = new System.Windows.Forms.Button();
+            this.pnlSearch = new System.Windows.Forms.Panel();
+            this.txtSearch = new System.Windows.Forms.TextBox();
+            this.lblSearch = new System.Windows.Forms.Label();
+            this.btnSearchCase = new System.Windows.Forms.Button();
+            this.btnSearchWord = new System.Windows.Forms.Button();
+            this.btnSearchRegex = new System.Windows.Forms.Button();
             this.notifyIcon = new System.Windows.Forms.NotifyIcon(this.components);
             this.contextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.toolStripMenuItemOpen = new System.Windows.Forms.ToolStripMenuItem();
@@ -54,6 +60,7 @@ namespace ShareToPcReciver
             this.menuDeleteRecord = new System.Windows.Forms.ToolStripMenuItem();
             this.menuDeleteWithFile = new System.Windows.Forms.ToolStripMenuItem();
             this.statusStrip.SuspendLayout();
+            this.pnlSearch.SuspendLayout();
             this.contextMenuStrip.SuspendLayout();
             this.lvHistoryMenu.SuspendLayout();
             this.SuspendLayout();
@@ -140,7 +147,7 @@ namespace ShareToPcReciver
             // btnOpenDir
             // 
             this.btnOpenDir.Location = new System.Drawing.Point(16, 12);
-            this.btnOpenDir.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.btnOpenDir.Margin = new System.Windows.Forms.Padding(4);
             this.btnOpenDir.Name = "btnOpenDir";
             this.btnOpenDir.Size = new System.Drawing.Size(160, 31);
             this.btnOpenDir.TabIndex = 1;
@@ -151,7 +158,7 @@ namespace ShareToPcReciver
             // btnDevices
             // 
             this.btnDevices.Location = new System.Drawing.Point(287, 12);
-            this.btnDevices.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.btnDevices.Margin = new System.Windows.Forms.Padding(4);
             this.btnDevices.Name = "btnDevices";
             this.btnDevices.Size = new System.Drawing.Size(100, 31);
             this.btnDevices.TabIndex = 3;
@@ -162,13 +169,77 @@ namespace ShareToPcReciver
             // btnSettings
             // 
             this.btnSettings.Location = new System.Drawing.Point(187, 12);
-            this.btnSettings.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.btnSettings.Margin = new System.Windows.Forms.Padding(4);
             this.btnSettings.Name = "btnSettings";
             this.btnSettings.Size = new System.Drawing.Size(100, 31);
             this.btnSettings.TabIndex = 2;
             this.btnSettings.Text = "设置";
             this.btnSettings.UseVisualStyleBackColor = true;
             this.btnSettings.Click += new System.EventHandler(this.BtnSettings_Click);
+            // 
+            // pnlSearch
+            // 
+            this.pnlSearch.BackColor = System.Drawing.SystemColors.ControlDark;
+            this.pnlSearch.Controls.Add(this.txtSearch);
+            this.pnlSearch.Location = new System.Drawing.Point(492, 16);
+            this.pnlSearch.Name = "pnlSearch";
+            this.pnlSearch.Padding = new System.Windows.Forms.Padding(1);
+            this.pnlSearch.Size = new System.Drawing.Size(426, 23);
+            this.pnlSearch.TabIndex = 5;
+            // 
+            // txtSearch
+            // 
+            this.txtSearch.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.txtSearch.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.txtSearch.Location = new System.Drawing.Point(1, 1);
+            this.txtSearch.Margin = new System.Windows.Forms.Padding(0);
+            this.txtSearch.Name = "txtSearch";
+            this.txtSearch.Size = new System.Drawing.Size(424, 18);
+            this.txtSearch.TabIndex = 0;
+            this.txtSearch.TextChanged += new System.EventHandler(this.TxtSearch_TextChanged);
+            this.txtSearch.KeyDown += new System.Windows.Forms.KeyEventHandler(this.TxtSearch_KeyDown);
+            // 
+            // lblSearch
+            // 
+            this.lblSearch.AutoSize = true;
+            this.lblSearch.Location = new System.Drawing.Point(443, 20);
+            this.lblSearch.Name = "lblSearch";
+            this.lblSearch.Size = new System.Drawing.Size(52, 15);
+            this.lblSearch.TabIndex = 6;
+            this.lblSearch.Text = "搜索：";
+            // 
+            // btnSearchCase
+            // 
+            this.btnSearchCase.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnSearchCase.Location = new System.Drawing.Point(924, 16);
+            this.btnSearchCase.Name = "btnSearchCase";
+            this.btnSearchCase.Size = new System.Drawing.Size(34, 23);
+            this.btnSearchCase.TabIndex = 7;
+            this.btnSearchCase.Text = "Aa";
+            this.btnSearchCase.UseVisualStyleBackColor = true;
+            this.btnSearchCase.Click += new System.EventHandler(this.BtnSearchCase_Click);
+            // 
+            // btnSearchWord
+            // 
+            this.btnSearchWord.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnSearchWord.Location = new System.Drawing.Point(960, 16);
+            this.btnSearchWord.Name = "btnSearchWord";
+            this.btnSearchWord.Size = new System.Drawing.Size(34, 23);
+            this.btnSearchWord.TabIndex = 8;
+            this.btnSearchWord.Text = "ab";
+            this.btnSearchWord.UseVisualStyleBackColor = true;
+            this.btnSearchWord.Click += new System.EventHandler(this.BtnSearchWord_Click);
+            // 
+            // btnSearchRegex
+            // 
+            this.btnSearchRegex.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.btnSearchRegex.Location = new System.Drawing.Point(996, 16);
+            this.btnSearchRegex.Name = "btnSearchRegex";
+            this.btnSearchRegex.Size = new System.Drawing.Size(34, 23);
+            this.btnSearchRegex.TabIndex = 9;
+            this.btnSearchRegex.Text = ".*";
+            this.btnSearchRegex.UseVisualStyleBackColor = true;
+            this.btnSearchRegex.Click += new System.EventHandler(this.BtnSearchRegex_Click);
             // 
             // notifyIcon
             // 
@@ -222,7 +293,7 @@ namespace ShareToPcReciver
             this.lvHistory.GridLines = true;
             this.lvHistory.HideSelection = false;
             this.lvHistory.Location = new System.Drawing.Point(16, 55);
-            this.lvHistory.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.lvHistory.Margin = new System.Windows.Forms.Padding(4);
             this.lvHistory.Name = "lvHistory";
             this.lvHistory.OwnerDraw = true;
             this.lvHistory.Size = new System.Drawing.Size(1012, 430);
@@ -324,9 +395,14 @@ namespace ShareToPcReciver
             this.Controls.Add(this.btnOpenDir);
             this.Controls.Add(this.btnSettings);
             this.Controls.Add(this.btnDevices);
+            this.Controls.Add(this.pnlSearch);
+            this.Controls.Add(this.lblSearch);
+            this.Controls.Add(this.btnSearchCase);
+            this.Controls.Add(this.btnSearchWord);
+            this.Controls.Add(this.btnSearchRegex);
             this.Controls.Add(this.statusStrip);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.Margin = new System.Windows.Forms.Padding(4);
             this.MinimumSize = new System.Drawing.Size(527, 363);
             this.Name = "MainForm";
             this.Text = "ShareToPcReciver";
@@ -334,6 +410,8 @@ namespace ShareToPcReciver
             this.Load += new System.EventHandler(this.MainForm_Load);
             this.statusStrip.ResumeLayout(false);
             this.statusStrip.PerformLayout();
+            this.pnlSearch.ResumeLayout(false);
+            this.pnlSearch.PerformLayout();
             this.contextMenuStrip.ResumeLayout(false);
             this.lvHistoryMenu.ResumeLayout(false);
             this.ResumeLayout(false);
@@ -359,6 +437,12 @@ namespace ShareToPcReciver
         private System.Windows.Forms.Button btnOpenDir;
         private System.Windows.Forms.Button btnDevices;
         private System.Windows.Forms.Button btnSettings;
+        private System.Windows.Forms.Panel pnlSearch;
+        private System.Windows.Forms.TextBox txtSearch;
+        private System.Windows.Forms.Label lblSearch;
+        private System.Windows.Forms.Button btnSearchCase;
+        private System.Windows.Forms.Button btnSearchWord;
+        private System.Windows.Forms.Button btnSearchRegex;
         private System.Windows.Forms.NotifyIcon notifyIcon;
         private System.Windows.Forms.ContextMenuStrip contextMenuStrip;
         private System.Windows.Forms.ToolStripMenuItem toolStripMenuItemOpen;

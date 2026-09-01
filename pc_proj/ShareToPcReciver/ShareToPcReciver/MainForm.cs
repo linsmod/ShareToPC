@@ -12,6 +12,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -35,6 +36,7 @@ namespace ShareToPcReciver
         private string _lastFilePath;
         private ListViewItem _activeRow;
         private const int ProgressColumnIndex = 6;
+        private System.Windows.Forms.Timer _searchDebounceTimer;
 
         /// <summary>网络/IP 变化去抖定时器（WinForms 定时器，Tick 在 UI 线程触发）。</summary>
         private System.Windows.Forms.Timer _netChangeTimer;
@@ -86,6 +88,16 @@ namespace ShareToPcReciver
             // 睡眠恢复 / IP 变化时刷新 mDNS 广播与 IP 显示，不动已绑定的 TCP 监听
             NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
+
+            // 让搜索框边框贴合文字高度，避免底部多出背景空隙显得边框粗
+            pnlSearch.Height = txtSearch.PreferredHeight + 2;
+
+            _searchDebounceTimer = new System.Windows.Forms.Timer { Interval = 300 };
+            _searchDebounceTimer.Tick += (s, ev) =>
+            {
+                _searchDebounceTimer.Stop();
+                ApplySearchFilter();
+            };
 
             if (_startMinimized)
             {
@@ -378,6 +390,13 @@ namespace ShareToPcReciver
                     _netChangeTimer = null;
                 }
                 _netChangePending = false;
+
+                if (_searchDebounceTimer != null)
+                {
+                    _searchDebounceTimer.Stop();
+                    _searchDebounceTimer.Dispose();
+                    _searchDebounceTimer = null;
+                }
 
                 // 1. 先停 mDNS 广播，Android 端更快感知
                 _advertiser.Stop();
@@ -782,6 +801,208 @@ namespace ShareToPcReciver
         {
             if (item != null && item.Index >= 0)
                 lvHistory.RedrawItems(item.Index, item.Index, true);
+        }
+
+        /// <summary>按搜索框内容过滤历史列表。空关键字显示全部（最新 200 条），否则仅显示匹配项。</summary>
+        private void ApplySearchFilter()
+        {
+            if (IsDisposed || !IsHandleCreated) return;
+
+            bool matchCase = ToggleOn(btnSearchCase);
+            bool wholeWord = ToggleOn(btnSearchWord);
+            bool useRegex = ToggleOn(btnSearchRegex);
+            UpdateSearchBorder();
+
+            string q = txtSearch.Text.Trim();
+            bool filtering = q.Length > 0;
+            if (filtering && useRegex && !IsValidRegex(q)) return;
+
+            List<object> source;
+            lock (_historyLock) { source = new List<object>(_history); }
+
+            var entries = new List<object>(source.Count);
+            foreach (var e in source)
+            {
+                if (filtering && !MatchesQuery(e, q, matchCase, wholeWord, useRegex)) continue;
+                entries.Add(e);
+                if (!filtering && entries.Count >= 200) break;
+            }
+
+            // 记住传输中的行，重建后按 TransferId 恢复引用
+            string activeTid = (_activeRow?.Tag as FileProgressInfo)?.TransferId;
+
+            lvHistory.BeginUpdate();
+            try
+            {
+                lvHistory.Items.Clear();
+                lvHistory.Groups.Clear();
+                foreach (var e in entries)
+                {
+                    var item = CreateHistoryRow(e);
+                    if (item != null) lvHistory.Items.Add(item);
+                }
+            }
+            finally
+            {
+                lvHistory.EndUpdate();
+            }
+
+            _activeRow = activeTid != null ? FindRowByTransferId(activeTid) : null;
+            if (_activeRow != null) RefreshRow(_activeRow);
+        }
+
+        private void TxtSearch_TextChanged(object sender, EventArgs e)
+        {
+            UpdateSearchBorder();
+            _searchDebounceTimer.Stop();
+            bool useRegex = ToggleOn(btnSearchRegex);
+            bool invalid = useRegex && !string.IsNullOrEmpty(txtSearch.Text) && !IsValidRegex(txtSearch.Text);
+            if (invalid) return;
+            _searchDebounceTimer.Start();
+        }
+
+        private void TxtSearch_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Escape)
+            {
+                txtSearch.Text = "";
+                e.Handled = true;
+            }
+        }
+
+        private void BtnSearchCase_Click(object sender, EventArgs e) => ToggleSearchOption(btnSearchCase);
+        private void BtnSearchWord_Click(object sender, EventArgs e) => ToggleSearchOption(btnSearchWord);
+        private void BtnSearchRegex_Click(object sender, EventArgs e) => ToggleSearchOption(btnSearchRegex);
+
+        /// <summary>VSCode 风格选项按钮：切换开关状态并高亮。搜索框为空时无需刷新列表，仅更新边框。</summary>
+        private void ToggleSearchOption(Button btn)
+        {
+            bool on = !ToggleOn(btn);
+            btn.Tag = on;
+            btn.BackColor = on ? Color.FromArgb(0, 122, 204) : SystemColors.ButtonFace;
+            btn.ForeColor = on ? Color.White : SystemColors.ControlText;
+            _searchDebounceTimer.Stop();
+            if (txtSearch.Text.Trim().Length > 0)
+                ApplySearchFilter();
+            else
+                UpdateSearchBorder();
+        }
+
+        private static bool ToggleOn(Button btn)
+        {
+            return btn.Tag is bool b && b;
+        }
+
+        /// <summary>正则开启且表达式非法时，把搜索框边框染红提示；否则恢复默认边框色。</summary>
+        private void UpdateSearchBorder()
+        {
+            bool useRegex = ToggleOn(btnSearchRegex);
+            bool invalid = useRegex && !string.IsNullOrEmpty(txtSearch.Text) && !IsValidRegex(txtSearch.Text);
+            pnlSearch.BackColor = invalid ? Color.FromArgb(230, 70, 70) : SystemColors.ControlDark;
+        }
+
+        private static bool IsValidRegex(string pattern)
+        {
+            if (string.IsNullOrEmpty(pattern)) return true;
+            try
+            {
+                new Regex(pattern);
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>判断历史记录是否命中搜索关键字（名称、来源设备、文本内容）。</summary>
+        private static bool MatchesQuery(object entry, string q, bool matchCase, bool wholeWord, bool useRegex)
+        {
+            if (entry is ReceivedText rt)
+            {
+                return TextMatches(rt.Text, q, matchCase, wholeWord, useRegex)
+                    || TextMatches(rt.DeviceName, q, matchCase, wholeWord, useRegex);
+            }
+            if (entry is ReceivedFile rf)
+            {
+                return TextMatches(rf.FileName, q, matchCase, wholeWord, useRegex)
+                    || TextMatches(rf.DeviceName, q, matchCase, wholeWord, useRegex);
+            }
+            if (entry is FileProgressInfo pi)
+            {
+                return TextMatches(pi.FileName, q, matchCase, wholeWord, useRegex)
+                    || TextMatches(pi.DeviceName, q, matchCase, wholeWord, useRegex);
+            }
+            return false;
+        }
+
+        /// <summary>按大小写/整词/正则选项判断文本是否命中关键字。非法正则视为不匹配。</summary>
+        private static bool TextMatches(string text, string q, bool matchCase, bool wholeWord, bool useRegex)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(q)) return false;
+            var opts = matchCase ? RegexOptions.None : RegexOptions.IgnoreCase;
+            try
+            {
+                if (useRegex)
+                    return Regex.IsMatch(text, q, opts);
+                if (wholeWord)
+                    return Regex.IsMatch(text, @"\b" + Regex.Escape(q) + @"\b", opts);
+                return text.IndexOf(q, matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>按历史记录对象构建一行（用于重建列表），返回 null 表示未知类型。</summary>
+        private ListViewItem CreateHistoryRow(object tag)
+        {
+            if (tag is ReceivedText text)
+            {
+                string preview = text.Text.Length > 80 ? text.Text.Substring(0, 80) + "..." : text.Text;
+                var item = new ListViewItem(text.ReceivedAt.ToString("HH:mm:ss"));
+                item.SubItems.Add("文本");
+                item.SubItems.Add(preview);
+                item.SubItems.Add("");
+                item.SubItems.Add(text.Text.Length + " 字符");
+                item.SubItems.Add(text.DeviceName);
+                item.SubItems.Add("");
+                item.Tag = tag;
+                item.Group = GetOrCreateGroup(tag, text.DeviceName);
+                return item;
+            }
+            if (tag is ReceivedFile file)
+            {
+                string ext = GetFileExtension(file.FileName);
+                string sizeText = (file.Status == "cancelled") && file.ReceivedBytes > 0
+                    ? $"{FormatSize(file.ReceivedBytes)} / {FormatSize(file.Size)}"
+                    : FormatSize(file.Size);
+                var item = new ListViewItem(file.ReceivedAt.ToString("HH:mm:ss"));
+                item.SubItems.Add("文件");
+                item.SubItems.Add(file.FileName);
+                item.SubItems.Add(ext);
+                item.SubItems.Add(sizeText);
+                item.SubItems.Add(file.DeviceName);
+                item.SubItems.Add("");
+                item.Tag = tag;
+                item.Group = GetOrCreateGroup(tag, file.DeviceName);
+                return item;
+            }
+            if (tag is FileProgressInfo pi)
+            {
+                var item = new ListViewItem(DateTime.Now.ToString("HH:mm:ss"));
+                item.SubItems.Add("文件");
+                item.SubItems.Add(pi.FileName);
+                item.SubItems.Add(GetFileExtension(pi.FileName));
+                item.SubItems.Add(FormatSize(pi.Total));
+                item.SubItems.Add(pi.DeviceName);
+                item.SubItems.Add("");
+                item.Tag = tag;
+                item.Group = GetOrCreateGroup(tag, pi.DeviceName);
+                return item;
+            }
+            return null;
         }
 
         private void LvHistory_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
