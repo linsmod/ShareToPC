@@ -42,5 +42,16 @@ namespace ShareToPcReciver
         private static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 
         private const int SW_RESTORE = 9;
+
+        /// <summary>是否以最小化/仅托盘方式启动（由注册表开机启动项传入 -minimized）。</summary>
+        public static bool StartMinimized()
+        {
+            foreach (string arg in Environment.GetCommandLineArgs())
+            {
+                if (string.Equals(arg, "-minimized", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
     }
 }

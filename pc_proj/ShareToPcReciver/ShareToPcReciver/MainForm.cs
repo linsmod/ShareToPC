@@ -40,6 +40,7 @@ namespace ShareToPcReciver
         private System.Windows.Forms.Timer _netChangeTimer;
         private bool _netChangePending;
         private string _advertisedIp;
+        private readonly bool _startMinimized = Program.StartMinimized();
 
         public MainForm()
         {
@@ -85,12 +86,25 @@ namespace ShareToPcReciver
             // 睡眠恢复 / IP 变化时刷新 mDNS 广播与 IP 显示，不动已绑定的 TCP 监听
             NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
             SystemEvents.PowerModeChanged += OnPowerModeChanged;
+
+            if (_startMinimized)
+            {
+                // 仅托盘启动：暂时从任务栏消失，点托盘图标后再恢复
+                this.ShowInTaskbar = false;
+                this.WindowState = FormWindowState.Minimized;
+            }
         }
 
         private void MainForm_Load(object sender, EventArgs e)
         {
             LoadHistory();
             StartServices();
+            // 开机自启：以最小化方式进托盘，不显示主窗口
+            if (_startMinimized)
+            {
+                this.WindowState = FormWindowState.Minimized;
+                this.Hide();
+            }
         }
 
         private void LoadHistory()
@@ -331,6 +345,7 @@ namespace ShareToPcReciver
                     return;
                 }
             }
+            this.ShowInTaskbar = true;
             this.Show();
             this.WindowState = FormWindowState.Normal;
             this.BringToFront();

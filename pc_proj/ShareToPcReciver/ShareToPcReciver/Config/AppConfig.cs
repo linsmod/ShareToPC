@@ -116,7 +116,8 @@ namespace ShareToPcReciver.Config
                 string appPath = Assembly.GetExecutingAssembly().Location;
                 if (RunAtStartup)
                 {
-                    key.SetValue("ShareToPcReciver", $"\"{appPath}\"");
+                    // 开机启动带 -minimized，最小化到托盘，等用户点托盘图标再显示窗口
+                    key.SetValue("ShareToPcReciver", $"\"{appPath}\" -minimized");
                 }
                 else
                 {
