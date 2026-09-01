@@ -35,7 +35,6 @@ namespace ShareToPcReciver
             this.btnOpenDir = new System.Windows.Forms.Button();
             this.btnDevices = new System.Windows.Forms.Button();
             this.btnSettings = new System.Windows.Forms.Button();
-            this.btnMinimize = new System.Windows.Forms.Button();
             this.notifyIcon = new System.Windows.Forms.NotifyIcon(this.components);
             this.contextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.toolStripMenuItemOpen = new System.Windows.Forms.ToolStripMenuItem();
@@ -170,18 +169,6 @@ namespace ShareToPcReciver
             this.btnSettings.Text = "设置";
             this.btnSettings.UseVisualStyleBackColor = true;
             this.btnSettings.Click += new System.EventHandler(this.BtnSettings_Click);
-            // 
-            // btnMinimize
-            // 
-            this.btnMinimize.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.btnMinimize.Location = new System.Drawing.Point(929, 12);
-            this.btnMinimize.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
-            this.btnMinimize.Name = "btnMinimize";
-            this.btnMinimize.Size = new System.Drawing.Size(100, 31);
-            this.btnMinimize.TabIndex = 4;
-            this.btnMinimize.Text = "最小化";
-            this.btnMinimize.UseVisualStyleBackColor = true;
-            this.btnMinimize.Click += new System.EventHandler(this.BtnMinimize_Click);
             // 
             // notifyIcon
             // 
@@ -337,7 +324,6 @@ namespace ShareToPcReciver
             this.Controls.Add(this.btnOpenDir);
             this.Controls.Add(this.btnSettings);
             this.Controls.Add(this.btnDevices);
-            this.Controls.Add(this.btnMinimize);
             this.Controls.Add(this.statusStrip);
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
@@ -373,7 +359,6 @@ namespace ShareToPcReciver
         private System.Windows.Forms.Button btnOpenDir;
         private System.Windows.Forms.Button btnDevices;
         private System.Windows.Forms.Button btnSettings;
-        private System.Windows.Forms.Button btnMinimize;
         private System.Windows.Forms.NotifyIcon notifyIcon;
         private System.Windows.Forms.ContextMenuStrip contextMenuStrip;
         private System.Windows.Forms.ToolStripMenuItem toolStripMenuItemOpen;

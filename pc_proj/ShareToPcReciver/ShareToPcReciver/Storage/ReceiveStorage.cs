@@ -10,11 +10,14 @@ namespace ShareToPcReciver.Storage
     public class ReceiveStorage
     {
         private readonly string _baseDir;
+        /// <summary>未完成传输的 .part/.meta 临时目录（系统临时目录下），避免弄乱接收文件夹。</summary>
+        private readonly string _partDir;
         private readonly object _lock = new object();
 
         public ReceiveStorage(string baseDir)
         {
             _baseDir = baseDir;
+            _partDir = Path.Combine(Path.GetTempPath(), "ShareToPcReciver", "parts");
         }
 
         public string GetBaseDir() => _baseDir;
@@ -25,7 +28,7 @@ namespace ShareToPcReciver.Storage
             public string FileName { get; set; } = "";
         }
 
-        /// <summary>创建接收文件：返回预期最终文件路径，out 参数为写入用的 .part 临时路径（基于 transferId 命名）。</summary>
+        /// <summary>创建接收文件：返回预期最终文件路径（接收目录），out 参数为写入用的 .part 临时路径（系统临时目录，基于 transferId 命名）。</summary>
         public string CreateFile(string originalName, string transferId, out string partPath)
         {
             string safeName = SanitizeFileName(originalName);
@@ -37,12 +40,14 @@ namespace ShareToPcReciver.Storage
             {
                 if (!Directory.Exists(monthDir))
                     Directory.CreateDirectory(monthDir);
+                if (!Directory.Exists(_partDir))
+                    Directory.CreateDirectory(_partDir);
 
                 string finalPath = Path.Combine(monthDir, safeName);
 
-                // .part 用 transferId 命名，避免同名文件碰撞
+                // .part 用 transferId 命名，避免同名文件碰撞，存放于系统临时目录
                 string cleanId = SanitizeTransferId(transferId);
-                partPath = Path.Combine(monthDir, cleanId + ".part");
+                partPath = Path.Combine(_partDir, cleanId + ".part");
 
                 // 写入 .meta 记录预期路径和原始文件名（用于断点续传时恢复）
                 string metaPath = partPath + ".meta";
@@ -93,7 +98,16 @@ namespace ShareToPcReciver.Storage
 
                     if (File.Exists(finalPath))
                         File.Delete(finalPath);
-                    File.Move(partPath, finalPath);
+                    // 临时目录可能和接收目录不在同一盘符，跨卷时先复制再删除
+                    try
+                    {
+                        File.Move(partPath, finalPath);
+                    }
+                    catch (IOException)
+                    {
+                        File.Copy(partPath, finalPath, true);
+                        File.Delete(partPath);
+                    }
                 }
             }
 
@@ -121,33 +135,27 @@ namespace ShareToPcReciver.Storage
 
             string partFileName = cleanId + ".part";
 
-            if (Directory.Exists(_baseDir))
+            string candidate = Path.Combine(_partDir, partFileName);
+            if (File.Exists(candidate))
             {
-                foreach (var dir in Directory.GetDirectories(_baseDir))
+                partPath = candidate;
+                receivedBytes = new FileInfo(candidate).Length;
+
+                // 读取 .meta 恢复最终路径和文件名
+                string metaPath = candidate + ".meta";
+                if (File.Exists(metaPath))
                 {
-                    string candidate = Path.Combine(dir, partFileName);
-                    if (File.Exists(candidate))
+                    try
                     {
-                        partPath = candidate;
-                        receivedBytes = new FileInfo(candidate).Length;
-
-                        // 读取 .meta 恢复最终路径和文件名
-                        string metaPath = candidate + ".meta";
-                        if (File.Exists(metaPath))
-                        {
-                            try
-                            {
-                                var meta = JsonSerializer.Deserialize<PartMeta>(
-                                    File.ReadAllText(metaPath, Encoding.UTF8));
-                                finalPath = meta?.FinalPath;
-                                originalName = meta?.FileName;
-                            }
-                            catch { }
-                        }
-
-                        return true;
+                        var meta = JsonSerializer.Deserialize<PartMeta>(
+                            File.ReadAllText(metaPath, Encoding.UTF8));
+                        finalPath = meta?.FinalPath;
+                        originalName = meta?.FileName;
                     }
+                    catch { }
                 }
+
+                return true;
             }
 
             partPath = null;

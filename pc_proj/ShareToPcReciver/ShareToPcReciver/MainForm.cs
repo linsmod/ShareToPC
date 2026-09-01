@@ -308,13 +308,6 @@ namespace ShareToPcReciver
             dlg.ShowDialog(this);
         }
 
-        private void BtnMinimize_Click(object sender, EventArgs e)
-        {
-            this.WindowState = FormWindowState.Minimized;
-            this.Hide();
-            notifyIcon.Visible = true;
-        }
-
         private void NotifyIcon_DoubleClick(object sender, EventArgs e)
         {
             ShowWindow();
