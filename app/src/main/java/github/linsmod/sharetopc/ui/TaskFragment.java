@@ -28,6 +28,7 @@ import github.linsmod.sharetopc.MainViewModel;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
+import github.linsmod.sharetopc.util.TransferStatusHelper;
 
 public class TaskFragment extends Fragment {
 
@@ -118,11 +119,8 @@ public class TaskFragment extends Fragment {
             }
 
             @Override
-            public void onEntryRetryRequested(SendEntry entry, TaskGroup group) {
-                if (entry != null && group != null) {
-                    viewModel.resumeGroup(group);
-                    Toast.makeText(requireContext(), "正在重试传输", Toast.LENGTH_SHORT).show();
-                }
+            public void onEntryMenuRequested(SendEntry entry, TaskGroup group, View anchor) {
+                showEntryMenu(entry, group, anchor);
             }
         }, transferId -> viewModel.hasPfd(transferId));
         rvTask.setAdapter(taskAdapter);
@@ -272,6 +270,42 @@ public class TaskFragment extends Fragment {
                 return true;
             } else if (id == R.id.action_resume_group) {
                 viewModel.resumeGroup(group);
+                return true;
+            } else if (id == R.id.action_delete_group) {
+                viewModel.deleteGroup(group);
+                Toast.makeText(requireContext(),
+                        getString(R.string.group_deleted, group.totalEntries),
+                        Toast.LENGTH_SHORT).show();
+                return true;
+            }
+            return false;
+        });
+
+        popup.show();
+    }
+
+    /** 单个条目菜单：暂停/恢复/删除（与分组菜单逻辑一致）。 */
+    private void showEntryMenu(SendEntry entry, TaskGroup group, View anchor) {
+        PopupMenu popup = new PopupMenu(requireActivity(), anchor);
+        popup.getMenuInflater().inflate(R.menu.group_context_menu, popup.getMenu());
+
+        boolean isActive = entry.status == SendEntry.STATUS_SENDING;
+        boolean canResume = entry.canResume()
+                && TransferStatusHelper.canResumeOrRetry(entry,
+                        transferId -> viewModel.hasPfd(transferId));
+
+        popup.getMenu().findItem(R.id.action_pause_group).setEnabled(isActive);
+        popup.getMenu().findItem(R.id.action_resume_group).setEnabled(canResume && !isActive);
+
+        popup.setOnMenuItemClickListener(item -> {
+            int id = item.getItemId();
+            if (id == R.id.action_pause_group) {
+                viewModel.pauseGroup(group);
+                Toast.makeText(requireContext(), "已暂停传输", Toast.LENGTH_SHORT).show();
+                return true;
+            } else if (id == R.id.action_resume_group) {
+                viewModel.resumeGroup(group);
+                Toast.makeText(requireContext(), "正在重试传输", Toast.LENGTH_SHORT).show();
                 return true;
             } else if (id == R.id.action_delete_group) {
                 viewModel.deleteGroup(group);
