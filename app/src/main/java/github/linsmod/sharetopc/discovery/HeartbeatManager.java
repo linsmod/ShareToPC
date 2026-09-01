@@ -103,7 +103,7 @@ public class HeartbeatManager {
     private void syncConnections() {
         if (!running) return;
 
-        List<DiscoveredDevice> devices = discoveryManager.getDevices();
+        List<DiscoveredDevice> devices = discoveryManager.getAllCached();
         Set<String> currentKeys = new HashSet<>();
         for (DiscoveredDevice d : devices) currentKeys.add(d.address());
 

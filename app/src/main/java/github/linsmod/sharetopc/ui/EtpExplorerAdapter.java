@@ -196,7 +196,9 @@ class EtpExplorerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
                 vh.tvPath.setVisibility(View.VISIBLE);
                 vh.tvPath.setText(highlight(pathText, highlightTerms));
             } else {
-                vh.tvPath.setVisibility(View.GONE);
+                // 无路径时保留 weight 占位，让日期贴右对齐
+                vh.tvPath.setVisibility(View.VISIBLE);
+                vh.tvPath.setText("");
             }
         } else {
             vh.layoutPathRow.setVisibility(View.GONE);

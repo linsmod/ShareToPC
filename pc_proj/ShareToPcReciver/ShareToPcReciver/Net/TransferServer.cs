@@ -144,7 +144,10 @@ namespace ShareToPcReciver.Net
             Stop();
             Port = port;
             _cts = new CancellationTokenSource();
-            _listener = new TcpListener(IPAddress.Any, port);
+            IPAddress listenAddr = IPAddress.Any;
+            if (!string.IsNullOrWhiteSpace(Config.ListenIp) && IPAddress.TryParse(Config.ListenIp, out var parsed))
+                listenAddr = parsed;
+            _listener = new TcpListener(listenAddr, port);
             _listener.Start();
             Util.Log.Info($"TCP server started on port {port}");
             _serverTask = RunLoopAsync(_cts.Token);

@@ -245,7 +245,8 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
                 // 常用文件里点文件夹 → 切到位置浏览并进入该目录
                 enterBrowseAt(item.fullPath());
             } else {
-                EtpFileDialog.showActions(this, item, deviceId, deviceHost, devicePort);
+                EtpFileDialog.showActions(this, item, deviceId, deviceHost, devicePort,
+                        () -> enterBrowseAt(item.path));
             }
         });
         adapter.setOnItemLongClickListener(item -> {
@@ -521,7 +522,8 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
             browseViewModel.openFolder(drivePath != null && !drivePath.isEmpty()
                     ? drivePath : item.fullPath());
         } else {
-            EtpFileDialog.showActions(this, item, deviceId, deviceHost, devicePort);
+            EtpFileDialog.showActions(this, item, deviceId, deviceHost, devicePort,
+                    () -> enterBrowseAt(item.path));
         }
     }
 
@@ -756,8 +758,10 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
     // ==================== 文件属性对话框 ====================
 
+    /** 长按文件：完整属性 + 操作对话框。 */
     private void showFilePropertiesDialog(EtpClient.EtpSearchResult r) {
-        EtpFileDialog.show(this, r, deviceId, deviceHost, devicePort);
+        EtpFileDialog.show(this, r, deviceId, deviceHost, devicePort,
+                () -> enterBrowseAt(r.path));
     }
 
     private int getThemeColor(int attr) {

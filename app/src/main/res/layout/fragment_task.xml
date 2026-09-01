@@ -63,7 +63,7 @@
             android:id="@+id/tabTaskType"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingHorizontal="8dp"
+            android:layout_marginHorizontal="8dp"
             app:tabGravity="fill"
             app:tabMode="fixed">
 

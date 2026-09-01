@@ -84,11 +84,14 @@ public class DeviceStore {
 
     /**
      * 记录一个设备（在线发现时调用）。
-     * 去重规则：deviceId 非空时按 deviceId 合并（旧 host:port 记录会被自动删除），
-     * deviceId 为 null 时退化为按主键 (host, port) 替换。
-     * 新设备写入加入时间；已有设备（按 deviceId 或 host:port 匹配）保留原加入时间。
+     * 客户端唯一身份 = deviceId；deviceId 为空视为未确认身份，不作为有效客户端持久化（无效客户端）。
+     * 去重规则：同一 deviceId 只允许保留一行，IP 变化即更新所在行（旧地址行自动清理）。
      */
     public synchronized void saveDevice(DiscoveredDevice device) {
+        if (device.deviceId == null || device.deviceId.isEmpty()) {
+            return; // 未确认身份的客户端不持久化
+        }
+
         Long existing = findExistingAddTime(device);
         long addTime = existing != null ? existing : System.currentTimeMillis();
         device.addedTimeMillis = addTime;
@@ -108,6 +111,23 @@ public class DeviceStore {
         // 插入或替换（主键冲突时更新）
         db.insertWithOnConflict(DBHelper.TABLE_DEVICE, null, values,
                 SQLiteDatabase.CONFLICT_REPLACE);
+
+        // 以 deviceId 为唯一身份标识：同一 deviceId 只允许存在一行，IP 变化即更新所在行。
+        // 防御性清理（正常由 deviceId 唯一索引在插入时替换，此处兜底处理索引缺失/历史脏数据）。
+        db.delete(DBHelper.TABLE_DEVICE,
+                DBHelper.COL_DEV_ID + "=? AND NOT ("
+                        + DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?)",
+                new String[]{device.deviceId, device.host, String.valueOf(device.port)});
+        // 旧地址上 deviceId 仍为空的同名同端口残留记录视为同一台，一并清理，
+        // 避免 PC 重启换 IP 前 mDNS TXT 解析失败写入的无 id 行长期残留。
+        if (device.name != null && !device.name.isEmpty()) {
+            db.delete(DBHelper.TABLE_DEVICE,
+                    "((" + DBHelper.COL_DEV_ID + " IS NULL) OR (" + DBHelper.COL_DEV_ID + "='')) AND "
+                            + DBHelper.COL_DEV_NAME + "=? AND " + DBHelper.COL_DEV_PORT + "=? AND NOT ("
+                            + DBHelper.COL_DEV_HOST + "=? AND " + DBHelper.COL_DEV_PORT + "=?)",
+                    new String[]{device.name, String.valueOf(device.port),
+                            device.host, String.valueOf(device.port)});
+        }
     }
 
     /** 查询已有记录的加入时间：优先按 deviceId 匹配（IP 变化视为同一台），其次按 host:port。 */

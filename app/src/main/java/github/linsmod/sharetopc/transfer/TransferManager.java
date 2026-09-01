@@ -60,8 +60,9 @@ public class TransferManager implements TransferProtocol.Progress {
     public static class SendJob implements TransferProtocol.Cancellable {
         public final String id;
         public final List<SendEntry> items;
-        public final String host;
-        public final int port;
+        @NonNull
+        public String host;
+        public int port;
         public final String deviceId;
         /** true = 从 PC 下载文件到手机（复用发送队列/状态机/任务记录）。 */
         public boolean pull;
@@ -347,6 +348,31 @@ public class TransferManager implements TransferProtocol.Progress {
         }
     }
 
+    /**
+     * 按 deviceId 重新解析设备当前最新地址（host/port），用于 PC 换 IP 后自动更新发送目标。
+     * 每次重连前调用，避免任务一直打旧 IP。地址变化时同步更新 job 与 client。
+     */
+    private void refreshDeviceTarget(SendJob job, TransferClient client) {
+        try {
+            DiscoveredDevice latest = deviceStore.getById(job.deviceId);
+            if (latest == null || latest.host == null || latest.host.isEmpty()) {
+                return; // 未解析到，维持原地址连接
+            }
+            job.device = latest;
+            if (!job.host.equals(latest.host) || job.port != latest.port) {
+                LogX.d("device IP changed for " + job.deviceId + ": "
+                        + job.host + ":" + job.port + " -> "
+                        + latest.host + ":" + latest.port);
+                job.host = latest.host;
+                job.port = latest.port;
+                client.updateTarget(job.host, job.port);
+                job.authResult = null; // 换 IP 后授权/连接上下文失效，需重新握手
+            }
+        } catch (Exception e) {
+            LogX.d("refreshDeviceTarget failed: " + e.getMessage());
+        }
+    }
+
     private void process(SendJob job) {
         currentJob = job;
         deviceStore.setLatestJobId(job.host, job.port, job.id);
@@ -368,6 +394,8 @@ public class TransferManager implements TransferProtocol.Progress {
                         break;
                     }
                     try {
+                        // 每次尝试前按 deviceId 解析最新地址：PC 换 IP 时自动更新目标
+                        refreshDeviceTarget(job, client);
                         if (this.currentJob.isCancelRequested()) {
                             break;
                         }

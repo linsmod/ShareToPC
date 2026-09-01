@@ -32,6 +32,8 @@ namespace ShareToPcReciver.Config
         private static readonly object LockObj = new object();
 
         public int Port { get; set; } = Protocol.DefaultPort;
+        /// <summary>服务绑定的本机 IP，空表示绑定所有网卡（自动）。</summary>
+        public string ListenIp { get; set; } = "";
         public string SaveDir { get; set; } = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "ShareToPC");
         /// <summary>收到文本时的动作（适用：None / CopyText）。</summary>

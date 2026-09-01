@@ -887,13 +887,13 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         if (r.isFolder) {
             showFilePropertiesDialog(r);
         } else {
-            EtpFileDialog.showActions(this, r, deviceId, deviceHost, devicePort);
+            EtpFileDialog.showActions(this, r, deviceId, deviceHost, devicePort, null);
         }
     }
 
     /** 长按文件：完整属性 + 操作对话框。 */
     private void showFilePropertiesDialog(EtpClient.EtpSearchResult r) {
-        EtpFileDialog.show(this, r, deviceId, deviceHost, devicePort);
+        EtpFileDialog.show(this, r, deviceId, deviceHost, devicePort, null);
     }
 
     private int dp(int dp) {

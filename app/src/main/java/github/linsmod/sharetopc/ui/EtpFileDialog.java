@@ -22,13 +22,12 @@ import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.data.SendEntry;
 import github.linsmod.sharetopc.transfer.EtpClient;
-import github.linsmod.sharetopc.transfer.StreamingShare;
 import github.linsmod.sharetopc.transfer.TransferManager;
 import github.linsmod.sharetopc.util.FileUtils;
 
 /**
  * 文件属性 + 操作 统一对话框（浏览/搜索共用）。
- * 属性与全部操作（复制路径 / 拉到手机并打开 / 转发 / 仅拉取 / 流式转发）内联在一个
+ * 属性与全部操作（复制路径 / 拉到手机并打开 / 转发 / 仅拉取）内联在一个
  * 对话框里，不再弹二次对话框。
  */
 public final class EtpFileDialog {
@@ -42,7 +41,8 @@ public final class EtpFileDialog {
      * @param port     接收端端口
      */
     public static void show(Context ctx, EtpClient.EtpSearchResult r,
-                            String deviceId, String host, int port) {
+                            String deviceId, String host, int port,
+                            Runnable onOpenFolder) {
         LinearLayout root = new LinearLayout(ctx);
         root.setOrientation(LinearLayout.VERTICAL);
 
@@ -89,6 +89,14 @@ public final class EtpFileDialog {
 
         final Dialog[] dialogRef = new Dialog[1];
 
+        if (onOpenFolder != null) {
+            root.addView(divider(ctx));
+            root.addView(actionRow(ctx, R.string.etp_open_folder, v -> {
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                onOpenFolder.run();
+            }));
+        }
+
         if (!r.isFolder) {
             root.addView(divider(ctx));
             addPullActions(root, dialogRef, r, deviceId, host, port);
@@ -104,13 +112,14 @@ public final class EtpFileDialog {
     }
 
     /**
-     * 仅操作菜单（点击文件时显示）：拉取并打开 / 转发 / 仅拉取 / 流式转发。
+     * 仅操作菜单（点击文件时显示）：打开所在文件夹 / 拉取并打开 / 转发 / 仅拉取 / 流式转发。
      * 文件夹无可执行操作，直接展示完整属性对话框。
      */
     public static void showActions(Context ctx, EtpClient.EtpSearchResult r,
-                                   String deviceId, String host, int port) {
+                                   String deviceId, String host, int port,
+                                   Runnable onOpenFolder) {
         if (r.isFolder) {
-            show(ctx, r, deviceId, host, port);
+            show(ctx, r, deviceId, host, port, onOpenFolder);
             return;
         }
         LinearLayout root = new LinearLayout(ctx);
@@ -118,6 +127,13 @@ public final class EtpFileDialog {
         root.setPadding(dp(ctx, 8), dp(ctx, 4), dp(ctx, 8), dp(ctx, 4));
 
         final Dialog[] dialogRef = new Dialog[1];
+        if (onOpenFolder != null) {
+            root.addView(actionRow(ctx, R.string.etp_open_folder, v -> {
+                if (dialogRef[0] != null) dialogRef[0].dismiss();
+                onOpenFolder.run();
+            }));
+            root.addView(divider(ctx));
+        }
         addPullActions(root, dialogRef, r, deviceId, host, port);
 
         Dialog dialog = new MaterialAlertDialogBuilder(ctx)
@@ -146,13 +162,6 @@ public final class EtpFileDialog {
             if (dialogRef[0] != null) dialogRef[0].dismiss();
             enqueuePull(ctx, r, deviceId, host, port, SendEntry.POST_PULL_NONE);
         }));
-        // 流式转发仅在大文件（>100MB）或大小未知时显示
-        if (r.size < 0 || r.size > 100L * 1024 * 1024) {
-            root.addView(actionRow(ctx, R.string.etp_pull_stream, v -> {
-                if (dialogRef[0] != null) dialogRef[0].dismiss();
-                streamingShare(ctx, r, deviceId, host, port);
-            }));
-        }
     }
 
     private static String buildBodyTail(Context ctx, EtpClient.EtpSearchResult r) {
@@ -214,24 +223,6 @@ public final class EtpFileDialog {
         if (job != null) {
             Toast.makeText(ctx, R.string.etp_pull_queued, Toast.LENGTH_SHORT).show();
         }
-    }
-
-    private static void streamingShare(Context ctx, EtpClient.EtpSearchResult r,
-                                       String deviceId, String host, int port) {
-        if (host == null || port <= 0) {
-            Toast.makeText(ctx, R.string.etp_pull_no_target, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (deviceId == null || deviceId.isEmpty()) {
-            github.linsmod.sharetopc.util.LogX.e(
-                    "EtpFileDialog: device missing deviceId: " + host + ":" + port);
-            Toast.makeText(ctx, R.string.etp_no_device_id, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        StreamingShare.share(ctx,
-                deviceId,
-                host, port, r.name, r.fullPath(),
-                r.size >= 0 ? r.size : 0, FileUtils.guessMimeType(r.name));
     }
 
     /** 一行可点击操作项。 */

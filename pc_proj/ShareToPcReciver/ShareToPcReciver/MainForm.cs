@@ -158,17 +158,9 @@ namespace ShareToPcReciver
 
         private string GetLocalIpAddress()
         {
-            try
-            {
-                var host = Dns.GetHostEntry(Dns.GetHostName());
-                foreach (var addr in host.AddressList)
-                {
-                    if (addr.AddressFamily == AddressFamily.InterNetwork && !addr.ToString().StartsWith("127."))
-                        return addr.ToString();
-                }
-            }
-            catch { }
-            return "127.0.0.1";
+            if (!string.IsNullOrWhiteSpace(_config.ListenIp) && IPAddress.TryParse(_config.ListenIp, out var pinned))
+                return pinned.ToString();
+            return LocalNetwork.GetPrimaryIp();
         }
 
         private void BtnCopyIp_Click(object sender, EventArgs e)
@@ -210,8 +202,11 @@ namespace ShareToPcReciver
             using var dlg = new SettingsDialog(_config, _server.Port);
             if (dlg.ShowDialog() == DialogResult.OK)
             {
-                bool needRestart = _config.Port != dlg.Port || _config.SaveDir != dlg.SaveDir;
+                bool needRestart = _config.Port != dlg.Port
+                    || _config.ListenIp != dlg.SelectedIp
+                    || _config.SaveDir != dlg.SaveDir;
                 _config.Port = dlg.Port;
+                _config.ListenIp = dlg.SelectedIp;
                 _config.SaveDir = dlg.SaveDir;
                 _config.TextAction = dlg.TextAction;
                 _config.FileAction = dlg.FileAction;
@@ -261,9 +256,22 @@ namespace ShareToPcReciver
 
         private void ShowWindow()
         {
+            // 模态弹窗（如设置页）打开时主窗体被禁用，需把弹窗带到前台
+            foreach (Form f in Application.OpenForms)
+            {
+                if (f.Visible && f != this)
+                {
+                    f.Show();
+                    f.WindowState = FormWindowState.Normal;
+                    f.BringToFront();
+                    f.Activate();
+                    return;
+                }
+            }
             this.Show();
             this.WindowState = FormWindowState.Normal;
             this.BringToFront();
+            this.Activate();
         }
 
         private async void MainForm_FormClosing(object sender, FormClosingEventArgs e)

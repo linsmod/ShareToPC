@@ -64,6 +64,7 @@
     <Compile Include="Net\DeviceInfo.cs" />
     <Compile Include="Net\Drives.cs" />
     <Compile Include="Net\KnownFolder.cs" />
+    <Compile Include="Net\LocalNetwork.cs" />
     <Compile Include="Net\Messages.cs" />
     <Compile Include="Net\Mime.cs" />
     <Compile Include="Net\Protocol.cs" />

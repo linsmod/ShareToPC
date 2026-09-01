@@ -262,8 +262,8 @@
     <string name="etp_pull_open">打开</string>
     <string name="etp_pull_share">转发</string>
     <string name="etp_pull_download_only">下载</string>
-    <string name="etp_pull_stream">转发（流式）</string>
     <string name="etp_pull_no_target">缺少目标设备信息，无法拉取</string>
+    <string name="etp_open_folder">打开所在文件夹</string>
     <string name="etp_no_device_id">设备标识缺失，无法传输</string>
     <string name="task_tab_send">发送</string>
     <string name="task_tab_pull">下载</string>

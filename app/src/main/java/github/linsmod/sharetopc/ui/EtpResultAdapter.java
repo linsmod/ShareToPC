@@ -232,14 +232,17 @@ class EtpResultAdapter extends ListAdapter<EtpClient.EtpSearchResult, RecyclerVi
                     ivh.tvPath.setVisibility(View.VISIBLE);
                     ivh.tvPath.setText(pathText);
                 } else {
-                    ivh.tvPath.setVisibility(View.GONE);
+                    // 无路径时保留 weight 占位，让日期贴右对齐
+                    ivh.tvPath.setVisibility(View.VISIBLE);
+                    ivh.tvPath.setText("");
                 }
             } else {
                 ivh.layoutPathRow.setVisibility(View.GONE);
             }
         } else {
             ivh.tvLocation.setVisibility(View.GONE);
-            ivh.tvPath.setVisibility(View.GONE);
+            ivh.tvPath.setVisibility(View.VISIBLE);
+            ivh.tvPath.setText("");
             ivh.layoutPathRow.setVisibility(hasDate ? View.VISIBLE : View.GONE);
         }
 

@@ -21,8 +21,8 @@ import github.linsmod.sharetopc.util.LogX;
 public class TransferClient implements Closeable {
     public static final int CONNECT_TIMEOUT_MS = 5000;
     public static final int ACK_TIMEOUT_MS = 10000;
-    private final String host;
-    private final int port;
+    private String host;
+    private int port;
     final String pcDeviceId;
 
     private Socket socket;
@@ -38,6 +38,14 @@ public class TransferClient implements Closeable {
 
     public TransferClient(String pcDeviceId, String host, int port) {
         this.pcDeviceId = pcDeviceId;
+        this.host = host;
+        this.port = port;
+    }
+
+    /**
+     * 更新连接目标地址（PC 换 IP 后由上层在重连前调用）。
+     */
+    public void updateTarget(String host, int port) {
         this.host = host;
         this.port = port;
     }
@@ -117,63 +125,6 @@ public class TransferClient implements Closeable {
         public boolean rejected() {
             return !ok;
         }
-    }
-
-    /** 探测结果：远端是否允许、拒绝原因、文件大小与 MIME。 */
-    public static class PullProbe {
-        public final boolean ok;
-        public final String msg;
-        public final long size;
-        public final String mime;
-        public PullProbe(boolean ok, String msg, long size, String mime) {
-            this.ok = ok;
-            this.msg = msg != null ? msg : "";
-            this.size = size;
-            this.mime = mime != null ? mime : "";
-        }
-    }
-
-    /** 发送 PULL_REQUEST（seek=0）并仅读 ACK，用于流式分享前获取真实大小与 MIME。拒绝时 ok=false。 */
-    public PullProbe probePull(String deviceId, String name, String path, long estSize) throws IOException {
-        TransferProtocol.writePullRequest(out, deviceId, name, path, estSize, 0, "");
-        PullAck ack = expectPullAck();
-        return new PullProbe(ack.ok, ack.msg,
-                ack.ok && ack.size >= 0 ? ack.size : estSize, ack.mime);
-    }
-
-    /**
-     * 流式下载：把远端文件内容写入给定 OutputStream（不落盘，只经过管道/内存缓冲）。
-     * 调用前需已 connect + hello(oneway)。返回已写入字节数；PC 明确拒绝时返回 0（不抛异常）。
-     */
-    public long pullToStream(String deviceId, String name, String path, long estSize,
-                             OutputStream os) throws IOException {
-        TransferProtocol.writePullRequest(out, deviceId, name, path, estSize, 0, "");
-        PullAck ack = expectPullAck();
-        if (ack.rejected()) {
-            return 0;
-        }
-        long received = 0;
-        while (true) {
-            JsonObject h = TransferProtocol.readHeader(in);
-            String type = TransferProtocol.optString(h, "type");
-            if ("PULL_END".equals(type)) break;
-            if ("PULL_CHUNK".equals(type)) {
-                int len = h.has("len") && !h.get("len").isJsonNull() ? h.get("len").getAsInt() : 0;
-                if (len < 0 || len > 16 * 1024 * 1024) {
-                    throw new IOException("invalid chunk len: " + len);
-                }
-                byte[] buf = new byte[len];
-                in.readFully(buf);
-                os.write(buf);
-                received += len;
-            } else if ("ACK".equals(type)) {
-                throw new IOException("下载中断: " + TransferProtocol.ackError(h));
-            } else {
-                throw new IOException("unexpected frame: " + type);
-            }
-        }
-        os.flush();
-        return received;
     }
 
     /** 读取并解析 PULL_ACK：status=OK→ok=true；status=REJECTED→ok=false（显式协议状态，非异常）。 */
