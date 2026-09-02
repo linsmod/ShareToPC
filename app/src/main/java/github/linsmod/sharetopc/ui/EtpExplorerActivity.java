@@ -714,19 +714,39 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     // ---- 排序（参考搜索页：点击排序字段，单选中，再点切换升降序） ----
 
     private void initSortItems() {
+        EtpSettingsActivity.PathPresets presets = EtpExplorerViewModel.loadPresets();
+        List<String> uiFields = presets.uiSortFields;
+        if (uiFields == null || uiFields.isEmpty()) {
+            uiFields = new ArrayList<>();
+            uiFields.add("name");
+            uiFields.add("size");
+            uiFields.add("path");
+            uiFields.add("date_modified");
+        }
+
         TextView[] allViews = {
                 findViewById(R.id.tvSortName), findViewById(R.id.tvSortSize),
                 findViewById(R.id.tvSortPath), findViewById(R.id.tvSortExt),
                 findViewById(R.id.tvSortDateMod), findViewById(R.id.tvSortDateCre)};
         List<SortItem> items = new ArrayList<>();
         for (int i = 0; i < SORT_NAMES.length; i++) {
+            String name = SORT_NAMES[i];
             TextView view = allViews[i];
-            SortItem item = new SortItem(view, SORT_NAMES[i]);
+            if (!uiFields.contains(name)) {
+                view.setVisibility(View.GONE);
+                continue;
+            }
+            view.setVisibility(View.VISIBLE);
+            SortItem item = new SortItem(view, name);
+            item.state = presets.sortFields.getOrDefault(name, 0);
             items.add(item);
             final int idx = items.size() - 1;
             view.setOnClickListener(v -> onSortItemClicked(idx));
         }
         sortItems = items.toArray(new SortItem[0]);
+        currentSort = (presets.sortName != null && !presets.sortName.isEmpty()
+                && presets.sortFields.getOrDefault(presets.sortName, 0) != 0)
+                ? presets.sortName : null;
         refreshSortIndicators();
     }
 
