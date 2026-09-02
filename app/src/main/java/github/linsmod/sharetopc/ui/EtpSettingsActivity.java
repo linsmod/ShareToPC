@@ -125,7 +125,7 @@ public class EtpSettingsActivity extends AppCompatActivity {
                     + "视频 (video: size:>10mb)\n"
                     + "音频 (audio:)\n"
                     + "思维导图 (ext:xmind)\n"
-                    + "电脑程序 (ext:exe | ext:msi | ext:msix)\n"
+                    + "EXE/MSI (ext:exe | ext:msi | ext:msix)\n"
                     + "APK (ext:apk)\n"
                     + "PSD (ext:psd)\n"
                     + "\n"

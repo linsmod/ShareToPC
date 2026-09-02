@@ -191,7 +191,7 @@
     <string name="device_action_explor">文件浏览器</string>
     <string name="device_action_search">搜索文件</string>
     <string name="device_action_props">属性</string>
-    <string name="device_tasks_section_title">%1$s/%2$s 的文件</string>
+    <string name="device_tasks_section_title">用户文件 - %1$s</string>
 
     <!-- 路径预设 -->
     <string name="path_preset_title">默认搜索位置</string>

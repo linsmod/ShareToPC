@@ -93,7 +93,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         String titleDeviceName = device.displayName();
         String titleUserName = userName != null ? userName : "";
         items.add(new DeviceTasksAdapter.HeaderItem(
-                getString(R.string.device_tasks_section_title, titleDeviceName, titleUserName)));
+                getString(R.string.device_tasks_section_title, titleUserName)));
 
         // 从设置加载快速检索类目
         EtpSettingsActivity.PathPresets presets = EtpExplorerViewModel.loadPresets();
