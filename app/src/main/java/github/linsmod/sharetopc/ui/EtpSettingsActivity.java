@@ -243,9 +243,6 @@ public class EtpSettingsActivity extends AppCompatActivity {
     private TextInputEditText etCustomPath;
     private View btnAdd;
 
-    // ETP 端口
-    private TextInputEditText etEtpPort;
-
     // 匹配选项
     private Chip chipMatchCase, chipWholeWord, chipMatchPath, chipRegex;
 
@@ -292,9 +289,6 @@ public class EtpSettingsActivity extends AppCompatActivity {
         btnAdd = findViewById(R.id.btnAddPath);
 
         btnAdd.setOnClickListener(v -> addCustomPath());
-
-        // ETP 端口
-        etEtpPort = findViewById(R.id.etEtpPort);
 
         // 匹配选项
         chipMatchCase = findViewById(R.id.chipMatchCase);
@@ -367,28 +361,12 @@ public class EtpSettingsActivity extends AppCompatActivity {
         // 保存路径预设
         String json = gson.toJson(presets);
         App.get().settingsStore.putString(PREF_KEY, json);
-
-        // 保存 ETP 端口
-        String portStr = etEtpPort.getText().toString().trim();
-        int port;
-        try {
-            port = portStr.isEmpty() ? SettingsStore.DEFAULT_ETP_PORT : Integer.parseInt(portStr);
-            if (port <= 0 || port > 65535) port = SettingsStore.DEFAULT_ETP_PORT;
-        } catch (NumberFormatException e) {
-            port = SettingsStore.DEFAULT_ETP_PORT;
-        }
-        App.get().settingsStore.putString(SettingsStore.KEY_ETP_PORT, String.valueOf(port));
     }
 
     // ---- UI ----
 
     private void applyToUI() {
         rebuildPaths();
-
-        // ETP 端口
-        int port = App.get().settingsStore.getEtpPort();
-        etEtpPort.setText(String.valueOf(port));
-
         // 匹配选项
         chipMatchCase.setChecked(presets.matchCase != 0);
         chipWholeWord.setChecked(presets.matchWholeWord != 0);

@@ -30,6 +30,8 @@ public final class TransferProtocol {
     public static final int MAX_HEADER_BYTES = 64 * 1024;
     public static final int PROTOCOL_VERSION = 1;
     public static final String APP_VERSION = "ShareToPC/" + BuildConfig.VERSION_NAME;
+    public static final int DEFAULT_PORT = 51234;
+    public static final int DEFAULT_ETP_PORT = DEFAULT_PORT+1;
 
     private static final Gson gson = new Gson();
 

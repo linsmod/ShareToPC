@@ -48,6 +48,7 @@ import java.util.Locale;
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.transfer.EtpClient;
+import github.linsmod.sharetopc.transfer.TransferProtocol;
 
 /**
  * ETP 远程文件搜索界面（重构版）。
@@ -58,6 +59,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
+    public static final String EXTRA_ETP_PORT = "etp_port";
     public static final String EXTRA_DEVICE_ID = "device_id";
     public static final String EXTRA_PORT = "port";
 
@@ -206,7 +208,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         Intent intent = getIntent();
         String deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
         deviceHost = intent.getStringExtra(EXTRA_HOST);
-        int etpPort = App.get().settingsStore.getEtpPort();
+        int etpPort = intent.getIntExtra(EXTRA_ETP_PORT, TransferProtocol.DEFAULT_ETP_PORT);
         if (TextUtils.isEmpty(deviceHost)) {
             Toast.makeText(this, "未指定设备", Toast.LENGTH_SHORT).show();
             finish();

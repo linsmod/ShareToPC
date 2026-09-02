@@ -24,7 +24,6 @@ public class SettingsStore {
     public static final String KEY_LAST_PORT = "last_device_port";
     public static final String KEY_ETP_LAST_HOST = "etp_last_host";
     public static final String KEY_ETP_LAST_PORT = "etp_last_port";
-    public static final String KEY_ETP_PORT = "etp_port";
     public static final int DEFAULT_PORT = 51234;
     public static final int DEFAULT_ETP_PORT = 21;
     public static final int DEFAULT_SCAN_TIMEOUT_SEC = 30;
@@ -134,18 +133,6 @@ public class SettingsStore {
 
     public int getLastEtpPort() {
         return prefs.getInt(KEY_ETP_LAST_PORT, 0);
-    }
-
-    // ---- ETP 端口配置 ----
-
-    public int getEtpPort() {
-        try {
-            String val = prefs.getString(KEY_ETP_PORT, String.valueOf(DEFAULT_ETP_PORT));
-            int port = Integer.parseInt(val != null ? val.trim() : String.valueOf(DEFAULT_ETP_PORT));
-            return port > 0 && port <= 65535 ? port : DEFAULT_ETP_PORT;
-        } catch (NumberFormatException e) {
-            return DEFAULT_ETP_PORT;
-        }
     }
 
     // ---- 通用 Key-Value ----

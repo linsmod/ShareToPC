@@ -33,6 +33,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
     public static final String EXTRA_PORT = "port";
+    public static final String EXTRA_ETP_PORT = "etp_port";
     public static final String EXTRA_DEVICE_ID = "device_id";
 
     private MainViewModel viewModel;

@@ -47,6 +47,8 @@
     <Reference Include="System.Core" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
     <Reference Include="System.Deployment" />
@@ -57,6 +59,13 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Config\AppConfig.cs" />
+    <Compile Include="Etp\TcpPortForwarder.cs" />
+    <Compile Include="FormWait.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FormWait.Designer.cs">
+      <DependentUpon>FormWait.cs</DependentUpon>
+    </Compile>
     <Compile Include="Net\AuthInfo.cs" />
     <Compile Include="Net\AsyncBlockingQueue.cs" />
     <Compile Include="Net\BlockingQueue.cs" />
@@ -93,12 +102,21 @@
     <Compile Include="Storage\DeviceStore.cs" />
     <Compile Include="Storage\PairStore.cs" />
     <Compile Include="Storage\ReceiveStorage.cs" />
+    <Compile Include="Etp\EverythingLocator.cs" />
+    <Compile Include="Etp\EverythingDownloader.cs" />
+    <Compile Include="Etp\EtpBootstrap.cs" />
+    <Compile Include="Etp\EtpSetupWizard.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Util\Log.cs" />
     <EmbeddedResource Include="AuthDialog.resx">
       <DependentUpon>AuthDialog.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="DeviceManagerDialog.resx">
       <DependentUpon>DeviceManagerDialog.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="FormWait.resx">
+      <DependentUpon>FormWait.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
@@ -115,6 +133,9 @@
     <EmbeddedResource Include="SettingsDialog.resx">
       <DependentUpon>SettingsDialog.cs</DependentUpon>
     </EmbeddedResource>
+    <None Include="Plugins-Everything_ShareToPc.ini">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>

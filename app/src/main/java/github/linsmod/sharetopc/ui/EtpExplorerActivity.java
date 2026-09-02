@@ -7,11 +7,9 @@ import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.TextUtils;
-import android.text.format.DateUtils;
 import android.text.style.ImageSpan;
 import android.util.TypedValue;
 import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
@@ -32,8 +30,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
-import com.google.android.material.chip.Chip;
-import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.divider.MaterialDividerItemDecoration;
 import com.google.android.material.textfield.TextInputEditText;
 
@@ -48,6 +44,7 @@ import java.util.Set;
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.R;
 import github.linsmod.sharetopc.transfer.EtpClient;
+import github.linsmod.sharetopc.transfer.TransferProtocol;
 
 /**
  * ETP 文件浏览：打开后在常用位置按分类搜索常见类型并缓存结果，
@@ -58,6 +55,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
     public static final String EXTRA_DEVICE_NAME = "device_name";
     public static final String EXTRA_HOST = "host";
+    public static final String EXTRA_ETP_PORT = "etp_port";
     public static final String EXTRA_DEVICE_ID = "device_id";
     public static final String EXTRA_PORT = "port";
     public static final String EXTRA_FILTER_CATEGORY = "filter_category";
@@ -87,6 +85,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
     private String deviceName;
     private String deviceHost;
+    private int etpPort;
     private String deviceId;
     private int devicePort;
     private String filterCategory;
@@ -150,8 +149,10 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         Intent intent = getIntent();
         deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
         deviceHost = intent.getStringExtra(EXTRA_HOST);
+
         deviceId = intent.getStringExtra(EXTRA_DEVICE_ID);
-        devicePort = intent.getIntExtra(EXTRA_PORT, 0);
+        devicePort = intent.getIntExtra(EXTRA_PORT, TransferProtocol.DEFAULT_ETP_PORT);
+        etpPort = intent.getIntExtra(EXTRA_ETP_PORT,devicePort+1);
         filterCategory = intent.getStringExtra(EXTRA_FILTER_CATEGORY);
         initialPath = intent.getStringExtra(EXTRA_INITIAL_PATH);
         if (TextUtils.isEmpty(deviceHost)) {
@@ -288,11 +289,11 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private void initViewModel() {
         viewModel = new ViewModelProvider(this).get(EtpExplorerViewModel.class);
         viewModel.observe(this::render);
-        viewModel.init(deviceId, deviceHost, App.get().settingsStore.getEtpPort());
+        viewModel.init(deviceId, deviceHost, etpPort);
 
         browseViewModel = new ViewModelProvider(this).get(EtpBrowseViewModel.class);
         browseViewModel.observe(this::renderBrowseState);
-        browseViewModel.init(deviceHost, App.get().settingsStore.getEtpPort());
+        browseViewModel.init(deviceHost, etpPort);
     }
 
     // ==================== 状态渲染 ====================

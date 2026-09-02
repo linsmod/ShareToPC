@@ -8,7 +8,6 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 
@@ -387,6 +386,19 @@ public class TransferClient implements Closeable {
         rdi.drives = TransferProtocol.optDriveList(ack, "drives");
         if (rdi.drives != null && !rdi.drives.isEmpty()) {
             DeviceUserInfo.putDrives(host, rdi.drives);
+        }
+        String etpPort = TransferProtocol.optString(ack, "etpPort");
+        if(etpPort!=null){
+            rdi.etpPort = Integer.parseInt(etpPort);
+            if(rdi.etpPort<21){
+                rdi.etpPort=TransferProtocol.DEFAULT_ETP_PORT;
+            }
+            if(rdi.etpPort>65534){
+                rdi.etpPort=TransferProtocol.DEFAULT_ETP_PORT;
+            }
+        }
+        else{
+            rdi.etpPort=TransferProtocol.DEFAULT_ETP_PORT;
         }
         android.util.Log.d("TransferClient",
                 "HELLO OK: " + rdi.clientVersion + " proto v" + rdi.protoVer + " id=" + rdi.deviceId

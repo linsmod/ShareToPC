@@ -17,4 +17,6 @@ public class RemoteDeviceInfo{
     public Map<String, String> userFolders;
     /** PC 端 HELLO 握手上报的磁盘列表（DriveInfo.GetDrives）。 */
     public List<RemoteDrive> drives;
+    /** Exposed Etp port by PC side program*/
+    public int etpPort;
 }

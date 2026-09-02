@@ -200,7 +200,7 @@ namespace ShareToPcReciver.Net
                 LastSeen = DateTime.UtcNow
             });
             if(!oneway)
-                await Protocol.WriteHelloAckAsync(stream, _config.DeviceId, _config.HeartbeatIntervalMs, KnownFolder.GetAll(), Drives.GetAll(), _ct);
+                await Protocol.WriteHelloAckAsync(stream,_server.GetEtpServicePort(), _config.DeviceId, _config.HeartbeatIntervalMs, KnownFolder.GetAll(), Drives.GetAll(), _ct);
         }
 
         /// <summary>
@@ -254,7 +254,7 @@ namespace ShareToPcReciver.Net
             reason = "";
             if (!_config.PullEnabled)
             {
-                reason = "下载功能已关闭";
+                reason = "下载功能未启用";
                 return false;
             }
             if (string.IsNullOrEmpty(path))

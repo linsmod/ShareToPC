@@ -48,7 +48,8 @@ namespace ShareToPcReciver.Config
         public string DeviceId { get; set; } = Guid.NewGuid().ToString();
 
         // ---- 下载（手机端从 PC 拉文件） ----
-
+        /// <summary>是否允许手机端搜索文件。</summary>
+        public bool SearchEnabled;
         /// <summary>是否允许手机端下载文件。</summary>
         public bool PullEnabled { get; set; } = true;
         /// <summary>允许下载的文件扩展名（逗号分隔，不含点），空表示仅允许列表为空。</summary>

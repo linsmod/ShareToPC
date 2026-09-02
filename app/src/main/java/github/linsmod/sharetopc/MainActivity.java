@@ -99,6 +99,7 @@ public class MainActivity extends AppCompatActivity implements TaskFragment.Devi
         intent.putExtra(DeviceTasksActivity.EXTRA_DEVICE_NAME, device.displayName());
         intent.putExtra(DeviceTasksActivity.EXTRA_HOST, device.host);
         intent.putExtra(DeviceTasksActivity.EXTRA_PORT, device.port);
+        intent.putExtra(DeviceTasksActivity.EXTRA_ETP_PORT, device.etpPort);
         intent.putExtra(DeviceTasksActivity.EXTRA_DEVICE_ID, device.deviceId);
         startActivity(intent);
     }

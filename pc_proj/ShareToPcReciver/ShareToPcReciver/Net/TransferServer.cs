@@ -14,6 +14,7 @@ namespace ShareToPcReciver.Net
 {
     public class TransferServer : IDisposable
     {
+        private TcpPortForwarder _tcpForward;
         private TcpListener _listener;
         private CancellationTokenSource _cts;
         private Task _serverTask;
@@ -149,6 +150,9 @@ namespace ShareToPcReciver.Net
             IPAddress listenAddr = IPAddress.Any;
             if (!string.IsNullOrWhiteSpace(Config.ListenIp) && IPAddress.TryParse(Config.ListenIp, out var parsed))
                 listenAddr = parsed;
+            _tcpForward = new TcpPortForwarder(listenAddr, port + 1,"127.12.34.56",21);
+            _tcpForward.Start();
+            Util.Log.Info($"TCP forward server started. Forward {listenAddr}:{port} => 127.12.34.56:21");
             _listener = new TcpListener(listenAddr, port);
             _listener.Start();
             Util.Log.Info($"TCP server started on port {port}");
@@ -158,6 +162,7 @@ namespace ShareToPcReciver.Net
         public void Stop()
         {
             _cts?.Cancel();
+            try { if(_tcpForward!=null) _tcpForward.Stop(); } catch { }
             try { _listener?.Stop(); } catch { }
             try { _serverTask?.Wait(2000); } catch { }
             _listener = null;
@@ -372,6 +377,11 @@ namespace ShareToPcReciver.Net
                 session.Key = Guid.NewGuid().ToString();
             PairStore?.Save(session);
             return session;
+        }
+
+        internal int GetEtpServicePort()
+        {
+            return _tcpForward.GetLocalPort();
         }
     }
 }
