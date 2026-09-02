@@ -133,6 +133,7 @@ public class NsdDiscoveryManager {
             refreshed.latestJobId = pending.latestJobId;
             refreshed.latestJob = pending.latestJob;
             refreshed.addedTimeMillis = pending.addedTimeMillis;
+            refreshed.etpPort = incoming.etpPort > 0 ? incoming.etpPort : pending.etpPort;
             devices.put(refreshed.address(), refreshed);
             return refreshed;
         }
@@ -153,6 +154,7 @@ public class NsdDiscoveryManager {
                 confirmed.latestJobId = slot.latestJobId;
                 confirmed.latestJob = slot.latestJob;
                 confirmed.addedTimeMillis = slot.addedTimeMillis;
+                confirmed.etpPort = incoming.etpPort > 0 ? incoming.etpPort : slot.etpPort;
                 devices.put(confirmed.address(), confirmed);
                 return confirmed;
             }
@@ -174,6 +176,7 @@ public class NsdDiscoveryManager {
         merged.latestJobId = existing.latestJobId;
         merged.latestJob = existing.latestJob;
         merged.addedTimeMillis = existing.addedTimeMillis;
+        merged.etpPort = incoming.etpPort > 0 ? incoming.etpPort : existing.etpPort;
 
         // 地址变化（同 deviceId 但 host/port 不同）时，移除旧 key 重新放入
         if (!existing.address().equals(merged.address())) {
@@ -406,7 +409,7 @@ public class NsdDiscoveryManager {
      * HELLO 握手完成时更新 PC 端身份信息（版本、协议版本、设备 ID）。
      * 投递到事件队列，由 mergeIncoming 按 deviceId 合并（host:port 变化也视为同一台）。
      */
-    public void updateDeviceInfo(String host, int port, String version, int protoVersion, String deviceId) {
+    public void updateDeviceInfo(String host, int port, String version, int protoVersion, String deviceId, int etpPort) {
         eventExecutor.execute(() -> {
             DiscoveredDevice current;
             synchronized (cacheLock) {
@@ -418,6 +421,7 @@ public class NsdDiscoveryManager {
             incoming.version = version;
             incoming.protoVersion = String.valueOf(protoVersion);
             incoming.deviceId = deviceId;
+            incoming.etpPort = etpPort > 0 ? etpPort : incoming.etpPort;
 
             DiscoveredDevice merged;
             synchronized (cacheLock) {

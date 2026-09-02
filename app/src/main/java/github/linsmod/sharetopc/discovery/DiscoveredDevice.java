@@ -10,7 +10,8 @@ public class DiscoveredDevice {
     public final String name;
     public final String host;
     public final int port;
-    public final int etpPort;
+    /** ETP 服务端口；默认按主端口+1 推算，PC 端 HELLO 上报真实端口后更新并持久化。 */
+    public int etpPort;
     /** 用户备注名（可选），由 SettingsStore 填充。 */
     public String alias;
     /** 设备程序版本（由 mDNS TXT 或 HELLO 握手获取）。 */

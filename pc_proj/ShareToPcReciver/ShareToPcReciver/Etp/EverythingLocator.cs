@@ -20,13 +20,8 @@ namespace ShareToPcReciver.Etp
         /// <summary>Everything 是否为便携版由我们部署到用户目录。</summary>
         public const string LocalPortableDirName = "Everything";
 
-        /// <summary>用户配置目录（Everything 默认把 ini/db 放这里）。</summary>
-        private static string DefaultAppDataDir => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Everything");
-
         /// <summary>Everything.exe 的完整路径；找不到返回 null。</summary>
-        public string EverythingExe => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ShareToPcReciver/Everything", "Everything.exe");
+        public string EverythingExe => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ShareToPcReciver", "Everything", "Everything.exe");
 
         /// <summary>Everything.e 所在目录；找不到为 null。</summary>
         public string EverythingDir => EverythingExe == null ? null : Path.GetDirectoryName(EverythingExe);
@@ -36,9 +31,6 @@ namespace ShareToPcReciver.Etp
 
         /// <summary>ETP 插件 dll 完整路径。</summary>
         public string PluginDllPath => PluginsDir == null ? null : Path.Combine(PluginsDir, PluginDllName);
-
-        /// <summary>Everything 配置 ini 路径。</summary>
-        public string IniPath { get; private set; }
 
         /// <summary>是否在系统搜索到了 Everything（本机已安装或便携包已部署）。</summary>
         public bool EverythingFound => File.Exists(EverythingExe);
@@ -79,7 +71,7 @@ namespace ShareToPcReciver.Etp
         /// 只做只读探测，不修改任何文件。
         /// </summary>
         /// <param name="timeoutMs">单步超时（毫秒）。</param>
-        public bool IsEtpRunning(int port,int timeoutMs = 1500)
+        public bool IsEtpRunning(int port,int timeoutMs = 15000)
         {
             if (!EverythingFound) return false;
             try
@@ -110,7 +102,7 @@ namespace ShareToPcReciver.Etp
                             TryCommand(reader, writer, "PASS anonymous", timeoutMs);
 
                             // 3) 执行一个真实查询：设置空搜索串并执行 QUERY
-                            string searchResp = TryCommand(reader, writer, "EVERYTHING SEARCH \"\"", timeoutMs);
+                            string searchResp = TryCommand(reader, writer, "EVERYTHING SEARCH \"folder:Desktop\"", timeoutMs);
                             string queryResp = TryCommand(reader, writer, "EVERYTHING QUERY", timeoutMs);
 
                             // 关键判别：服务端认识并执行了 EVERYTHING 命令（返回 200 系），

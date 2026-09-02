@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import github.linsmod.sharetopc.App;
+import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.transfer.EtpClient;
 
 /**
@@ -35,6 +36,7 @@ public class EtpSearchViewModel extends ViewModel {
     // 自动重连
     private String savedHost;
     private int savedPort;
+    private String savedDeviceId;
     private String pendingQuery;
     private boolean verified; // 是否已成功连接验证过（探测性连接完成）
 
@@ -80,9 +82,21 @@ public class EtpSearchViewModel extends ViewModel {
     // ==================== 连接 ====================
 
     /** 仅保存目标地址，不建立连接；首次搜索时才会真正连接。 */
-    public void init(String host, int port) {
+    public void init(String host, int port, String deviceId) {
         this.savedHost = host;
         this.savedPort = port;
+        this.savedDeviceId = deviceId;
+    }
+
+    /** 按 deviceId 从设备库解析最新连接地址（host + ETP 端口）；无记录时回退传入地址。 */
+    private String[] resolveTarget() {
+        if (savedDeviceId != null && !savedDeviceId.isEmpty()) {
+            DiscoveredDevice d = App.get().deviceStore.getById(savedDeviceId);
+            if (d != null && d.host != null && !d.host.isEmpty() && d.etpPort > 0) {
+                return new String[]{d.host, String.valueOf(d.etpPort)};
+            }
+        }
+        return new String[]{savedHost, String.valueOf(savedPort)};
     }
 
     public void connect(String host, int port) {
@@ -91,8 +105,9 @@ public class EtpSearchViewModel extends ViewModel {
         connecting = true;
         emit(new SearchUiState.Connecting());
 
+        final String[] target = resolveTarget();
         App.get().ioExecutor.execute(() -> {
-            try (EtpClient c = new EtpClient(host, port)) {
+            try (EtpClient c = new EtpClient(target[0], Integer.parseInt(target[1]))) {
                 c.connect();
                 c.login("anonymous", "");
                 if (!c.isLoggedIn()) {
@@ -201,8 +216,9 @@ public class EtpSearchViewModel extends ViewModel {
         int limit = maxResultsLimit;
         int count = limit > 0 ? Math.min(PAGE_SIZE, limit - offset) : PAGE_SIZE;
 
+        final String[] target = resolveTarget();
         App.get().ioExecutor.execute(() -> {
-            EtpClient c = new EtpClient(savedHost, savedPort);
+            EtpClient c = new EtpClient(target[0], Integer.parseInt(target[1]));
             activeClient.set(c); // 注册当前请求引用，供 cancelActiveQuery() 取消
             if (activeClient.get() != c) {
                 closeQuietly(c); // 注册前已被取消，直接退出

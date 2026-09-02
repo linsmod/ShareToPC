@@ -155,6 +155,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         intent.putExtra(EtpExplorerActivity.EXTRA_HOST, device.host);
         intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_ID, device.deviceId);
         intent.putExtra(EtpExplorerActivity.EXTRA_PORT, device.port);
+        intent.putExtra(EtpExplorerActivity.EXTRA_ETP_PORT, device.etpPort);
         startActivity(intent);
     }
 
@@ -165,6 +166,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_ID, device.deviceId);
         intent.putExtra(EtpExplorerActivity.EXTRA_PORT, device.port);
         intent.putExtra(EtpExplorerActivity.EXTRA_FILTER_CATEGORY, category);
+        intent.putExtra(EtpExplorerActivity.EXTRA_ETP_PORT, device.etpPort);
         startActivity(intent);
     }
 
@@ -175,6 +177,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_ID, device.deviceId);
         intent.putExtra(EtpExplorerActivity.EXTRA_PORT, device.port);
         intent.putExtra(EtpExplorerActivity.EXTRA_INITIAL_PATH, path);
+        intent.putExtra(EtpExplorerActivity.EXTRA_ETP_PORT, device.etpPort);
         startActivity(intent);
     }
 
@@ -184,6 +187,7 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         intent.putExtra(EtpSearchActivity.EXTRA_HOST, device.host);
         intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_ID, device.deviceId);
         intent.putExtra(EtpSearchActivity.EXTRA_PORT, device.port);
+        intent.putExtra(EtpSearchActivity.EXTRA_ETP_PORT, device.etpPort);
         startActivity(intent);
     }
 }

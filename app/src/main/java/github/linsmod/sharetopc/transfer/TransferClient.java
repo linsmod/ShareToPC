@@ -405,6 +405,8 @@ public class TransferClient implements Closeable {
                 + " user=" + rdi.userName + " machine=" + rdi.machineName
                 + " folders=" + rdi.userFolders + " drives=" + (rdi.drives != null ? rdi.drives.size() : 0)
                 + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
+        // 持久化 PC 上报的 ETP 端口等身份信息到设备记录，供 Etp 页面按 deviceId 动态读取最新连接地址
+            App.get().discoveryManager.updateDeviceInfo(host, port, rdi.clientVersion, rdi.protoVer, rdi.deviceId, rdi.etpPort);
         this.rdi = new RemoteDeviceInfo();
     }
     /** 读取 PC 返回的 JOB_ACK 帧，解析出授权结果。 */

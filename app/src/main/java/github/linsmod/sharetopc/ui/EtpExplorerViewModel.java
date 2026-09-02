@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import github.linsmod.sharetopc.App;
+import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.transfer.EtpClient;
 
 /**
@@ -185,6 +186,17 @@ public class EtpExplorerViewModel extends ViewModel {
 
     // ==================== 后台加载 ====================
 
+    /** 按 deviceId 从设备库解析最新连接地址（host + ETP 端口）；无记录时回退 init 传入地址。 */
+    private String[] resolveTarget() {
+        if (savedDeviceId != null && !savedDeviceId.isEmpty()) {
+            DiscoveredDevice d = App.get().deviceStore.getById(savedDeviceId);
+            if (d != null && d.host != null && !d.host.isEmpty() && d.etpPort > 0) {
+                return new String[]{d.host, String.valueOf(d.etpPort)};
+            }
+        }
+        return new String[]{savedHost, String.valueOf(savedPort)};
+    }
+
     private void loadOnBackground(boolean firstLoad) {
         EtpClient client = null;
         try {
@@ -194,7 +206,8 @@ public class EtpExplorerViewModel extends ViewModel {
             EtpSettingsActivity.PathPresets presets = loadPresets();
             progressTotal = categories.size();
 
-            EtpClient c = new EtpClient(savedHost, savedPort);
+            String[] x = resolveTarget();
+            EtpClient c = new EtpClient(x[0], Integer.parseInt(x[1]));
             activeClient.set(c);
             if (cancelled) {
                 activeClient.compareAndSet(c, null);
@@ -234,8 +247,8 @@ public class EtpExplorerViewModel extends ViewModel {
             }
 
             ExplorerCache cache = new ExplorerCache();
-            cache.host = savedHost;
-            cache.port = savedPort;
+            cache.host = x[0];
+            cache.port = Integer.parseInt(x[1]);
             cache.cachedAt = System.currentTimeMillis();
             cache.categories = results;
             App.get().settingsStore.putString(cacheKey(), gson.toJson(cache));

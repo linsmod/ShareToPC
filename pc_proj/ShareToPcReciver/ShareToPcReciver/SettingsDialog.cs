@@ -20,8 +20,8 @@ namespace ShareToPcReciver
         public ArrivalAction FileAction { get; private set; }
         public bool ShowBalloon { get; private set; }
         public bool RunAtStartup { get; private set; }
-        public bool PullEnabled { get; private set; }
-        public bool SearchEnabled { get; private set; }
+        public bool EtpPullEnabled { get; private set; }
+        public bool EtpSearchEnabled { get; private set; }
         public string PullAllowedExtensions { get; private set; }
 
         private readonly int _currentPort;
@@ -58,6 +58,7 @@ namespace ShareToPcReciver
         };
         private CheckBox chkDownload;
         private LinkLabel linkEtpStatus;
+        private Label label1;
         private static readonly List<ActionOption> FileActionOptions = new List<ActionOption>
         {
             new ActionOption(ArrivalAction.None, "无操作"),
@@ -86,8 +87,8 @@ namespace ShareToPcReciver
             FileAction = config.FileAction;
             ShowBalloon = config.ShowBalloon;
             RunAtStartup = config.RunAtStartup;
-            SearchEnabled = config.SearchEnabled;
-            PullEnabled = config.PullEnabled;
+            EtpSearchEnabled = config.SearchEnabled;
+            EtpPullEnabled = config.PullEnabled;
             PullAllowedExtensions = config.PullAllowedExtensions;
             InitializeComponent();
 
@@ -98,10 +99,10 @@ namespace ShareToPcReciver
             chkShowBalloon.Checked = ShowBalloon;
             chkRunAtStartup.Checked = RunAtStartup;
 
-            chkEtp.Checked = SearchEnabled;
-            chkDownload.Checked = PullEnabled;
+            chkEtp.Checked = EtpSearchEnabled;
+            chkDownload.Checked = EtpPullEnabled;
             chkEtp.CheckedChanged += chkEtp_CheckedChanged;
-            chkDownload.CheckedChanged += checkBoxEnableEtpDownload_CheckedChanged;
+            chkDownload.CheckedChanged += chkEtpDownload_CheckedChanged;
             txtPullExt.Text = PullAllowedExtensions;
 
             BindActionCombo(cmbTextAction, TextActionOptions, TextAction);
@@ -162,6 +163,7 @@ namespace ShareToPcReciver
             this.btnOk = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.folderBrowserDialog1 = new System.Windows.Forms.FolderBrowserDialog();
+            this.label1 = new System.Windows.Forms.Label();
             this.grpEndpoint.SuspendLayout();
             this.grpReceive.SuspendLayout();
             this.grpPull.SuspendLayout();
@@ -306,6 +308,7 @@ namespace ShareToPcReciver
             // 
             // grpPull
             // 
+            this.grpPull.Controls.Add(this.label1);
             this.grpPull.Controls.Add(this.linkEtpStatus);
             this.grpPull.Controls.Add(this.chkDownload);
             this.grpPull.Controls.Add(this.chkEtp);
@@ -321,35 +324,35 @@ namespace ShareToPcReciver
             // linkEtpStatus
             // 
             this.linkEtpStatus.AutoSize = true;
-            this.linkEtpStatus.Location = new System.Drawing.Point(69, 0);
+            this.linkEtpStatus.Location = new System.Drawing.Point(97, 36);
             this.linkEtpStatus.Name = "linkEtpStatus";
-            this.linkEtpStatus.Size = new System.Drawing.Size(91, 15);
+            this.linkEtpStatus.Size = new System.Drawing.Size(76, 15);
             this.linkEtpStatus.TabIndex = 5;
             this.linkEtpStatus.TabStop = true;
-            this.linkEtpStatus.Text = "正在检测...";
+            this.linkEtpStatus.Text = "刷新中...";
             // 
             // chkDownload
             // 
             this.chkDownload.AutoSize = true;
-            this.chkDownload.Location = new System.Drawing.Point(15, 68);
+            this.chkDownload.Location = new System.Drawing.Point(18, 115);
             this.chkDownload.Name = "chkDownload";
-            this.chkDownload.Size = new System.Drawing.Size(314, 19);
+            this.chkDownload.Size = new System.Drawing.Size(352, 19);
             this.chkDownload.TabIndex = 0;
-            this.chkDownload.Text = "启用远程文件下载（允许手机端读取文件）";
+            this.chkDownload.Text = "启用远程文件下载（允许手机端读取/下载文件）";
             // 
             // chkEtp
             // 
             this.chkEtp.AutoSize = true;
-            this.chkEtp.Location = new System.Drawing.Point(15, 37);
+            this.chkEtp.Location = new System.Drawing.Point(18, 84);
             this.chkEtp.Name = "chkEtp";
-            this.chkEtp.Size = new System.Drawing.Size(314, 19);
+            this.chkEtp.Size = new System.Drawing.Size(352, 19);
             this.chkEtp.TabIndex = 0;
-            this.chkEtp.Text = "启用远程文件浏览（允许手机端列出文件）";
+            this.chkEtp.Text = "启用远程文件浏览（允许手机端浏览/搜索文件）";
             // 
             // lblPullExt
             // 
             this.lblPullExt.AutoSize = true;
-            this.lblPullExt.Location = new System.Drawing.Point(12, 102);
+            this.lblPullExt.Location = new System.Drawing.Point(15, 149);
             this.lblPullExt.Name = "lblPullExt";
             this.lblPullExt.Size = new System.Drawing.Size(157, 15);
             this.lblPullExt.TabIndex = 1;
@@ -357,7 +360,7 @@ namespace ShareToPcReciver
             // 
             // txtPullExt
             // 
-            this.txtPullExt.Location = new System.Drawing.Point(15, 129);
+            this.txtPullExt.Location = new System.Drawing.Point(18, 176);
             this.txtPullExt.Name = "txtPullExt";
             this.txtPullExt.Size = new System.Drawing.Size(290, 25);
             this.txtPullExt.TabIndex = 2;
@@ -379,6 +382,15 @@ namespace ShareToPcReciver
             this.btnCancel.Size = new System.Drawing.Size(75, 23);
             this.btnCancel.TabIndex = 4;
             this.btnCancel.Text = "取消";
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Location = new System.Drawing.Point(15, 36);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(76, 15);
+            this.label1.TabIndex = 6;
+            this.label1.Text = "ETP状态：";
             // 
             // SettingsDialog
             // 
@@ -416,12 +428,12 @@ namespace ShareToPcReciver
         }
 
         /// <summary>弹出 ETP 配置向导以完成下载/安装/启动流程。</summary>
-        private DialogResult ShowEtpWizard()
+        private DialogResult ShowEtpWizard(Form ownerForm=null)
         {
             if (IsDisposed) return DialogResult.Cancel;
             using (var wizard = new EtpSetupWizard())
             {
-                return wizard.ShowDialog(this);
+                return wizard.ShowDialog(ownerForm==null?this:ownerForm);
             }
         }
 
@@ -449,11 +461,14 @@ namespace ShareToPcReciver
                         {
                             this.Invoke(new Action(() =>
                             {
+                                if (!chkEtp.Checked)
+                                {
+                                    bo.ExitEverything();
+                                    this.linkEtpStatus.Text = "已停止";
+                                    return;
+                                }
                                 this.linkEtpStatus.Text = "状态检查...";
-                            }));
-                            var running = locator.IsEtpRunning(bo.GetEtpPort());
-                            this.Invoke(new Action(() =>
-                            {
+                                var running = locator.IsEtpRunning(bo.GetEtpPort());
                                 this.linkEtpStatus.Text = running ? "已就绪" : "未就绪";
                             }));
                         }
@@ -479,8 +494,15 @@ namespace ShareToPcReciver
                 FileAction = ((ActionOption)cmbFileAction.SelectedItem).Value;
                 ShowBalloon = chkShowBalloon.Checked;
                 RunAtStartup = chkRunAtStartup.Checked;
-                PullEnabled = chkEtp.Checked;
+                EtpSearchEnabled = chkEtp.Checked;
+                EtpPullEnabled = chkDownload.Checked;
                 PullAllowedExtensions = txtPullExt.Text;
+            }
+            if (EtpSearchEnabled || EtpPullEnabled) {
+                if (!_etpLocator.IsEtpRunning(bo.GetEtpPort())) { 
+                    bo.SetEtpPluginEnabled(chkEtp.Checked, this.chkDownload.Checked);
+                    ShowEtpWizard(this.ParentForm);
+                }
             }
             return result;
         }
@@ -508,54 +530,19 @@ namespace ShareToPcReciver
         private Button btnCancel;
         private FolderBrowserDialog folderBrowserDialog1;
         private bool etpRelatedChkChanged = true;
-
-        private void checkBoxEnableEtpDownload_CheckedChanged(object sender, EventArgs e)
-        {
-            try
-            {
-                chkDownload.CheckedChanged -= checkBoxEnableEtpDownload_CheckedChanged;
-
-                var bo = new EtpBootstrap();
-
-                // 取消勾选无需校验可用性，直接放行。
-                if (!chkDownload.Checked)
-                {
-                    try
-                    {
-                        bo.SetEtpEnabled(true, false);
-                        bo.RestartEverything();
-                    }
-                    catch (Exception ex)
-                    {
-
-                    }
-                    return;
-                }
-
-                // download depend on etp enabled
-                chkEtp_CheckedChanged(sender, e);
-
-                // 弹出 ETP 安装向导引导配置（向导内可随时取消）。
-                this.chkDownload.Checked = ShowEtpWizard() == DialogResult.OK;
-            }
-            finally
-            {
-                etpRelatedChkChanged = true;
-                chkDownload.CheckedChanged += checkBoxEnableEtpDownload_CheckedChanged;
-            }
-        }
-
+        EtpBootstrap bo = new EtpBootstrap();
         private void chkEtp_CheckedChanged(object sender, EventArgs e)
         {
             try
             {
-                var bo = new EtpBootstrap();
-                if (bo.IsEtpPluginEnabled() == chkEtp.Checked)
+                
+                if (!chkEtp.Checked)
                 {
+                    this.chkDownload.Checked = false; // chkDownload depends On checked chkEtp;
                     return;
                 }
-                bo.SetEtpEnabled(chkEtp.Checked, this.chkDownload.Checked);
-                new EtpBootstrap().RestartEverything();
+                bo.SetEtpPluginEnabled(chkEtp.Checked, this.chkDownload.Checked);
+                ShowEtpWizard();
             }
             catch (Exception ex)
             {
@@ -564,6 +551,42 @@ namespace ShareToPcReciver
             finally
             {
                 etpRelatedChkChanged = true;
+            }
+        }
+        private void chkEtpDownload_CheckedChanged(object sender, EventArgs e)
+        {
+            try
+            {
+                chkDownload.CheckedChanged -= chkEtpDownload_CheckedChanged;
+                chkEtp.CheckedChanged -= chkEtp_CheckedChanged;
+
+                // 取消勾选无需校验可用性，直接放行。
+                if (!chkDownload.Checked)
+                {
+                    try
+                    {
+                        bo.SetEtpPluginEnabled(chkEtp.Checked, false);
+                        if (!chkEtp.Checked) {
+                            etpRelatedChkChanged = true;
+                            return;
+                        }
+                        bo.RestartEverything();
+                    }
+                    catch (Exception ex)
+                    {
+
+                    }
+                    return;
+                }
+                chkEtp.Checked = true; // chkDownload depends On checked chkEtp;
+                bo.SetEtpPluginEnabled(chkEtp.Checked, this.chkDownload.Checked);
+                ShowEtpWizard();
+            }
+            finally
+            {
+                etpRelatedChkChanged = true;
+                chkDownload.CheckedChanged += chkEtpDownload_CheckedChanged;
+                chkEtp.CheckedChanged += chkEtp_CheckedChanged;
             }
         }
     }

@@ -293,7 +293,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
         browseViewModel = new ViewModelProvider(this).get(EtpBrowseViewModel.class);
         browseViewModel.observe(this::renderBrowseState);
-        browseViewModel.init(deviceHost, etpPort);
+        browseViewModel.init(deviceHost, etpPort, deviceId);
     }
 
     // ==================== 状态渲染 ====================

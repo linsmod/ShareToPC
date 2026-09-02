@@ -49,9 +49,9 @@ namespace ShareToPcReciver.Config
 
         // ---- 下载（手机端从 PC 拉文件） ----
         /// <summary>是否允许手机端搜索文件。</summary>
-        public bool SearchEnabled;
+        public bool SearchEnabled { get; set; } = true;
         /// <summary>是否允许手机端下载文件。</summary>
-        public bool PullEnabled { get; set; } = true;
+        public bool PullEnabled { get; set; } = false;
         /// <summary>允许下载的文件扩展名（逗号分隔，不含点），空表示仅允许列表为空。</summary>
         public string PullAllowedExtensions { get; set; } =
             "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,md,csv,json,xml,jpg,jpeg,png,gif,bmp,webp,svg,mp3,wav,flac,ogg,m4a,mp4,mkv,avi,mov,zip,7z,rar,tar,gz,apk";

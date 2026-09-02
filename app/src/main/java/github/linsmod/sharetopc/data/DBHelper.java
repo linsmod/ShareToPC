@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class DBHelper extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "sendjob.db";
-    private static final int DB_VERSION = 4;
+    private static final int DB_VERSION = 5;
 
     // ---------- job_entry 表 ----------
     public static final String TABLE_JOB_ENTRY = "job_entry";
@@ -45,6 +45,7 @@ public class DBHelper extends SQLiteOpenHelper {
     public static final String COL_DEV_VERSION = "version";          // 原 v4 添加
     public static final String COL_DEV_PROTO_VERSION = "protoVersion"; // 原 v5 添加
     public static final String COL_DEV_ADD_TIME = "addTime";          // v3 添加
+    public static final String COL_DEV_ETP_PORT = "etpPort";          // v5 添加：PC 端 HELLO 上报的 ETP 服务端口
 
     // ---------- PairSession 表 ----------
     public static final String TABLE_PAIR_SESSION = "pair_session";
@@ -105,6 +106,7 @@ public class DBHelper extends SQLiteOpenHelper {
                     COL_DEV_VERSION + " TEXT, " +
                     COL_DEV_PROTO_VERSION + " TEXT, " +
                     COL_DEV_ADD_TIME + " INTEGER DEFAULT 0, " +
+                    COL_DEV_ETP_PORT + " INTEGER DEFAULT 0, " +
                     "PRIMARY KEY (" + COL_DEV_HOST + ", " + COL_DEV_PORT + ")" +
                     ")";
 
@@ -174,6 +176,11 @@ public class DBHelper extends SQLiteOpenHelper {
                     + " ADD COLUMN " + COL_DIRECTION + " INTEGER DEFAULT 0");
             db.execSQL("ALTER TABLE " + TABLE_JOB_ENTRY
                     + " ADD COLUMN " + COL_REMOTE_PATH + " TEXT");
+        }
+        if (oldVersion < 5) {
+            // v5: ETP 端口（PC 端 HELLO 上报，供 Etp 页面动态解析最新连接端口）
+            db.execSQL("ALTER TABLE " + TABLE_DEVICE
+                    + " ADD COLUMN " + COL_DEV_ETP_PORT + " INTEGER DEFAULT 0");
         }
     }
 

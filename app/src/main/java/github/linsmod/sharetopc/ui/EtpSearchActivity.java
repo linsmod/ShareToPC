@@ -220,7 +220,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         initViews(deviceName);
         initFilter();
         initEnterSearch();
-        initViewModel(deviceHost, etpPort);
+        initViewModel(deviceHost, etpPort, deviceId);
     }
 
     @Override
@@ -606,7 +606,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         });
     }
 
-    private void initViewModel(String host, int port) {
+    private void initViewModel(String host, int port, String deviceId) {
         viewModel = new ViewModelProvider(this).get(EtpSearchViewModel.class);
 
         viewModel.observe(state -> {
@@ -634,7 +634,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         });
 
         // 仅保存目标地址；首次发起搜索时才建立连接
-        viewModel.init(host, port);
+        viewModel.init(host, port, deviceId);
     }
 
     // ==================== 状态渲染 ====================

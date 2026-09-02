@@ -207,11 +207,16 @@ public class HeartbeatManager {
             String pcDeviceId = TransferProtocol.optString(ack, "deviceId");
             if (pcDeviceId != null && !pcDeviceId.isEmpty()) {
                 int proto = 0;
+                int etpPort = device.etpPort;
+                if (ack.has("etpPort") && !ack.get("etpPort").isJsonNull()) {
+                    try { etpPort = ack.get("etpPort").getAsInt(); } catch (Exception ignored) {}
+                    if (etpPort < 21 || etpPort > 65534) etpPort = TransferProtocol.DEFAULT_ETP_PORT;
+                }
                 if (ack.has("protoVersion") && !ack.get("protoVersion").isJsonNull()) {
                     proto = ack.get("protoVersion").getAsInt();
                 }
                 discoveryManager.updateDeviceInfo(device.host, device.port,
-                        pcVersion, proto, pcDeviceId);
+                        pcVersion, proto, pcDeviceId, etpPort);
             }
             int beatReadTimeout = (int) (hbInterval + BEAT_TIMEOUT_MARGIN_MS);
             LogX.d("Hb-" + device.address() + ": HELLO OK, hbInterval=" + hbInterval + "ms");

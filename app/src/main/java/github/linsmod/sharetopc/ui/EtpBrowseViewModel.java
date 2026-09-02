@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import github.linsmod.sharetopc.App;
+import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.transfer.DeviceUserInfo;
 import github.linsmod.sharetopc.transfer.EtpClient;
 import github.linsmod.sharetopc.transfer.RemoteDrive;
@@ -51,6 +52,7 @@ public class EtpBrowseViewModel extends ViewModel {
 
     private String savedHost;
     private int savedPort;
+    private String savedDeviceId;
 
     private Consumer<State> observer;
 
@@ -206,12 +208,27 @@ public class EtpBrowseViewModel extends ViewModel {
     // ==================== 初始化 / 导航 ====================
 
     /** 打开页面入口：立即发出根视图（磁盘来自设置路径，本地计算无需网络）。 */
-    public void init(String host, int port) {
+    public void init(String host, int port, String deviceId) {
         this.savedHost = host;
         this.savedPort = port;
+        this.savedDeviceId = deviceId;
         DeviceUserInfo.addListener(infoListener);
         emitRoot();
         resolveQuickLocations();
+    }
+
+    /** 按 deviceId 从设备库解析最新连接地址（host + ETP 端口）；无记录时回退 init 传入地址。 */
+    private EtpClient newClient() {
+        String host = savedHost;
+        int port = savedPort;
+        if (savedDeviceId != null && !savedDeviceId.isEmpty()) {
+            DiscoveredDevice d = App.get().deviceStore.getById(savedDeviceId);
+            if (d != null && d.host != null && !d.host.isEmpty() && d.etpPort > 0) {
+                host = d.host;
+                port = d.etpPort;
+            }
+        }
+        return new EtpClient(host, port);
     }
 
     /** HELLO 上报更新（用户名/用户目录/磁盘）后刷新根视图；仅主线程回调。 */
@@ -268,7 +285,7 @@ public class EtpBrowseViewModel extends ViewModel {
         final boolean usingUser = user != null && !user.isEmpty();
         final String userForQuery = usingUser ? user : null;
         App.get().ioExecutor.execute(() -> {
-            EtpClient c = new EtpClient(savedHost, savedPort);
+            EtpClient c = newClient();
             try {
                 c.connect();
                 c.login("anonymous", "");
@@ -528,7 +545,7 @@ public class EtpBrowseViewModel extends ViewModel {
         emit(new Loading(path));
 
         App.get().ioExecutor.execute(() -> {
-            EtpClient c = new EtpClient(savedHost, savedPort);
+            EtpClient c = newClient();
             activeClient.set(c);
             if (activeClient.get() != c) {
                 closeQuietly(c);
@@ -563,7 +580,7 @@ public class EtpBrowseViewModel extends ViewModel {
         emit(new LoadMoreState(true, false));
 
         App.get().ioExecutor.execute(() -> {
-            EtpClient c = new EtpClient(savedHost, savedPort);
+            EtpClient c = newClient();
             activeClient.set(c);
             if (activeClient.get() != c) {
                 cf.loadingMore = false;

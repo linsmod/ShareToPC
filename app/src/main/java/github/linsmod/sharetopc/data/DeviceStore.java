@@ -43,6 +43,7 @@ public class DeviceStore {
                 d.deviceId = deviceId;
                 d.latestJobId = latestJobId;
                 d.addedTimeMillis = addedTime;
+                d.etpPort = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_DEV_ETP_PORT));
                 result.add(d);
             }
             c.close();
@@ -74,6 +75,7 @@ public class DeviceStore {
                 device.deviceId = id;
                 device.latestJobId = latestJobId;
                 device.addedTimeMillis = addedTime;
+                device.etpPort = c.getInt(c.getColumnIndexOrThrow(DBHelper.COL_DEV_ETP_PORT));
                 return device;
             }
         } finally {
@@ -105,6 +107,7 @@ public class DeviceStore {
         values.put(DBHelper.COL_DEV_ID, device.deviceId);
         values.put(DBHelper.COL_DEV_LAST_SEEN, System.currentTimeMillis());
         values.put(DBHelper.COL_DEV_ADD_TIME, addTime);
+        values.put(DBHelper.COL_DEV_ETP_PORT, device.etpPort);
 
         values.put(DBHelper.COL_DEV_LAST_SEND_ID, device.latestJobId);
 

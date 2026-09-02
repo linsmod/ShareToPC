@@ -303,8 +303,8 @@ namespace ShareToPcReciver
                 _config.FileAction = dlg.FileAction;
                 _config.ShowBalloon = dlg.ShowBalloon;
                 _config.RunAtStartup = dlg.RunAtStartup;
-                _config.SearchEnabled = dlg.SearchEnabled;
-                _config.PullEnabled = dlg.PullEnabled;
+                _config.SearchEnabled = dlg.EtpSearchEnabled;
+                _config.PullEnabled = dlg.EtpPullEnabled;
                 _config.PullAllowedExtensions = dlg.PullAllowedExtensions;
                 _config.Save();
                 _config.ApplyRunAtStartup();

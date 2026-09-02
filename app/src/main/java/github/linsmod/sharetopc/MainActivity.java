@@ -141,6 +141,7 @@ public class MainActivity extends AppCompatActivity implements TaskFragment.Devi
         intent.putExtra(EtpSearchActivity.EXTRA_HOST, device.host);
         intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_ID, device.deviceId);
         intent.putExtra(EtpSearchActivity.EXTRA_PORT, device.port);
+        intent.putExtra(EtpSearchActivity.EXTRA_ETP_PORT, device.etpPort);
         startActivity(intent);
     }
     @Override
@@ -154,6 +155,7 @@ public class MainActivity extends AppCompatActivity implements TaskFragment.Devi
         intent.putExtra(EtpExplorerActivity.EXTRA_HOST, device.host);
         intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_ID, device.deviceId);
         intent.putExtra(EtpExplorerActivity.EXTRA_PORT, device.port);
+        intent.putExtra(EtpExplorerActivity.EXTRA_ETP_PORT, device.etpPort);
         if (category != null) {
             intent.putExtra(EtpExplorerActivity.EXTRA_FILTER_CATEGORY, category);
         }

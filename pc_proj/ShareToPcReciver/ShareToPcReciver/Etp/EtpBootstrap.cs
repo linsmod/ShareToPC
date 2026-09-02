@@ -206,7 +206,7 @@ namespace ShareToPcReciver.Etp
         private void RunEnableConfig()
         {
             SetRunning(_steps[3], "安装ETP插件预设");
-            SetEtpEnabled(true);
+            SetEtpPluginEnabled(true);
             SetDone(_steps[3], "ETP 服务已启用（端口 " + PluginPortOrDefault + "）");
         }
 
@@ -216,14 +216,14 @@ namespace ShareToPcReciver.Etp
             LaunchEverything();
             Thread.Sleep(1000);
             var processes = Process.GetProcessesByName("Everything");
-            SetDone(_steps[4], processes.Length>0?"Everything 已启动": "Everything 启动失败");
+            SetDone(_steps[4], processes.Length > 0 ? "Everything 已启动" : "Everything 启动失败");
         }
 
         private bool TestRunning()
         {
             SetRunning(_steps[5], "连接测试…");
             var running = _locator.IsEtpRunning(GetEtpPort(), 30000);
-            SetDone(_steps[5], running ?"ETP连接就绪":"ETP连接测试失败");
+            SetDone(_steps[5], running ? "ETP连接就绪" : "ETP连接测试失败");
             return running;
         }
 
@@ -257,7 +257,7 @@ namespace ShareToPcReciver.Etp
 
         private void SetDone(EtpStep step, string detail)
         {
-            step.Status = detail.Contains("失败")?EtpStepStatus.Failed: EtpStepStatus.Done;
+            step.Status = detail.Contains("失败") ? EtpStepStatus.Failed : EtpStepStatus.Done;
             step.Detail = detail;
             RefreshAll();
         }
@@ -265,6 +265,8 @@ namespace ShareToPcReciver.Etp
         /// <summary>ETP 已在运行时，把步骤 1..N（本体/插件/配置/启动）全部标记为“已跳过”。</summary>
         private void MarkRemainingAsSkipped()
         {
+            _steps[0].Status = EtpStepStatus.Done;
+            _steps[0].Detail = "Everything 已就绪";
             for (int i = 1; i < _steps.Count; i++)
             {
                 _steps[i].Status = EtpStepStatus.Done;
@@ -274,9 +276,8 @@ namespace ShareToPcReciver.Etp
 
         private void RefreshAll()
         {
-            var done = _steps.Count(s => s.Status == EtpStepStatus.Done);
             foreach (var s in _steps)
-                StepChanged?.Invoke(s, done);
+                StepChanged?.Invoke(s, _steps.Count(s => s.Status == EtpStepStatus.Done));
         }
 
         private void OnDownloadProgress(string text, long downloaded, long total)
@@ -319,7 +320,7 @@ namespace ShareToPcReciver.Etp
         /// 启用 ETP 配置：把随程序分发的插件预设 ini（Plugins-Everything_ShareToPc.ini）拷贝到 Everything 主目录。
         /// 新版 Everything 使用插件独立 ini，无需再改写全局 Everything.ini 的 allow_etp_server。
         /// </summary>
-        public void SetEtpEnabled(bool enable,bool? enableDownload=null)
+        public void SetEtpPluginEnabled(bool enable, bool? enableDownload = null)
         {
             string everythingDir = _locator.EverythingDir;
             if (string.IsNullOrEmpty(everythingDir))
@@ -334,7 +335,8 @@ namespace ShareToPcReciver.Etp
 
             Directory.CreateDirectory(everythingDir);
             string target = Path.Combine(everythingDir, PluginIniName);
-            if (!File.Exists(target)) { 
+            if (!File.Exists(target))
+            {
                 File.Copy(source, target, overwrite: true);
             }
             var contents = File.ReadAllLines(target, System.Text.Encoding.UTF8);
@@ -344,15 +346,16 @@ namespace ShareToPcReciver.Etp
                 var line = contents[i];
                 if (line.StartsWith("enabled="))
                 {
-                    contents[i] = "enabled="+ (enable ? "1" : "0");
+                    contents[i] = "enabled=" + (enable ? "1" : "0");
                     changed += line != contents[i] ? 1 : 0;
                 }
-                if (enableDownload.HasValue && line.StartsWith("allow_file_download=")) {
+                if (enableDownload.HasValue && line.StartsWith("allow_file_download="))
+                {
                     contents[i] = "allow_file_download=" + (enableDownload.Value ? "1" : "0");
-                    changed += line != contents[i]?1:0;
+                    changed += line != contents[i] ? 1 : 0;
                 }
             }
-            if(changed>0)
+            if (changed > 0)
                 File.WriteAllText(target, String.Join("\n", contents));
             Log.Info("ETP 插件配置已部署到 " + target);
         }
@@ -407,7 +410,8 @@ namespace ShareToPcReciver.Etp
                 var line = contents[i];
                 if (line.StartsWith("port="))
                 {
-                    if (int.TryParse(line.Split('=')[1], out var port) && port >= 21 && port <= 65534) {
+                    if (int.TryParse(line.Split('=')[1], out var port) && port >= 21 && port <= 65534)
+                    {
                         return port;
                     }
                 }
@@ -420,7 +424,8 @@ namespace ShareToPcReciver.Etp
             {
                 port = 21;
             }
-            else if (port > 62234) {
+            else if (port > 62234)
+            {
                 port = 21;
             }
             String target = ensureIni();
@@ -497,7 +502,10 @@ namespace ShareToPcReciver.Etp
                 return 21;
             }
         }
-        public void RestartEverything()
+
+        public int ProcessId { get; private set; }
+
+        public void ExitEverything()
         {
             if (string.IsNullOrEmpty(_locator.EverythingExe))
                 throw new InvalidOperationException("Everything.exe 路径为空。");
@@ -517,12 +525,32 @@ namespace ShareToPcReciver.Etp
                 Log.Error("Failed to Exit Everything", ex);
                 throw new InvalidOperationException("启动 Everything 失败：" + ex.Message, ex);
             }
+        }
+        public void RestartEverything()
+        {
+            ExitEverything();
             LaunchEverything();
         }
         private void LaunchEverything()
         {
             if (string.IsNullOrEmpty(_locator.EverythingExe))
                 throw new InvalidOperationException("Everything.exe 路径为空。");
+            try
+            {
+
+                Process p = this.ProcessId > 0 ? Process.GetProcessById(this.ProcessId) : null;
+                if (p != null)
+                {
+                    if (p.ProcessName == "Everything")
+                    {
+                        p.Kill();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+
+            }
             try
             {
                 var psi = new ProcessStartInfo
@@ -532,7 +560,7 @@ namespace ShareToPcReciver.Etp
                     UseShellExecute = true,
                     Arguments = "-startup -instance Everything_ShareToPc",
                 };
-                Process.Start(psi);
+                this.ProcessId = Process.Start(psi).Id;
             }
             catch (Exception ex)
             {
