@@ -1,4 +1,5 @@
 using ShareToPcReciver.Config;
+using ShareToPcReciver.Etp;
 using ShareToPcReciver.Models;
 using ShareToPcReciver.Storage;
 using System;
@@ -144,15 +145,16 @@ namespace ShareToPcReciver.Net
 
         public async Task StartAsync(int port)
         {
+            EtpBootstrap bo = new EtpBootstrap();
             Stop();
             Port = port;
             _cts = new CancellationTokenSource();
             IPAddress listenAddr = IPAddress.Any;
             if (!string.IsNullOrWhiteSpace(Config.ListenIp) && IPAddress.TryParse(Config.ListenIp, out var parsed))
                 listenAddr = parsed;
-            _tcpForward = new TcpPortForwarder(listenAddr, port + 1,"127.12.34.56",21);
+            _tcpForward = new TcpPortForwarder(listenAddr, port + 1,"127.0.0.1", bo.GetEtpPort());
             _tcpForward.Start();
-            Util.Log.Info($"TCP forward server started. Forward {listenAddr}:{port} => 127.12.34.56:21");
+            Util.Log.Info($"TCP forward server started. Forward {listenAddr}:{port} => 127.0.0.1:{bo.GetEtpPort()}");
             _listener = new TcpListener(listenAddr, port);
             _listener.Start();
             Util.Log.Info($"TCP server started on port {port}");

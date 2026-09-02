@@ -469,7 +469,7 @@ namespace ShareToPcReciver
                                 }
                                 this.linkEtpStatus.Text = "状态检查...";
                                 var running = locator.IsEtpRunning(bo.GetEtpPort());
-                                this.linkEtpStatus.Text = running ? "已就绪" : "未就绪";
+                                this.linkEtpStatus.Text = running ? "已就绪，port="+bo.GetEtpPort() : "未就绪";
                             }));
                         }
                         catch(Exception ex)
