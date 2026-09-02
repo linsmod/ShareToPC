@@ -103,9 +103,6 @@ public class EtpSettingsActivity extends AppCompatActivity {
             p.paths.add(new PathEntry("common", "音乐目录", "regex:[A-Z]:\\\\Users\\\\([^\\\\]+)\\\\Musics\\\\([^\\\\]+)"));
             p.paths.add(new PathEntry("common", "Program Files", "path:regex:[A-Z]:\\\\Program\\sFiles",false));
             p.paths.add(new PathEntry("common", "Program Files (x86)", "path:regex:[A-Z]:\\\\Program\\sFiles\\s\\(x86\\)",false));
-            for (char c = 'A'; c <= 'Z'; c++) {
-                p.paths.add(new PathEntry("drive", c + ": 盘", c + ":\\",false));
-            }
             p.paths.add(new PathEntry("custom_path", "D:\\Software", "D:\\Software",false));
             p.maxResults = 200;
             for (String f : new String[]{"name", "size", "path", "extension", "date_modified", "date_created"}) {
@@ -199,7 +196,7 @@ public class EtpSettingsActivity extends AppCompatActivity {
             if (label.contains("PDF")) return github.linsmod.sharetopc.R.drawable.ic_type_pdf;
             if (label.contains("文本") || label.contains("txt")) return github.linsmod.sharetopc.R.drawable.ic_type_txt;
             if (label.contains("压缩")) return github.linsmod.sharetopc.R.drawable.ic_type_zip;
-            if (label.contains("程序") || label.contains("exe")) return github.linsmod.sharetopc.R.drawable.ic_type_exe;
+            if (label.contains("程序") || label.toLowerCase().contains("exe")) return github.linsmod.sharetopc.R.drawable.ic_type_exe;
             if (label.contains("APK")) return github.linsmod.sharetopc.R.drawable.ic_type_apk;
             if (label.contains("思维导图")) return github.linsmod.sharetopc.R.drawable.ic_mindmap;
             if (label.contains("PSD")) return github.linsmod.sharetopc.R.drawable.ic_type_psd;

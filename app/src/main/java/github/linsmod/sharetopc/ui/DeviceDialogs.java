@@ -51,7 +51,6 @@ public final class DeviceDialogs {
                 : "未知");
 
         EditText etAlias = layout.findViewById(R.id.etAlias);
-        etAlias.setHint(device.name);
         if (device.alias != null) {
             etAlias.setText(device.alias);
         }
