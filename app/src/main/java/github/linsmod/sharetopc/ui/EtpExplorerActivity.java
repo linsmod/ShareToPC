@@ -60,6 +60,8 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     public static final String EXTRA_HOST = "host";
     public static final String EXTRA_DEVICE_ID = "device_id";
     public static final String EXTRA_PORT = "port";
+    public static final String EXTRA_FILTER_CATEGORY = "filter_category";
+    public static final String EXTRA_INITIAL_PATH = "initial_path";
 
     private EtpExplorerViewModel viewModel;
     private EtpExplorerAdapter adapter;
@@ -87,6 +89,8 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private String deviceHost;
     private String deviceId;
     private int devicePort;
+    private String filterCategory;
+    private String initialPath;
 
     // 分类入口
     private TextView tvCacheInfo;
@@ -147,6 +151,8 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         deviceHost = intent.getStringExtra(EXTRA_HOST);
         deviceId = intent.getStringExtra(EXTRA_DEVICE_ID);
         devicePort = intent.getIntExtra(EXTRA_PORT, 0);
+        filterCategory = intent.getStringExtra(EXTRA_FILTER_CATEGORY);
+        initialPath = intent.getStringExtra(EXTRA_INITIAL_PATH);
         if (TextUtils.isEmpty(deviceHost)) {
             Toast.makeText(this, "未指定设备", Toast.LENGTH_SHORT).show();
             finish();
@@ -155,6 +161,12 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
 
         initViews();
         initViewModel();
+
+        // 如果指定了初始路径，直接进入浏览模式
+        if (initialPath != null && !initialPath.isEmpty()) {
+            applyMode(true);
+            browseViewModel.openFolder(initialPath);
+        }
     }
 
     @Override
@@ -342,6 +354,16 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
             return;
         }
 
+        if (filterCategory != null && !filterCategory.isEmpty()) {
+            for (EtpExplorerViewModel.CategoryResult c : fullCategories) {
+                if (filterCategory.equals(c.label)) {
+                    selectedCategories.add(c.label);
+                    break;
+                }
+            }
+            filterCategory = null;
+        }
+
         layoutEmpty.setVisibility(View.GONE);
         tilExplorerSearch.setVisibility(View.VISIBLE);
         layoutExplorerSort.setVisibility(View.VISIBLE);
@@ -497,6 +519,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
                         ? EtpResultAdapter.FOOTER_LOAD_MORE : EtpResultAdapter.FOOTER_ALL_LOADED,
                 (int) f.totalCount);
         rvExplorer.setVisibility(View.VISIBLE);
+        rvExplorer.scrollToPosition(0);
     }
 
     private void renderBrowseLoadMore(EtpBrowseViewModel.LoadMoreState s) {
@@ -618,7 +641,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         List<String> terms = EtpExplorerViewModel.parseTerms(searchQuery);
         adapter.setHighlightTerms(terms);
 
-        // chips 始终展示全部可用分类（仅受搜索影响，不受选中影响），便于多选
+        // chips 始终展示全部可用分类（仅受搜索影响，不受选中影响）
         List<EtpExplorerViewModel.CategoryResult> chipView =
                 EtpExplorerViewModel.applyView(fullCategories, null,
                         searchQuery, currentSort, sortAsc);
@@ -645,21 +668,16 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         rvExplorer.setVisibility(View.VISIBLE);
     }
 
-    /** 渲染分类筛选浮动按钮：点击弹出多选菜单。 */
+    /** 渲染分类筛选浮动按钮：点击弹出单选菜单。 */
     private void buildCategoryChips(List<EtpExplorerViewModel.CategoryResult> categories) {
         fabCategories.setVisibility(View.VISIBLE);
         fabCategories.setOnClickListener(v -> {
             PopupMenu popup = new PopupMenu(this, v);
             for (int i = 0; i < categories.size(); i++) {
                 EtpExplorerViewModel.CategoryResult c = categories.get(i);
-                MenuItem item = popup.getMenu().add(Menu.NONE, i, i, c.label + " (" + c.items.size() + ")");
-                item.setCheckable(true);
-                item.setChecked(selectedCategories.contains(c.label));
+                popup.getMenu().add(Menu.NONE, i, i, c.label + " (" + c.items.size() + ")");
             }
-            // 添加"全部"选项
-            MenuItem allItem = popup.getMenu().add(Menu.NONE, -1, categories.size(), "全部");
-            allItem.setCheckable(true);
-            allItem.setChecked(selectedCategories.isEmpty());
+            popup.getMenu().add(Menu.NONE, -1, categories.size(), "全部");
 
             popup.setOnMenuItemClickListener(item -> {
                 int idx = item.getItemId();
@@ -671,6 +689,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
                     if (selectedCategories.contains(label)) {
                         selectedCategories.remove(label);
                     } else {
+                        selectedCategories.clear();
                         selectedCategories.add(label);
                     }
                 }

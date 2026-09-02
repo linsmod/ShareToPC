@@ -19,12 +19,15 @@
             android:layout_height="wrap_content"
             app:navigationIcon="?attr/homeAsUpIndicator" />
 
-        <!-- 任务列表内容区（TaskFragment） -->
-        <FrameLayout
-            android:id="@+id/deviceTasksContent"
+        <!-- 分类快捷入口网格 -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rvCategoryActions"
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:padding="8dp" />
+
     </LinearLayout>
 
 </FrameLayout>
