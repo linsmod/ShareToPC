@@ -77,6 +77,21 @@ public class EtpSettingsActivity extends AppCompatActivity {
         String excludeText;
         /** 搜索页开关：查询时是否附加结果排除列表。 */
         boolean excludeEnabled = true;
+
+        /** 快速检索分类：包含标签、搜索模式、图标资源 ID 和颜色资源 ID。 */
+        static class QuickSearchCategory {
+            final String label;
+            final String pattern;
+            final int iconRes;
+            final int colorRes;
+
+            QuickSearchCategory(String label, String pattern, int iconRes, int colorRes) {
+                this.label = label;
+                this.pattern = pattern;
+                this.iconRes = iconRes;
+                this.colorRes = colorRes;
+            }
+        }
         // Search Syntax using paths: pathA | pathB | pathC {kw}
         static PathPresets defaults() {
             PathPresets p = new PathPresets();
@@ -142,28 +157,67 @@ public class EtpSettingsActivity extends AppCompatActivity {
          * 解析快速检索文本：每行 "显示名 (过滤模式)"。
          * 取最后一对括号：括号前为显示名，括号内为搜索关键词（原样发送，不额外处理）。
          * 无括号的行：整行同时作为显示名和搜索关键词。
-         * @return [label, pattern] 列表
+         * @return QuickSearchCategory 列表（包含预定义的图标和颜色）
          */
-        static List<String[]> parseQuickSearches(String text) {
-            List<String[]> out = new ArrayList<>();
+        static List<QuickSearchCategory> parseQuickSearches(String text) {
+            List<QuickSearchCategory> out = new ArrayList<>();
             if (text == null || text.isEmpty()) return out;
             for (String line : text.split("\\r?\\n")) {
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 int open = line.lastIndexOf('(');
                 int close = line.lastIndexOf(')');
+                String label;
+                String pattern;
                 if (open > 0 && close > open) {
-                    String label = line.substring(0, open).trim();
-                    String pattern = line.substring(open + 1, close).trim();
-                    if (!label.isEmpty() && !pattern.isEmpty()) {
-                        out.add(new String[]{label, pattern});
-                        continue;
+                    label = line.substring(0, open).trim();
+                    pattern = line.substring(open + 1, close).trim();
+                    if (label.isEmpty() || pattern.isEmpty()) {
+                        label = line;
+                        pattern = line;
                     }
+                } else {
+                    label = line;
+                    pattern = line;
                 }
-                // 无括号或括号不完整 → 整行作为显示名和搜索关键词
-                out.add(new String[]{line, line});
+                // 根据标签获取预定义的图标和颜色
+                int iconRes = iconForLabel(label);
+                int colorRes = colorForLabel(label);
+                out.add(new QuickSearchCategory(label, pattern, iconRes, colorRes));
             }
             return out;
+        }
+
+        /** 根据标签获取预定义的图标资源 ID */
+        static int iconForLabel(String label) {
+            if (label.contains("图片")) return github.linsmod.sharetopc.R.drawable.ic_type_img;
+            if (label.contains("视频")) return github.linsmod.sharetopc.R.drawable.ic_type_video;
+            if (label.contains("音频")) return github.linsmod.sharetopc.R.drawable.ic_type_audio;
+            if (label.contains("Word")) return github.linsmod.sharetopc.R.drawable.ic_type_docx;
+            if (label.contains("Excel")) return github.linsmod.sharetopc.R.drawable.ic_type_xlsx;
+            if (label.contains("PPT")) return github.linsmod.sharetopc.R.drawable.ic_type_pptx;
+            if (label.contains("PDF")) return github.linsmod.sharetopc.R.drawable.ic_type_pdf;
+            if (label.contains("文本") || label.contains("txt")) return github.linsmod.sharetopc.R.drawable.ic_type_txt;
+            if (label.contains("压缩")) return github.linsmod.sharetopc.R.drawable.ic_type_zip;
+            if (label.contains("程序") || label.contains("exe")) return github.linsmod.sharetopc.R.drawable.ic_type_exe;
+            if (label.contains("APK")) return github.linsmod.sharetopc.R.drawable.ic_type_apk;
+            if (label.contains("思维导图")) return github.linsmod.sharetopc.R.drawable.ic_mindmap;
+            if (label.contains("PSD")) return github.linsmod.sharetopc.R.drawable.ic_type_psd;
+            return github.linsmod.sharetopc.R.drawable.ic_file;
+        }
+
+        /** 根据标签获取预定义的颜色资源 ID */
+        static int colorForLabel(String label) {
+            if (label.contains("图片")) return github.linsmod.sharetopc.R.color.category_image;
+            if (label.contains("视频")) return github.linsmod.sharetopc.R.color.category_video;
+            if (label.contains("音频")) return github.linsmod.sharetopc.R.color.category_audio;
+            if (label.contains("Word") || label.contains("Excel") || label.contains("PPT")
+                    || label.contains("PDF") || label.contains("文本")) return github.linsmod.sharetopc.R.color.category_document;
+            if (label.contains("压缩")) return github.linsmod.sharetopc.R.color.category_archive;
+            if (label.contains("程序") || label.contains("APK")) return github.linsmod.sharetopc.R.color.category_app;
+            if (label.contains("思维导图")) return github.linsmod.sharetopc.R.color.category_desktop;
+            if (label.contains("PSD")) return github.linsmod.sharetopc.R.color.category_video;
+            return github.linsmod.sharetopc.R.color.action_browse;
         }
 
         /**

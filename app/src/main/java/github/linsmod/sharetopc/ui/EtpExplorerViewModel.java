@@ -188,7 +188,7 @@ public class EtpExplorerViewModel extends ViewModel {
     private void loadOnBackground(boolean firstLoad) {
         EtpClient client = null;
         try {
-            List<String[]> categories = buildCategories();
+            List<EtpSettingsActivity.PathPresets.QuickSearchCategory> categories = buildCategories();
             List<String> paths = getCheckedPaths();
             List<String> excludes = getExcludes();
             EtpSettingsActivity.PathPresets presets = loadPresets();
@@ -212,17 +212,17 @@ public class EtpExplorerViewModel extends ViewModel {
             List<CategoryResult> results = new ArrayList<>();
             for (int i = 0; i < categories.size(); i++) {
                 if (cancelled) break;
-                String[] cat = categories.get(i);
+                EtpSettingsActivity.PathPresets.QuickSearchCategory cat = categories.get(i);
                 progressCurrent = i + 1;
-                progressLabel = cat[0];
-                emit(new Initializing(firstLoad, i + 1, categories.size(), cat[0]));
+                progressLabel = cat.label;
+                emit(new Initializing(firstLoad, i + 1, categories.size(), cat.label));
 
-                String query = buildQuery(cat[1], paths, excludes);
+                String query = buildQuery(cat.pattern, paths, excludes);
                 EtpClient.QueryResult qr = c.query(query, COLUMNS,
                         presets.matchCase, presets.matchPath, presets.matchRegex,
                         presets.matchWholeWord, null, true, 0, CATEGORY_LIMIT);
                 if (cancelled) break;
-                CategoryResult cr = new CategoryResult(cat[0], cat[1]);
+                CategoryResult cr = new CategoryResult(cat.label, cat.pattern);
                 if (qr.items != null) cr.items.addAll(qr.items);
                 results.add(cr);
             }
@@ -276,9 +276,9 @@ public class EtpExplorerViewModel extends ViewModel {
     // ==================== 预设 / 缓存 ====================
 
     /** 分类取自设置页"快速检索"；为空时回退到内置默认分类。 */
-    private static List<String[]> buildCategories() {
+    private static List<EtpSettingsActivity.PathPresets.QuickSearchCategory> buildCategories() {
         EtpSettingsActivity.PathPresets presets = loadPresets();
-        List<String[]> items = EtpSettingsActivity.PathPresets.parseQuickSearches(presets.quickSearchText);
+        List<EtpSettingsActivity.PathPresets.QuickSearchCategory> items = EtpSettingsActivity.PathPresets.parseQuickSearches(presets.quickSearchText);
         if (!items.isEmpty()) return items;
 
         String[] labels = {"图片", "视频", "音频", "文档", "压缩包", "安装程序"};
@@ -286,9 +286,11 @@ public class EtpExplorerViewModel extends ViewModel {
                 "ext:doc | ext:docx | ext:pdf | ext:txt",
                 "ext:zip | ext:rar | ext:7z | ext:tar.gz",
                 "ext:exe | ext:msi"};
-        List<String[]> fallback = new ArrayList<>();
+        List<EtpSettingsActivity.PathPresets.QuickSearchCategory> fallback = new ArrayList<>();
         for (int i = 0; i < labels.length; i++) {
-            fallback.add(new String[]{labels[i], patterns[i]});
+            int iconRes = EtpSettingsActivity.PathPresets.iconForLabel(labels[i]);
+            int colorRes = EtpSettingsActivity.PathPresets.colorForLabel(labels[i]);
+            fallback.add(new EtpSettingsActivity.PathPresets.QuickSearchCategory(labels[i], patterns[i], iconRes, colorRes));
         }
         return fallback;
     }

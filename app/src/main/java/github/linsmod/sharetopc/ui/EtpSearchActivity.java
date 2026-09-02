@@ -558,7 +558,7 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
 
     /** 渲染快速检索 chips：设置页每行"显示名 (过滤模式)"，点击后括号内模式直接作为 kw 搜索。 */
     private void refreshQuickSearches() {
-        List<String[]> items =
+        List<EtpSettingsActivity.PathPresets.QuickSearchCategory> items =
                 EtpSettingsActivity.PathPresets.parseQuickSearches(presets.quickSearchText);
         if (items.isEmpty()) {
             layoutQuickSearch.setVisibility(View.GONE);
@@ -566,15 +566,15 @@ public class EtpSearchActivity extends androidx.appcompat.app.AppCompatActivity 
         }
         layoutQuickSearch.setVisibility(View.VISIBLE);
         cgQuickSearch.removeAllViews();
-        for (String[] item : items) {
+        for (EtpSettingsActivity.PathPresets.QuickSearchCategory item : items) {
             Chip chip = new Chip(this, null, com.google.android.material.R.attr.chipStyle);
-            chip.setText(item[0]);
+            chip.setText(item.label);
             chip.setClickable(true);
             chip.setCheckable(false);
             chip.setOnClickListener(v -> {
                 // 与搜索历史一致：模式直接填入搜索框并作为 kw 发起搜索
-                etSearch.setText(item[1]);
-                viewModel.search(item[1]);
+                etSearch.setText(item.pattern);
+                viewModel.search(item.pattern);
             });
             cgQuickSearch.addView(chip);
         }

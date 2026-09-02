@@ -97,12 +97,9 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
 
         // 从设置加载快速检索类目
         EtpSettingsActivity.PathPresets presets = EtpExplorerViewModel.loadPresets();
-        List<String[]> quickSearches = EtpSettingsActivity.PathPresets.parseQuickSearches(presets.quickSearchText);
-        for (String[] qs : quickSearches) {
-            String label = qs[0];
-            int iconRes = iconForCategory(label);
-            int colorRes = colorForCategory(label);
-            items.add(new DeviceTasksAdapter.ActionItem(label, iconRes, colorRes, label));
+        List<EtpSettingsActivity.PathPresets.QuickSearchCategory> quickSearches = EtpSettingsActivity.PathPresets.parseQuickSearches(presets.quickSearchText);
+        for (EtpSettingsActivity.PathPresets.QuickSearchCategory qs : quickSearches) {
+            items.add(new DeviceTasksAdapter.ActionItem(qs.label, qs.iconRes, qs.colorRes, qs.label));
         }
 
         // Section 2: 磁盘文件
@@ -141,35 +138,6 @@ public class DeviceTasksActivity extends androidx.appcompat.app.AppCompatActivit
         glm.setSpanSizeLookup(new DeviceTasksAdapter.SpanSizeProvider(adapter.getItems()));
         rv.setLayoutManager(glm);
         rv.setAdapter(adapter);
-    }
-
-    private static int iconForCategory(String label) {
-        if (label.contains("图片")) return R.drawable.ic_image;
-        if (label.contains("视频")) return R.drawable.ic_video;
-        if (label.contains("音频")) return R.drawable.ic_audio;
-        if (label.contains("文档") || label.contains("Word") || label.contains("Excel")
-                || label.contains("PPT") || label.contains("PDF") || label.contains("文本")
-                || label.contains("PSD")) return R.drawable.ic_document;
-        if (label.contains("压缩")) return R.drawable.ic_archive;
-        if (label.contains("程序") || label.contains("APK")) return R.drawable.ic_app;
-        if (label.contains("思维导图")) return R.drawable.ic_mindmap;
-        return R.drawable.ic_folder;
-    }
-
-    private static int colorForCategory(String label) {
-        if (label.contains("图片")) return R.color.category_image;
-        if (label.contains("视频")) return R.color.category_video;
-        if (label.contains("音频")) return R.color.category_audio;
-        if (label.contains("文档") || label.contains("Word")) return R.color.category_document;
-        if (label.contains("Excel")) return R.color.category_document;
-        if (label.contains("PPT")) return R.color.category_document;
-        if (label.contains("PDF")) return R.color.category_document;
-        if (label.contains("文本")) return R.color.category_document;
-        if (label.contains("压缩")) return R.color.category_archive;
-        if (label.contains("程序") || label.contains("APK")) return R.color.category_app;
-        if (label.contains("思维导图")) return R.color.category_desktop;
-        if (label.contains("PSD")) return R.color.category_video;
-        return R.color.action_browse;
     }
 
     private void onActionClick(DeviceTasksAdapter.ActionItem item) {

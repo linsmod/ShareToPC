@@ -161,7 +161,7 @@ public class DeviceTasksAdapter extends RecyclerView.Adapter<RecyclerView.ViewHo
             vh.btn.setText(a.label);
             Drawable icon = ContextCompat.getDrawable(vh.btn.getContext(), a.iconRes);
             vh.btn.setIcon(icon);
-            vh.btn.setIconTintResource(a.iconTint);
+            vh.btn.setIconTint(null);
             vh.btn.setOnClickListener(v -> listener.onClick(a));
         }
     }
