@@ -324,11 +324,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_marginEnd="16dp"
+        android:layout_margin="16dp"
         android:layout_marginBottom="80dp"
         android:contentDescription="分类筛选"
         android:visibility="gone"
-        app:fabSize="mini"
+        app:fabCustomSize="48dp"
         app:srcCompat="@android:drawable/ic_menu_sort_by_size" />
 
 </FrameLayout>
