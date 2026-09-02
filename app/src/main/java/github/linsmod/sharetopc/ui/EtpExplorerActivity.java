@@ -101,6 +101,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
     private View layoutExplorerSort;
     private TextView tvEmpty;
     private List<EtpExplorerViewModel.CategoryResult> fullCategories;
+    private List<EtpExplorerViewModel.CategoryResult> allCategories;
     private final Set<String> selectedCategories = new HashSet<>();
     private String searchQuery = "";
     private String currentSort;
@@ -337,6 +338,7 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         layoutError.setVisibility(View.GONE);
 
         fullCategories = EtpExplorerViewModel.nonEmpty(r.categories);
+        allCategories = r.categories;
         // 数据刷新后清理已失效的分类选中
         Set<String> labels = new HashSet<>();
         for (EtpExplorerViewModel.CategoryResult c : fullCategories) labels.add(c.label);
@@ -641,9 +643,18 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         List<String> terms = EtpExplorerViewModel.parseTerms(searchQuery);
         adapter.setHighlightTerms(terms);
 
-        // chips 始终展示全部可用分类（仅受搜索影响，不受选中影响）
+        // chips 始终展示全部可用分类（含选中的空分类，仅受搜索影响）
+        List<EtpExplorerViewModel.CategoryResult> chipSource = new ArrayList<>(fullCategories);
+        if (allCategories != null && !selectedCategories.isEmpty()) {
+            for (EtpExplorerViewModel.CategoryResult c : allCategories) {
+                if (selectedCategories.contains(c.label) && (c.items == null || c.items.isEmpty())
+                        && !chipSource.contains(c)) {
+                    chipSource.add(c);
+                }
+            }
+        }
         List<EtpExplorerViewModel.CategoryResult> chipView =
-                EtpExplorerViewModel.applyView(fullCategories, null,
+                EtpExplorerViewModel.applyView(chipSource, null,
                         searchQuery, currentSort, sortAsc);
         List<EtpExplorerViewModel.CategoryResult> view =
                 EtpExplorerViewModel.applyView(fullCategories, selectedCategories,
