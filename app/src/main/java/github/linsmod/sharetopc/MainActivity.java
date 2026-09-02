@@ -133,6 +133,7 @@ public class MainActivity extends AppCompatActivity implements TaskFragment.Devi
                 .show();
     }
 
+    @Override
     public void showEtpSearch(DiscoveredDevice device) {
         Intent intent = new Intent(this, EtpSearchActivity.class);
         intent.putExtra(EtpSearchActivity.EXTRA_DEVICE_NAME, device.displayName());
@@ -141,12 +142,20 @@ public class MainActivity extends AppCompatActivity implements TaskFragment.Devi
         intent.putExtra(EtpSearchActivity.EXTRA_PORT, device.port);
         startActivity(intent);
     }
+    @Override
     public void showEtpExplorer(DiscoveredDevice device) {
+        showEtpExplorerWithCategory(device, null);
+    }
+
+    public void showEtpExplorerWithCategory(DiscoveredDevice device, String category) {
         Intent intent = new Intent(this, EtpExplorerActivity.class);
         intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_NAME, device.displayName());
         intent.putExtra(EtpExplorerActivity.EXTRA_HOST, device.host);
         intent.putExtra(EtpExplorerActivity.EXTRA_DEVICE_ID, device.deviceId);
         intent.putExtra(EtpExplorerActivity.EXTRA_PORT, device.port);
+        if (category != null) {
+            intent.putExtra(EtpExplorerActivity.EXTRA_FILTER_CATEGORY, category);
+        }
         startActivity(intent);
     }
 

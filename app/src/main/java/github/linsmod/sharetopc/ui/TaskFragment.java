@@ -38,7 +38,7 @@ public class TaskFragment extends Fragment {
     public static final String EXTRA_DEVICE_NAME = "deviceName";
     public static final String EXTRA_DEVICE_ID = "deviceId";
 
-    /** 设备操作回调：由宿主 Activity 实现（MainActivity / DeviceTasksActivity）。 */
+    /** 设备操作回调：由宿主 Activity 实现（MainActivity）。 */
     public interface DeviceActionListener {
         void showEtpExplorer(DiscoveredDevice device);
         void showEtpSearch(DiscoveredDevice device);
