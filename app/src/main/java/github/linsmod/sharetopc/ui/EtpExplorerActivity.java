@@ -355,26 +355,13 @@ public class EtpExplorerActivity extends androidx.appcompat.app.AppCompatActivit
         }
 
         if (filterCategory != null && !filterCategory.isEmpty()) {
-            boolean found = false;
-            for (EtpExplorerViewModel.CategoryResult c : fullCategories) {
+            for (EtpExplorerViewModel.CategoryResult c : r.categories) {
                 if (filterCategory.equals(c.label)) {
                     selectedCategories.add(c.label);
-                    found = true;
                     break;
                 }
             }
             filterCategory = null;
-            if (!found) {
-                // 该分类无数据，显示空状态
-                rvExplorer.setVisibility(View.GONE);
-                fabCategories.setVisibility(View.GONE);
-                tvCacheInfo.setVisibility(View.GONE);
-                tilExplorerSearch.setVisibility(View.GONE);
-                layoutExplorerSort.setVisibility(View.GONE);
-                tvEmpty.setText(R.string.etp_explorer_empty);
-                layoutEmpty.setVisibility(View.VISIBLE);
-                return;
-            }
         }
 
         layoutEmpty.setVisibility(View.GONE);
