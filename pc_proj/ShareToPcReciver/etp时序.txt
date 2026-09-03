@@ -1,0 +1,6 @@
+时序:
+1. Android → HELLO → PC
+2. PC → ACK{etpPort(X), sid（不入库，用于跨socket授权）} → Android     ← 复用 HELLO ACK，移除etpPort字段，安卓端也不要持久化了，可以先忽略这里的etpPort，只加sid，最后来弄。
+3. Android → FEAT{deviceId, sid,"etp+etp_download"} → PC ← 新增消息 
+4. PC 验证 sid → 向中间件提供deviceId+生成的pass，回 ACK ({etp_port:getEptPort(),etp_pass:xxxxx,etp_download_pass:xxxxx}) empty the related pass if etp_disabled|etp_download_disabled
+5. Android → ETP connect (USER <deviceId> PASS <etp_pass>) → ETP 中间件验证
