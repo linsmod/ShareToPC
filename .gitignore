@@ -18,3 +18,5 @@ pc_proj/ShareToPcReciver/ShareToPcReciver/obj/
 pc_proj/ShareToPcReciver/ShareToPcReciver/bin/
 download_icons/
 app/src/main/assets/ShareToPcReciver.zip
+**/obj/
+**/bin/
