@@ -29,6 +29,7 @@ namespace ShareToPcReciver.Net
 
         public DeviceInfo clientDevice;
         private AuthInfo currentJobAuth;
+        private string _sessionSid;
 
         /// <summary>会话断开时触发，用于 TransferServer 清理会话列表。</summary>
         public event Action<ClientSession> Disconnected;
@@ -58,6 +59,9 @@ namespace ShareToPcReciver.Net
                     {
                         case "HELLO":
                             await HandleHello(stream, header);
+                            break;
+                        case "FEAT":
+                            await HandleFeat(stream, header);
                             break;
                         case "OBJECT":
                             await HandleObjectStream(stream, header, payloadLength);
@@ -200,7 +204,43 @@ namespace ShareToPcReciver.Net
                 LastSeen = DateTime.UtcNow
             });
             if(!oneway)
-                await Protocol.WriteHelloAckAsync(stream,_server.GetEtpServicePort(), _config.DeviceId, _config.HeartbeatIntervalMs, KnownFolder.GetAll(), Drives.GetAll(), _ct);
+            {
+                _sessionSid = Guid.NewGuid().ToString("N");
+                await Protocol.WriteHelloAckAsync(stream, _sessionSid, _config.DeviceId, _config.HeartbeatIntervalMs, KnownFolder.GetAll(), Drives.GetAll(), _ct);
+            }
+        }
+
+        /// <summary>
+        /// 处理 FEAT 请求：验证 sid，根据 features 生成一次性 ETP pass，返回给安卓端。
+        /// </summary>
+        private async Task HandleFeat(Stream stream, JsonElement header)
+        {
+            string deviceId = header.TryGetProperty("deviceId", out JsonElement did) ? did.GetString() ?? "" : "";
+            string sid = header.TryGetProperty("sid", out JsonElement sidEl) ? sidEl.GetString() ?? "" : "";
+            string features = header.TryGetProperty("features", out JsonElement featEl) ? featEl.GetString() ?? "" : "";
+
+            // 验证 sid
+            if (string.IsNullOrEmpty(_sessionSid) || sid != _sessionSid)
+            {
+                Util.Log.Warn($"FEAT rejected: invalid sid from {clientDevice?.DeviceName ?? "?"}");
+                await Protocol.WriteAckAsync(stream, false, "invalid sid", _ct);
+                return;
+            }
+
+            // 解析 features
+            bool etpEnabled = _config.SearchEnabled && features.Contains("etp");
+            bool etpDownloadEnabled = _config.PullEnabled && features.Contains("etp_download");
+
+            // 生成一次性 pass
+            var (etpPass, etpDownloadPass) = _server.CreateEtpSession(deviceId, etpEnabled, etpDownloadEnabled);
+
+            Util.Log.Info($"FEAT from {clientDevice?.DeviceName ?? "?"}: deviceId={deviceId}, etp={etpEnabled}, etp_download={etpDownloadEnabled}");
+
+            await Protocol.WriteFeatAckAsync(stream,
+                etpEnabled ? _server.GetEtpServicePort() : 0,
+                etpPass,
+                etpDownloadPass,
+                _ct);
         }
 
         /// <summary>

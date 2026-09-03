@@ -250,6 +250,16 @@ public final class TransferProtocol {
         return header;
     }
 
+    /** 发送 FEAT 请求帧（请求 ETP 凭证）。 */
+    public static void writeFeat(DataOutputStream out, String deviceId, String sid, String features) throws IOException {
+        JsonObject header = new JsonObject();
+        header.addProperty("type", "FEAT");
+        header.addProperty("deviceId", deviceId != null ? deviceId : "");
+        header.addProperty("sid", sid != null ? sid : "");
+        header.addProperty("features", features != null ? features : "");
+        writeFrame(out, header);
+    }
+
     // ---- 日志辅助 ----
 
     private static void logSend(JsonObject header) {

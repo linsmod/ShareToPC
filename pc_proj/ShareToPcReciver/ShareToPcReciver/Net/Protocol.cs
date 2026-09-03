@@ -103,8 +103,8 @@ namespace ShareToPcReciver.Net
             await stream.FlushAsync(ct);
         }
 
-        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本、协议版本、设备 ID、心跳间隔、登录用户名、真实用户目录及磁盘列表。</summary>
-        public static async Task WriteHelloAckAsync(Stream stream,int etpPort, string deviceId, int hbIntervalMs,
+        /// <summary>HELLO 握手 ACK，携带 PC 端程序版本、协议版本、设备 ID、心跳间隔、登录用户名、真实用户目录、磁盘列表及 sid。</summary>
+        public static async Task WriteHelloAckAsync(Stream stream, string sid, string deviceId, int hbIntervalMs,
             Dictionary<string, string> userFolders, List<Drives.DriveData> drives, CancellationToken ct)
         {
             var ack = new { type = "ACK", status = "OK", msg = "", version = AppVersion, protoVersion = ProtocolVersion,
@@ -112,8 +112,20 @@ namespace ShareToPcReciver.Net
                 machineName = Environment.MachineName,
                 userFolders = userFolders ?? new Dictionary<string, string>(),
                 drives = drives ?? new List<Drives.DriveData>(),
-                etpPort = etpPort,
+                sid,
             }; 
+            string json = JsonSerializer.Serialize(ack);
+            byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
+            byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));
+            await stream.WriteAsync(lenBytes, 0, 4, ct);
+            await stream.WriteAsync(jsonBytes, 0, jsonBytes.Length, ct);
+            await stream.FlushAsync(ct);
+        }
+
+        /// <summary>FEAT 响应：返回 ETP 端口及一次性登录凭证。</summary>
+        public static async Task WriteFeatAckAsync(Stream stream, int etpPort, string etpPass, string etpDownloadPass, CancellationToken ct)
+        {
+            var ack = new { type = "ACK", status = "OK", msg = "", etp_port = etpPort, etp_pass = etpPass ?? "", etp_download_pass = etpDownloadPass ?? "" };
             string json = JsonSerializer.Serialize(ack);
             byte[] jsonBytes = Encoding.UTF8.GetBytes(json);
             byte[] lenBytes = BitConverter.GetBytes(IPAddress.HostToNetworkOrder(jsonBytes.Length));

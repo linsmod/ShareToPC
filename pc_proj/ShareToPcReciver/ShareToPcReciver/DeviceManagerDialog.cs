@@ -18,6 +18,13 @@ namespace ShareToPcReciver
         private Button btnBlock;
         private Button btnDeleteAuth;
         private Button btnDeleteDevice;
+        private DataGridViewTextBoxColumn colName;
+        private DataGridViewTextBoxColumn colDeviceId;
+        private DataGridViewTextBoxColumn colCredits;
+        private DataGridViewTextBoxColumn colIssuedAt;
+        private DataGridViewTextBoxColumn colExpiresAt;
+        private DataGridViewTextBoxColumn colLastSeen;
+        private DataGridViewTextBoxColumn colBlocked;
         private Button btnClose;
 
         /// <summary>
@@ -38,147 +45,181 @@ namespace ShareToPcReciver
 
         private void InitializeComponent()
         {
-            this.dgvDevices = new DataGridView();
-            this.btnDeleteAuth = new Button();
-            this.btnClose = new Button();
-
+            this.dgvDevices = new System.Windows.Forms.DataGridView();
+            this.colName = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colDeviceId = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCredits = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIssuedAt = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colExpiresAt = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colLastSeen = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colBlocked = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.btnDeleteAuth = new System.Windows.Forms.Button();
+            this.btnClose = new System.Windows.Forms.Button();
+            this.btnEdit = new System.Windows.Forms.Button();
+            this.btnBlock = new System.Windows.Forms.Button();
+            this.btnDeleteDevice = new System.Windows.Forms.Button();
+            ((System.ComponentModel.ISupportInitialize)(this.dgvDevices)).BeginInit();
             this.SuspendLayout();
-
+            // 
             // dgvDevices
+            // 
             this.dgvDevices.AllowUserToAddRows = false;
             this.dgvDevices.AllowUserToDeleteRows = false;
             this.dgvDevices.AllowUserToResizeRows = false;
-            this.dgvDevices.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            this.dgvDevices.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            this.dgvDevices.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.dgvDevices.Location = new Point(12, 12);
+            this.dgvDevices.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.dgvDevices.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.dgvDevices.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.dgvDevices.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.colName,
+            this.colDeviceId,
+            this.colCredits,
+            this.colIssuedAt,
+            this.colExpiresAt,
+            this.colLastSeen,
+            this.colBlocked});
+            this.dgvDevices.Location = new System.Drawing.Point(12, 12);
             this.dgvDevices.MultiSelect = false;
             this.dgvDevices.Name = "dgvDevices";
             this.dgvDevices.ReadOnly = true;
             this.dgvDevices.RowHeadersVisible = false;
-            this.dgvDevices.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            this.dgvDevices.Size = new Size(620, 320);
+            this.dgvDevices.RowHeadersWidth = 51;
+            this.dgvDevices.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dgvDevices.Size = new System.Drawing.Size(987, 320);
             this.dgvDevices.TabIndex = 0;
-            this.dgvDevices.SelectionChanged += DgvDevices_SelectionChanged;
-            this.dgvDevices.CellDoubleClick += DgvDevices_CellDoubleClick;
-
-            // Columns
-            var colName = new DataGridViewTextBoxColumn();
-            colName.Name = "colName";
-            colName.HeaderText = "设备名称";
-            colName.FillWeight = 25;
-            colName.MinimumWidth = 100;
-            this.dgvDevices.Columns.Add(colName);
-
-            var colDeviceId = new DataGridViewTextBoxColumn();
-            colDeviceId.Name = "colDeviceId";
-            colDeviceId.HeaderText = "设备ID";
-            colDeviceId.FillWeight = 20;
-            colDeviceId.MinimumWidth = 100;
-            this.dgvDevices.Columns.Add(colDeviceId);
-
-            var colCredits = new DataGridViewTextBoxColumn();
-            colCredits.Name = "colCredits";
-            colCredits.HeaderText = "发送次数";
-            colCredits.FillWeight = 10;
-            colCredits.MinimumWidth = 70;
-            this.dgvDevices.Columns.Add(colCredits);
-
-            var colIssuedAt = new DataGridViewTextBoxColumn();
-            colIssuedAt.Name = "colIssuedAt";
-            colIssuedAt.HeaderText = "授权时间";
-            colIssuedAt.FillWeight = 15;
-            colIssuedAt.MinimumWidth = 120;
-            this.dgvDevices.Columns.Add(colIssuedAt);
-
-            var colExpiresAt = new DataGridViewTextBoxColumn();
-            colExpiresAt.Name = "colExpiresAt";
-            colExpiresAt.HeaderText = "过期时间";
-            colExpiresAt.FillWeight = 15;
-            colExpiresAt.MinimumWidth = 120;
-            this.dgvDevices.Columns.Add(colExpiresAt);
-
-            var colLastSeen = new DataGridViewTextBoxColumn();
-            colLastSeen.Name = "colLastSeen";
-            colLastSeen.HeaderText = "上次连接";
-            colLastSeen.FillWeight = 15;
-            colLastSeen.MinimumWidth = 120;
-            this.dgvDevices.Columns.Add(colLastSeen);
-
-            var colBlocked = new DataGridViewTextBoxColumn();
-            colBlocked.Name = "colBlocked";
-            colBlocked.HeaderText = "状态";
-            colBlocked.FillWeight = 8;
-            colBlocked.MinimumWidth = 60;
-            this.dgvDevices.Columns.Add(colBlocked);
-
-            // btnEdit
-            this.btnEdit = new Button();
-            this.btnEdit.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            this.btnEdit.Enabled = false;
-            this.btnEdit.Location = new Point(12, 342);
-            this.btnEdit.Size = new Size(75, 28);
-            this.btnEdit.Text = "编辑";
-            this.btnEdit.UseVisualStyleBackColor = true;
-            this.btnEdit.Click += BtnEdit_Click;
-
-            // btnBlock
-            this.btnBlock = new Button();
-            this.btnBlock.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            this.btnBlock.Enabled = false;
-            this.btnBlock.Location = new Point(93, 342);
-            this.btnBlock.Size = new Size(75, 28);
-            this.btnBlock.Text = "拉黑";
-            this.btnBlock.UseVisualStyleBackColor = true;
-            this.btnBlock.Click += BtnBlock_Click;
-
+            // 
+            // colName
+            // 
+            this.colName.FillWeight = 25F;
+            this.colName.HeaderText = "设备名称";
+            this.colName.MinimumWidth = 100;
+            this.colName.Name = "colName";
+            this.colName.ReadOnly = true;
+            // 
+            // colDeviceId
+            // 
+            this.colDeviceId.FillWeight = 20F;
+            this.colDeviceId.HeaderText = "设备ID";
+            this.colDeviceId.MinimumWidth = 100;
+            this.colDeviceId.Name = "colDeviceId";
+            this.colDeviceId.ReadOnly = true;
+            // 
+            // colCredits
+            // 
+            this.colCredits.FillWeight = 10F;
+            this.colCredits.HeaderText = "发送次数";
+            this.colCredits.MinimumWidth = 70;
+            this.colCredits.Name = "colCredits";
+            this.colCredits.ReadOnly = true;
+            // 
+            // colIssuedAt
+            // 
+            this.colIssuedAt.FillWeight = 15F;
+            this.colIssuedAt.HeaderText = "授权时间";
+            this.colIssuedAt.MinimumWidth = 120;
+            this.colIssuedAt.Name = "colIssuedAt";
+            this.colIssuedAt.ReadOnly = true;
+            // 
+            // colExpiresAt
+            // 
+            this.colExpiresAt.FillWeight = 15F;
+            this.colExpiresAt.HeaderText = "过期时间";
+            this.colExpiresAt.MinimumWidth = 120;
+            this.colExpiresAt.Name = "colExpiresAt";
+            this.colExpiresAt.ReadOnly = true;
+            // 
+            // colLastSeen
+            // 
+            this.colLastSeen.FillWeight = 15F;
+            this.colLastSeen.HeaderText = "上次连接";
+            this.colLastSeen.MinimumWidth = 120;
+            this.colLastSeen.Name = "colLastSeen";
+            this.colLastSeen.ReadOnly = true;
+            // 
+            // colBlocked
+            // 
+            this.colBlocked.FillWeight = 8F;
+            this.colBlocked.HeaderText = "状态";
+            this.colBlocked.MinimumWidth = 60;
+            this.colBlocked.Name = "colBlocked";
+            this.colBlocked.ReadOnly = true;
+            // 
             // btnDeleteAuth
-            this.btnDeleteAuth.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
+            // 
+            this.btnDeleteAuth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.btnDeleteAuth.Enabled = false;
-            this.btnDeleteAuth.Location = new Point(174, 342);
+            this.btnDeleteAuth.Location = new System.Drawing.Point(174, 342);
             this.btnDeleteAuth.Name = "btnDeleteAuth";
-            this.btnDeleteAuth.Size = new Size(100, 28);
+            this.btnDeleteAuth.Size = new System.Drawing.Size(100, 28);
             this.btnDeleteAuth.TabIndex = 1;
             this.btnDeleteAuth.Text = "删除授权";
             this.btnDeleteAuth.UseVisualStyleBackColor = true;
-            this.btnDeleteAuth.Click += BtnDeleteAuth_Click;
-
-            // btnDeleteDevice
-            this.btnDeleteDevice = new Button();
-            this.btnDeleteDevice.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            this.btnDeleteDevice.Enabled = false;
-            this.btnDeleteDevice.Location = new Point(280, 342);
-            this.btnDeleteDevice.Size = new Size(100, 28);
-            this.btnDeleteDevice.Text = "删除设备";
-            this.btnDeleteDevice.UseVisualStyleBackColor = true;
-            this.btnDeleteDevice.Click += BtnDeleteDevice_Click;
-
+            // 
             // btnClose
-            this.btnClose.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            this.btnClose.DialogResult = DialogResult.OK;
-            this.btnClose.Location = new Point(557, 342);
+            // 
+            this.btnClose.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnClose.DialogResult = System.Windows.Forms.DialogResult.OK;
+            this.btnClose.Location = new System.Drawing.Point(924, 342);
             this.btnClose.Name = "btnClose";
-            this.btnClose.Size = new Size(75, 28);
+            this.btnClose.Size = new System.Drawing.Size(75, 28);
             this.btnClose.TabIndex = 2;
             this.btnClose.Text = "关闭";
             this.btnClose.UseVisualStyleBackColor = true;
-
-            // Form
+            // 
+            // btnEdit
+            // 
+            this.btnEdit.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.btnEdit.Enabled = false;
+            this.btnEdit.Location = new System.Drawing.Point(12, 342);
+            this.btnEdit.Name = "btnEdit";
+            this.btnEdit.Size = new System.Drawing.Size(75, 28);
+            this.btnEdit.TabIndex = 3;
+            this.btnEdit.Text = "编辑";
+            this.btnEdit.UseVisualStyleBackColor = true;
+            // 
+            // btnBlock
+            // 
+            this.btnBlock.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.btnBlock.Enabled = false;
+            this.btnBlock.Location = new System.Drawing.Point(93, 342);
+            this.btnBlock.Name = "btnBlock";
+            this.btnBlock.Size = new System.Drawing.Size(75, 28);
+            this.btnBlock.TabIndex = 4;
+            this.btnBlock.Text = "拉黑";
+            this.btnBlock.UseVisualStyleBackColor = true;
+            // 
+            // btnDeleteDevice
+            // 
+            this.btnDeleteDevice.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.btnDeleteDevice.Enabled = false;
+            this.btnDeleteDevice.Location = new System.Drawing.Point(280, 342);
+            this.btnDeleteDevice.Name = "btnDeleteDevice";
+            this.btnDeleteDevice.Size = new System.Drawing.Size(100, 28);
+            this.btnDeleteDevice.TabIndex = 5;
+            this.btnDeleteDevice.Text = "删除设备";
+            this.btnDeleteDevice.UseVisualStyleBackColor = true;
+            // 
+            // DeviceManagerDialog
+            // 
+            this.AcceptButton = this.btnClose;
+            this.CancelButton = this.btnClose;
+            this.ClientSize = new System.Drawing.Size(1011, 382);
             this.Controls.Add(this.btnClose);
             this.Controls.Add(this.btnEdit);
             this.Controls.Add(this.btnBlock);
             this.Controls.Add(this.btnDeleteAuth);
             this.Controls.Add(this.btnDeleteDevice);
             this.Controls.Add(this.dgvDevices);
-            this.AcceptButton = this.btnClose;
-            this.CancelButton = this.btnClose;
-            this.ClientSize = new Size(644, 382);
-            this.FormBorderStyle = FormBorderStyle.FixedDialog;
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.StartPosition = FormStartPosition.CenterParent;
+            this.Name = "DeviceManagerDialog";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "设备管理";
+            ((System.ComponentModel.ISupportInitialize)(this.dgvDevices)).EndInit();
             this.ResumeLayout(false);
+
         }
 
         private void LoadDevices()

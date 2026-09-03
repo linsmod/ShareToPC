@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.transfer.EtpClient;
+import github.linsmod.sharetopc.transfer.EtpCredentialsCache;
 
 /**
  * ETP 搜索 ViewModel — 用 Consumer 回调代替 LiveData。
@@ -88,15 +89,26 @@ public class EtpSearchViewModel extends ViewModel {
         this.savedDeviceId = deviceId;
     }
 
-    /** 按 deviceId 从设备库解析最新连接地址（host + ETP 端口）；无记录时回退传入地址。 */
-    private String[] resolveTarget() {
+    /** 按 deviceId 从设备库解析最新 host；无记录时回退传入地址。 */
+    private String resolveHost() {
         if (savedDeviceId != null && !savedDeviceId.isEmpty()) {
             DiscoveredDevice d = App.get().deviceStore.getById(savedDeviceId);
-            if (d != null && d.host != null && !d.host.isEmpty() && d.etpPort > 0) {
-                return new String[]{d.host, String.valueOf(d.etpPort)};
+            if (d != null && d.host != null && !d.host.isEmpty()) {
+                return d.host;
             }
         }
-        return new String[]{savedHost, String.valueOf(savedPort)};
+        return savedHost;
+    }
+
+    /** 从设备库解析主传输端口（二进制协议）；无记录时回退 savedPort-1。 */
+    private int resolveMainPort() {
+        if (savedDeviceId != null && !savedDeviceId.isEmpty()) {
+            DiscoveredDevice d = App.get().deviceStore.getById(savedDeviceId);
+            if (d != null && d.port > 0) {
+                return d.port;
+            }
+        }
+        return savedPort > 1 ? savedPort - 1 : savedPort;
     }
 
     public void connect(String host, int port) {
@@ -105,40 +117,90 @@ public class EtpSearchViewModel extends ViewModel {
         connecting = true;
         emit(new SearchUiState.Connecting());
 
-        final String[] target = resolveTarget();
+        final String hostResolved = resolveHost();
+        final int mainPort = resolveMainPort();
         App.get().ioExecutor.execute(() -> {
-            try (EtpClient c = new EtpClient(target[0], Integer.parseInt(target[1]))) {
-                c.connect();
-                c.login("anonymous", "");
-                if (!c.isLoggedIn()) {
-                    c.login("anonymous", "");
-                }
-                if (c.isLoggedIn()) {
-                    App.get().settingsStore.setLastEtpHost(host);
-                    App.get().settingsStore.setLastEtpPort(port);
-                    connecting = false;
-                    verified = true;
-
-                    String pq = pendingQuery;
-                    pendingQuery = null;
-                    if (pq != null && !pq.isEmpty()) {
-                        doQuery(pq, 0, false);
-                    } else {
-                        emit(new SearchUiState.Ready());
-                    }
-                } else {
+            try {
+                // 1. 获取 ETP 凭证（TransferClient → 主传输端口）
+                EtpCredentialsCache.EtpCredentials creds = getCredentials(hostResolved, mainPort);
+                if (creds == null || !creds.hasEtpPass()) {
                     connecting = false;
                     verified = false;
                     pendingQuery = null;
-                    emit(new SearchUiState.Error("登录失败，请检查 ETP 服务是否开启"));
+                    emit(new SearchUiState.Error("PC 端未启用搜索功能，请在 PC 端设置中开启"));
+                    return;
+                }
+
+                // 2. 使用 FEAT 返回的 etpPort 连接 ETP
+                try (EtpClient c = new EtpClient(hostResolved, creds.etpPort)) {
+                    c.connect();
+                    String deviceId = App.get().settingsStore.getDeviceId();
+                    if (!c.loginWithPass(deviceId, creds.etpPass)) {
+                        c.login("anonymous", "");
+                    }
+                    if (c.isLoggedIn()) {
+                        App.get().settingsStore.setLastEtpHost(host);
+                        App.get().settingsStore.setLastEtpPort(port);
+                        connecting = false;
+                        verified = true;
+
+                        String pq = pendingQuery;
+                        pendingQuery = null;
+                        if (pq != null && !pq.isEmpty()) {
+                            doQuery(pq, 0, false);
+                        } else {
+                            emit(new SearchUiState.Ready());
+                        }
+                    } else {
+                        connecting = false;
+                        verified = false;
+                        pendingQuery = null;
+                        emit(new SearchUiState.Error("登录失败，请检查 ETP 服务是否开启"));
+                    }
                 }
             } catch (IOException e) {
                 connecting = false;
                 verified = false;
                 pendingQuery = null;
-                emit(new SearchUiState.Error("连接失败: " + e.getMessage()));
+                String msg = e.getMessage();
+                emit(new SearchUiState.Error(msg != null && !msg.isEmpty() ? msg : "连接失败"));
             }
         });
+    }
+
+    /**
+     * 获取 ETP 凭证：优先使用缓存，否则连接 → HELLO → FEAT → 返回凭证。
+     */
+    private EtpCredentialsCache.EtpCredentials getCredentials(String host, int port) throws IOException {
+        String deviceId = savedDeviceId != null ? savedDeviceId : App.get().settingsStore.getDeviceId();
+        EtpCredentialsCache.EtpCredentials cached = EtpCredentialsCache.peek(deviceId);
+        if (cached != null && cached.hasEtpPass()) {
+            return cached;
+        }
+        try (github.linsmod.sharetopc.transfer.TransferClient client =
+                     new github.linsmod.sharetopc.transfer.TransferClient(deviceId, host, port)) {
+            client.connect();
+            github.linsmod.sharetopc.transfer.TransferManager.SendJob dummyJob =
+                    new github.linsmod.sharetopc.transfer.TransferManager.SendJob(
+                            "etp-cred", deviceId,
+                            new ArrayList<>(), host, port);
+            client.hello(dummyJob, false);
+            // 发送 FEAT 获取 etp_pass
+            github.linsmod.sharetopc.transfer.TransferClient.FeatResult feat;
+            try {
+                feat = client.sendFeat(deviceId, "etp+etp_download");
+            } catch (IOException e) {
+                // 提取 PC 返回的中文错误信息，去掉 "FEAT failed: " 前缀
+                String raw = e.getMessage();
+                if (raw != null && raw.startsWith("FEAT failed: ")) {
+                    raw = raw.substring("FEAT failed: ".length());
+                }
+                throw new IOException(raw != null ? raw : "获取 ETP 凭证失败");
+            }
+            // 缓存凭证
+            EtpCredentialsCache.put(deviceId, client.getSessionSid(), feat.etpPort, feat.etpPass, feat.etpDownloadPass);
+            return EtpCredentialsCache.peek(deviceId);
+        }
     }
 
     public boolean isConnected() {
@@ -216,9 +278,14 @@ public class EtpSearchViewModel extends ViewModel {
         int limit = maxResultsLimit;
         int count = limit > 0 ? Math.min(PAGE_SIZE, limit - offset) : PAGE_SIZE;
 
-        final String[] target = resolveTarget();
+        final String host = resolveHost();
         App.get().ioExecutor.execute(() -> {
-            EtpClient c = new EtpClient(target[0], Integer.parseInt(target[1]));
+            // 先取出缓存凭证，用 etpPort 连接
+            String deviceId = App.get().settingsStore.getDeviceId();
+            EtpCredentialsCache.EtpCredentials creds = EtpCredentialsCache.take(deviceId);
+            int etpPort = (creds != null && creds.etpPort > 0) ? creds.etpPort : (savedPort > 0 ? savedPort : EtpClient.DEFAULT_PORT);
+
+            EtpClient c = new EtpClient(host, etpPort);
             activeClient.set(c); // 注册当前请求引用，供 cancelActiveQuery() 取消
             if (activeClient.get() != c) {
                 closeQuietly(c); // 注册前已被取消，直接退出
@@ -226,7 +293,11 @@ public class EtpSearchViewModel extends ViewModel {
             }
             try {
                 c.connect();
-                c.login("anonymous", "");
+                if (creds != null && creds.hasEtpPass()) {
+                    c.loginWithPass(deviceId, creds.etpPass);
+                } else {
+                    c.login("anonymous", "");
+                }
                 EtpClient.QueryResult qr = c.query(filteredQuery, columns,
                         qp.matchCase, qp.matchPath, qp.matchRegex, qp.matchWholeWord,
                         qp.sortName, qp.sortAsc, offset, count);

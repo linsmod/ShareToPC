@@ -120,6 +120,21 @@ namespace ShareToPcReciver.Net
         public long TotalBytes { get; set; }
     }
 
+    public class FeatMsg
+    {
+        [JsonPropertyName("type")]
+        public string Type => "FEAT";
+
+        [JsonPropertyName("deviceId")]
+        public string DeviceId { get; set; } = "";
+
+        [JsonPropertyName("sid")]
+        public string Sid { get; set; } = "";
+
+        [JsonPropertyName("features")]
+        public string Features { get; set; } = "";
+    }
+
     public class JobAckMsg
     {
         [JsonPropertyName("type")]

@@ -3,7 +3,9 @@ using ShareToPcReciver.Etp;
 using ShareToPcReciver.Models;
 using ShareToPcReciver.Storage;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -21,6 +23,26 @@ namespace ShareToPcReciver.Net
         private Task _serverTask;
         private readonly List<ClientSession> _sessions = new List<ClientSession>();
         private readonly object _sessionsLock = new object();
+
+        /// <summary>ETP 会话条目：存储 deviceId 到 pass 的映射，供中间件验证。</summary>
+        internal class EtpSessionEntry
+        {
+            public string DeviceId { get; }
+            public string EtpPass { get; }
+            public string EtpDownloadPass { get; }
+            public DateTime CreatedAt { get; }
+
+            public EtpSessionEntry(string deviceId, string etpPass, string etpDownloadPass, DateTime createdAt)
+            {
+                DeviceId = deviceId;
+                EtpPass = etpPass;
+                EtpDownloadPass = etpDownloadPass;
+                CreatedAt = createdAt;
+            }
+        }
+
+        /// <summary>sid → EtpSessionEntry，不持久化，跨 socket 授权用。</summary>
+        private readonly ConcurrentDictionary<string, EtpSessionEntry> _etpSessions = new();
 
         public int Port { get; private set; }
         public bool IsRunning => _listener?.Server != null && _listener.Server.IsBound;
@@ -153,6 +175,7 @@ namespace ShareToPcReciver.Net
             if (!string.IsNullOrWhiteSpace(Config.ListenIp) && IPAddress.TryParse(Config.ListenIp, out var parsed))
                 listenAddr = parsed;
             _tcpForward = new TcpPortForwarder(listenAddr, port + 1,"127.0.0.1", bo.GetEtpPort());
+            _tcpForward.UseMiddleware(new EtpSessionMiddleware(this));
             _tcpForward.Start();
             Util.Log.Info($"TCP forward server started. Forward {listenAddr}:{port} => 127.0.0.1:{bo.GetEtpPort()}");
             _listener = new TcpListener(listenAddr, port);
@@ -379,6 +402,63 @@ namespace ShareToPcReciver.Net
                 session.Key = Guid.NewGuid().ToString();
             PairStore?.Save(session);
             return session;
+        }
+
+        /// <summary>创建 ETP 会话：生成一次性 pass，存入内存字典。</summary>
+        internal (string EtpPass, string EtpDownloadPass) CreateEtpSession(string deviceId, bool etpEnabled, bool etpDownloadEnabled)
+        {
+            string etpPass = etpEnabled ? GeneratePass() : "";
+            string etpDownloadPass = etpDownloadEnabled ? GeneratePass() : "";
+            // 以 deviceId 为 key，同一设备只保留最新的一组 pass
+            _etpSessions[deviceId] = new EtpSessionEntry(deviceId, etpPass, etpDownloadPass, DateTime.UtcNow);
+            return (etpPass, etpDownloadPass);
+        }
+
+        /// <summary>验证 ETP 登录：deviceId + pass 匹配则消费并返回 true。</summary>
+        internal bool ValidateEtpPass(string deviceId, string pass)
+        {
+            if (string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(pass))
+                return false;
+
+            if (_etpSessions.TryGetValue(deviceId, out var entry) && entry.EtpPass == pass)
+            {
+                _etpSessions.TryRemove(deviceId, out _);
+                Util.Log.Info($"ETP pass validated for device {deviceId}");
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>验证 ETP 下载登录：deviceId + pass 匹配则消费并返回 true。</summary>
+        internal bool ValidateEtpDownloadPass(string deviceId, string pass)
+        {
+            if (string.IsNullOrEmpty(deviceId) || string.IsNullOrEmpty(pass))
+                return false;
+
+            if (_etpSessions.TryGetValue(deviceId, out var entry) && entry.EtpDownloadPass == pass)
+            {
+                _etpSessions.TryRemove(deviceId, out _);
+                Util.Log.Info($"ETP download pass validated for device {deviceId}");
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>生成 12 字符随机 pass。</summary>
+        private static string GeneratePass()
+        {
+            return Guid.NewGuid().ToString("N").Substring(0, 12);
+        }
+
+        /// <summary>清理超过 60 秒的过期 ETP 会话。</summary>
+        internal void CleanupExpiredEtpSessions()
+        {
+            var cutoff = DateTime.UtcNow.AddSeconds(-60);
+            foreach (var kv in _etpSessions)
+            {
+                if (kv.Value.CreatedAt < cutoff)
+                    _etpSessions.TryRemove(kv.Key, out _);
+            }
         }
 
         internal int GetEtpServicePort()

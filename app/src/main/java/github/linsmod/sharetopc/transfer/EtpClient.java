@@ -71,14 +71,18 @@ public class EtpClient implements Closeable {
         LogX.d("EtpClient connected to " + host + ":" + port);
     }
 
-    private void readWelcome() throws IOException {
+    private String readWelcome() throws IOException {
         String line;
         while ((line = reader.readLine()) != null) {
-            if (line.startsWith("220 ") || line.startsWith("421 ")) {
-                break;
+            if (line.startsWith("421 ")) {
+                throw new IOException("FTP service unavailable: " + line);
             }
-            // 220- 前缀表示多行欢迎信息继续
+            if (line.startsWith("220 ")) {
+                return line.substring(4); // 正常欢迎消息，直接返回
+            }
+            // 220- 继续读取下一行
         }
+        throw new IOException("Connection closed unexpectedly");
     }
 
     // ---- 登录 ----
@@ -105,6 +109,30 @@ public class EtpClient implements Closeable {
             return true;
         }
         LogX.d("EtpClient login failed: " + resp);
+        return false;
+    }
+
+    /**
+     * 使用 deviceId + 一次性 pass 登录 ETP 服务器。
+     */
+    public boolean loginWithPass(String deviceId, String pass) throws IOException {
+        if (deviceId == null || deviceId.isEmpty() || pass == null || pass.isEmpty()) {
+            LogX.d("EtpClient loginWithPass: missing deviceId or pass");
+            return false;
+        }
+
+        sendCommand("USER " + deviceId);
+        String resp = readResponse();
+        if (resp.startsWith("331")) {
+            sendCommand("PASS " + pass);
+            resp = readResponse();
+        }
+        if (resp.startsWith("230") || resp.startsWith("202")) {
+            loggedIn = true;
+            LogX.d("EtpClient logged in with pass for device: " + deviceId);
+            return true;
+        }
+        LogX.d("EtpClient loginWithPass failed: " + resp);
         return false;
     }
 

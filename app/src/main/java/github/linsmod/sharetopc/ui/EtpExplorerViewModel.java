@@ -19,6 +19,7 @@ import java.util.function.Consumer;
 import github.linsmod.sharetopc.App;
 import github.linsmod.sharetopc.discovery.DiscoveredDevice;
 import github.linsmod.sharetopc.transfer.EtpClient;
+import github.linsmod.sharetopc.transfer.EtpCredentialsCache;
 
 /**
  * ETP 文件浏览 ViewModel。
@@ -186,15 +187,26 @@ public class EtpExplorerViewModel extends ViewModel {
 
     // ==================== 后台加载 ====================
 
-    /** 按 deviceId 从设备库解析最新连接地址（host + ETP 端口）；无记录时回退 init 传入地址。 */
-    private String[] resolveTarget() {
+    /** 按 deviceId 从设备库解析最新 host；无记录时回退 init 传入地址。 */
+    private String resolveHost() {
         if (savedDeviceId != null && !savedDeviceId.isEmpty()) {
             DiscoveredDevice d = App.get().deviceStore.getById(savedDeviceId);
-            if (d != null && d.host != null && !d.host.isEmpty() && d.etpPort > 0) {
-                return new String[]{d.host, String.valueOf(d.etpPort)};
+            if (d != null && d.host != null && !d.host.isEmpty()) {
+                return d.host;
             }
         }
-        return new String[]{savedHost, String.valueOf(savedPort)};
+        return savedHost;
+    }
+
+    /** 从设备库解析主传输端口（二进制协议）；无记录时回退 savedPort-1。 */
+    private int resolveMainPort() {
+        if (savedDeviceId != null && !savedDeviceId.isEmpty()) {
+            DiscoveredDevice d = App.get().deviceStore.getById(savedDeviceId);
+            if (d != null && d.port > 0) {
+                return d.port;
+            }
+        }
+        return savedPort > 1 ? savedPort - 1 : savedPort;
     }
 
     private void loadOnBackground(boolean firstLoad) {
@@ -206,8 +218,16 @@ public class EtpExplorerViewModel extends ViewModel {
             EtpSettingsActivity.PathPresets presets = loadPresets();
             progressTotal = categories.size();
 
-            String[] x = resolveTarget();
-            EtpClient c = new EtpClient(x[0], Integer.parseInt(x[1]));
+            String host = resolveHost();
+
+            // 1. 通过主协议获取 ETP 凭证（TransferClient → 主传输端口）
+            EtpCredentialsCache.EtpCredentials creds = getCredentials(host, resolveMainPort());
+            if (creds == null || !creds.hasEtpPass()) {
+                throw new IOException("PC 端未启用搜索功能，请在 PC 端设置中开启");
+            }
+
+            // 2. 使用 FEAT 返回的 etpPort 连接 ETP
+            EtpClient c = new EtpClient(host, creds.etpPort);
             activeClient.set(c);
             if (cancelled) {
                 activeClient.compareAndSet(c, null);
@@ -215,8 +235,12 @@ public class EtpExplorerViewModel extends ViewModel {
                 return;
             }
             c.connect();
-            c.login("anonymous", "");
-            if (!c.isLoggedIn()) c.login("anonymous", "");
+
+            // 3. 使用凭证登录 ETP
+            String deviceId = App.get().settingsStore.getDeviceId();
+            if (!c.loginWithPass(deviceId, creds.etpPass)) {
+                c.login("anonymous", "");
+            }
             if (!c.isLoggedIn()) {
                 throw new IOException("登录失败，请检查 ETP 服务是否开启");
             }
@@ -247,8 +271,8 @@ public class EtpExplorerViewModel extends ViewModel {
             }
 
             ExplorerCache cache = new ExplorerCache();
-            cache.host = x[0];
-            cache.port = Integer.parseInt(x[1]);
+            cache.host = host;
+            cache.port = creds.etpPort;
             cache.cachedAt = System.currentTimeMillis();
             cache.categories = results;
             App.get().settingsStore.putString(cacheKey(), gson.toJson(cache));
@@ -266,6 +290,38 @@ public class EtpExplorerViewModel extends ViewModel {
                 activeClient.compareAndSet(client, null);
                 closeQuietly(client);
             }
+        }
+    }
+
+    /**
+     * 获取 ETP 凭证：优先使用缓存，否则连接 → HELLO → FEAT → 返回凭证。
+     */
+    private EtpCredentialsCache.EtpCredentials getCredentials(String host, int port) throws IOException {
+        String deviceId = savedDeviceId != null ? savedDeviceId : App.get().settingsStore.getDeviceId();
+        EtpCredentialsCache.EtpCredentials cached = EtpCredentialsCache.peek(deviceId);
+        if (cached != null && cached.hasEtpPass()) {
+            return cached;
+        }
+        try (github.linsmod.sharetopc.transfer.TransferClient client =
+                     new github.linsmod.sharetopc.transfer.TransferClient(deviceId, host, port)) {
+            client.connect();
+            github.linsmod.sharetopc.transfer.TransferManager.SendJob dummyJob =
+                    new github.linsmod.sharetopc.transfer.TransferManager.SendJob(
+                            "etp-cred", deviceId,
+                            new ArrayList<>(), host, port);
+            client.hello(dummyJob, false);
+            github.linsmod.sharetopc.transfer.TransferClient.FeatResult feat;
+            try {
+                feat = client.sendFeat(deviceId, "etp+etp_download");
+            } catch (IOException e) {
+                String raw = e.getMessage();
+                if (raw != null && raw.startsWith("FEAT failed: ")) {
+                    raw = raw.substring("FEAT failed: ".length());
+                }
+                throw new IOException(raw != null ? raw : "获取 ETP 凭证失败");
+            }
+            EtpCredentialsCache.put(deviceId, client.getSessionSid(), feat.etpPort, feat.etpPass, feat.etpDownloadPass);
+            return EtpCredentialsCache.peek(deviceId);
         }
     }
 

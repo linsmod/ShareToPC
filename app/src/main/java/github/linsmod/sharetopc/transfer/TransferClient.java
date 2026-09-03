@@ -28,6 +28,7 @@ public class TransferClient implements Closeable {
     private DataOutputStream out;
     private DataInputStream in;
     private int state;
+    private String sessionSid; // HELLO ACK 返回的 sid
 
     public static final int DISCONNECTED = 0;
     public static final int CONNECTING = 1;
@@ -52,6 +53,12 @@ public class TransferClient implements Closeable {
     public int getState(){
         return this.state;
     }
+
+    /** 获取 HELLO 握手返回的 sid。 */
+    public String getSessionSid() {
+        return sessionSid;
+    }
+
     public void connect() throws IOException {
         if(state==CONNECTED){
             return;
@@ -333,7 +340,7 @@ public class TransferClient implements Closeable {
         TransferProtocol.writeFrame(out, header);
         return expectJobAck(job,progress);
     }
-    void hello(TransferManager.SendJob job, boolean oneway) throws IOException {
+    public void hello(TransferManager.SendJob job, boolean oneway) throws IOException {
         JsonObject header = new JsonObject();
         header.addProperty("type", "HELLO");
         String deviceName = App.get().settingsStore.getDeviceName();
@@ -350,6 +357,7 @@ public class TransferClient implements Closeable {
         if(oneway || job.isCancelRequested()){
             return;
         }
+        this.rdi = new RemoteDeviceInfo();
         // 读 PC 的 HELLO ACK，其中携带 PC 程序版本、协议版本、设备 ID
         JsonObject ack = TransferProtocol.readHeader(in);
         if (!TransferProtocol.isAckOk(ack)) {
@@ -387,6 +395,11 @@ public class TransferClient implements Closeable {
         if (rdi.drives != null && !rdi.drives.isEmpty()) {
             DeviceUserInfo.putDrives(host, rdi.drives);
         }
+        // 提取 sid（用于后续 FEAT 请求）
+        String sid = TransferProtocol.optString(ack, "sid");
+        if (sid != null && !sid.isEmpty()) {
+            this.sessionSid = sid;
+        }
         String etpPort = TransferProtocol.optString(ack, "etpPort");
         if(etpPort!=null){
             rdi.etpPort = Integer.parseInt(etpPort);
@@ -407,7 +420,51 @@ public class TransferClient implements Closeable {
                 + ", self " + TransferProtocol.APP_VERSION + " proto v" + TransferProtocol.PROTOCOL_VERSION);
         // 持久化 PC 上报的 ETP 端口等身份信息到设备记录，供 Etp 页面按 deviceId 动态读取最新连接地址
             App.get().discoveryManager.updateDeviceInfo(host, port, rdi.clientVersion, rdi.protoVer, rdi.deviceId, rdi.etpPort);
-        this.rdi = new RemoteDeviceInfo();
+    }
+
+    /** FEAT 请求结果。 */
+    public static class FeatResult {
+        public final int etpPort;
+        public final String etpPass;
+        public final String etpDownloadPass;
+
+        public FeatResult(int etpPort, String etpPass, String etpDownloadPass) {
+            this.etpPort = etpPort;
+            this.etpPass = etpPass;
+            this.etpDownloadPass = etpDownloadPass;
+        }
+
+        public boolean hasEtp() {
+            return etpPort > 0 && etpPass != null && !etpPass.isEmpty();
+        }
+
+        public boolean hasEtpDownload() {
+            return etpDownloadPass != null && !etpDownloadPass.isEmpty();
+        }
+    }
+
+    /**
+     * 发送 FEAT 请求，获取 ETP 一次性凭证。
+     * @param deviceId 本机 deviceId
+     * @param features 请求的特性，如 "etp+etp_download"
+     * @return FeatResult，含 etpPort/etpPass/etpDownloadPass
+     */
+    public FeatResult sendFeat(String deviceId, String features) throws IOException {
+        if (sessionSid == null || sessionSid.isEmpty()) {
+            throw new IOException("No sid from HELLO, cannot send FEAT");
+        }
+        TransferProtocol.writeFeat(out, deviceId, sessionSid, features);
+        JsonObject ack = TransferProtocol.readHeader(in);
+        if (!TransferProtocol.isAckOk(ack)) {
+            String msg = TransferProtocol.ackError(ack);
+            throw new IOException("FEAT failed: " + msg);
+        }
+        int etpPort = ack.has("etp_port") && !ack.get("etp_port").isJsonNull()
+                ? ack.get("etp_port").getAsInt() : 0;
+        String etpPass = TransferProtocol.optString(ack, "etp_pass");
+        String etpDownloadPass = TransferProtocol.optString(ack, "etp_download_pass");
+        LogX.d("FEAT OK: etpPort=" + etpPort + ", hasPass=" + (etpPass != null && !etpPass.isEmpty()));
+        return new FeatResult(etpPort, etpPass, etpDownloadPass);
     }
     /** 读取 PC 返回的 JOB_ACK 帧，解析出授权结果。 */
     private JobInfoResult expectJobAck(TransferManager.SendJob job, TransferProtocol.Progress progress) throws IOException {
